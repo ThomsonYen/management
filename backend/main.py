@@ -192,6 +192,7 @@ class TodoOut(BaseModel):
     importance: str
     estimated_hours: float
     status: str
+    is_blocked: bool
     created_at: str
     subtodos: List[SubTodoOut] = []
     blocked_by_ids: List[int] = []
@@ -224,6 +225,7 @@ def todo_to_out(t: Todo) -> TodoOut:
         importance=t.importance,
         estimated_hours=t.estimated_hours,
         status=t.status,
+        is_blocked=any(b.status != "done" for b in t.blocked_by),
         created_at=t.created_at,
         subtodos=[SubTodoOut.model_validate(s) for s in t.subtodos],
         blocked_by_ids=[b.id for b in t.blocked_by],
@@ -332,9 +334,13 @@ def list_todos(
         q = q.filter(Todo.assignee_id == assignee_id)
     if project_id is not None:
         q = q.filter(Todo.project_id == project_id)
-    if status is not None:
-        q = q.filter(Todo.status == status)
-    return [todo_to_out(t) for t in q.all()]
+    if status == "blocked":
+        todos = [t for t in q.all() if any(b.status != "done" for b in t.blocked_by)]
+    else:
+        if status is not None:
+            q = q.filter(Todo.status == status)
+        todos = q.all()
+    return [todo_to_out(t) for t in todos]
 
 @app.get("/todos/{todo_id}", response_model=TodoOut)
 def get_todo(todo_id: int, db: Session = Depends(get_db)):

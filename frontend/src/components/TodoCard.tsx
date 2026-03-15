@@ -18,7 +18,6 @@ const statusBadge = (s: string) => {
     todo: 'bg-slate-100 text-slate-600',
     'in-progress': 'bg-blue-100 text-blue-700',
     done: 'bg-green-100 text-green-700',
-    blocked: 'bg-red-100 text-red-700',
   }
   return map[s] || 'bg-slate-100 text-slate-600'
 }
@@ -83,6 +82,11 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys }: Todo
               >
                 {todo.status}
               </span>
+              {todo.is_blocked && (
+                <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-red-100 text-red-700">
+                  blocked
+                </span>
+              )}
               {isOverdue && (
                 <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-red-600 text-white">
                   OVERDUE

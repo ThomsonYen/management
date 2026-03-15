@@ -19,7 +19,7 @@ interface Props {
 }
 
 const IMPORTANCE_OPTIONS = ['low', 'medium', 'high', 'critical']
-const STATUS_OPTIONS = ['todo', 'in-progress', 'done', 'blocked']
+const STATUS_OPTIONS = ['todo', 'in-progress', 'done']
 
 export default function TodoModal({ todo, onClose, invalidateKeys }: Props) {
   const queryClient = useQueryClient()
@@ -32,7 +32,8 @@ export default function TodoModal({ todo, onClose, invalidateKeys }: Props) {
   const [deadline, setDeadline] = useState(todo?.deadline || '')
   const [importance, setImportance] = useState(todo?.importance || 'medium')
   const [estimatedHours, setEstimatedHours] = useState(todo?.estimated_hours?.toString() || '1')
-  const [status, setStatus] = useState(todo?.status || 'todo')
+  const rawStatus = todo?.status || 'todo'
+  const [status, setStatus] = useState(STATUS_OPTIONS.includes(rawStatus) ? rawStatus : 'todo')
   const [blockedByIds, setBlockedByIds] = useState<number[]>(todo?.blocked_by_ids || [])
   const [subtodos, setSubtodos] = useState<SubTodo[]>(todo?.subtodos || [])
   const [newSubTitle, setNewSubTitle] = useState('')

@@ -35,6 +35,7 @@ export interface Todo {
   importance: string
   estimated_hours: number
   status: string
+  is_blocked: boolean
   created_at: string
   subtodos: SubTodo[]
   blocked_by_ids: number[]

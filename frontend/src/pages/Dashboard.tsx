@@ -29,6 +29,15 @@ function longestBlockerPath(
   return bestPath
 }
 
+const scheduleStatusBadge = (s: string) => {
+  const map: Record<string, string> = {
+    todo: 'bg-slate-100 text-slate-700',
+    'in-progress': 'bg-blue-100 text-blue-700',
+    done: 'bg-green-100 text-green-700',
+  }
+  return map[s] || 'bg-slate-100 text-slate-700'
+}
+
 function ScheduleCard({ item, todosById }: { item: ScheduleStatus; todosById: Map<number, Todo> }) {
   const isBehind = item.status === 'behind'
   const deficit = item.chain_hours - item.available_hours
@@ -77,11 +86,7 @@ function ScheduleCard({ item, todosById }: { item: ScheduleStatus; todosById: Ma
           <div className="flex flex-wrap items-center gap-1">
             {blockerPath.map((b, i) => (
               <span key={b.id} className="flex items-center gap-1">
-                <span className={`text-xs px-2 py-0.5 rounded font-medium ${
-                  b.status === 'blocked'
-                    ? 'bg-red-100 text-red-700'
-                    : 'bg-slate-100 text-slate-700'
-                }`}>
+                <span className={`text-xs px-2 py-0.5 rounded font-medium ${scheduleStatusBadge(b.status)}`}>
                   {b.title}
                   <span className="ml-1 opacity-60">({b.estimated_hours}h)</span>
                 </span>
@@ -146,7 +151,6 @@ export default function Dashboard({ onOpenTodo }: { onOpenTodo: (id: number) => 
       todo: 'bg-slate-100 text-slate-600',
       'in-progress': 'bg-blue-100 text-blue-700',
       done: 'bg-green-100 text-green-700',
-      blocked: 'bg-red-100 text-red-700',
     }
     return map[s] || 'bg-slate-100 text-slate-600'
   }
@@ -160,7 +164,7 @@ export default function Dashboard({ onOpenTodo }: { onOpenTodo: (id: number) => 
         <StatCard label="Total Todos" value={todos.length} color="bg-indigo-600" />
         <StatCard label="In Progress" value={statusCounts['in-progress'] || 0} color="bg-blue-500" />
         <StatCard label="Done" value={statusCounts['done'] || 0} color="bg-green-500" />
-        <StatCard label="Blocked" value={statusCounts['blocked'] || 0} color="bg-slate-500" />
+        <StatCard label="Blocked" value={todos.filter((t) => t.is_blocked).length} color="bg-slate-500" />
       </div>
 
       {/* Schedule alerts */}
