@@ -74,7 +74,7 @@ function AddPersonModal({ onClose }: { onClose: () => void }) {
   )
 }
 
-export default function PeoplePage() {
+export default function PeoplePage({ onOpenTodo }: { onOpenTodo: (id: number) => void }) {
   const queryClient = useQueryClient()
   const [selectedPersonId, setSelectedPersonId] = useState<number | null>(null)
   const [showAddPerson, setShowAddPerson] = useState(false)
@@ -324,6 +324,7 @@ export default function PeoplePage() {
                             setEditingTodo(todo)
                             setShowTodoModal(true)
                           }}
+                          onOpenDetail={() => onOpenTodo(t.id)}
                           queryKeys={todoQueryKeys}
                         />
                       ))}

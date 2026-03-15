@@ -26,10 +26,11 @@ const statusBadge = (s: string) => {
 interface TodoCardProps {
   todo: Todo
   onEdit: (todo: Todo) => void
+  onOpenDetail?: () => void
   queryKeys?: unknown[][]
 }
 
-export default function TodoCard({ todo, onEdit, queryKeys }: TodoCardProps) {
+export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys }: TodoCardProps) {
   const [expanded, setExpanded] = useState(false)
   const queryClient = useQueryClient()
 
@@ -187,6 +188,14 @@ export default function TodoCard({ todo, onEdit, queryKeys }: TodoCardProps) {
           )}
 
           <div className="flex gap-2 pt-1">
+            {onOpenDetail && (
+              <button
+                onClick={onOpenDetail}
+                className="px-3 py-1.5 bg-slate-800 text-white text-xs font-medium rounded-lg hover:bg-slate-900 transition-colors"
+              >
+                Open
+              </button>
+            )}
             <button
               onClick={() => onEdit(todo)}
               className="px-3 py-1.5 bg-indigo-600 text-white text-xs font-medium rounded-lg hover:bg-indigo-700 transition-colors"

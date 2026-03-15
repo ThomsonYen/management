@@ -3,6 +3,7 @@ import Dashboard from './pages/Dashboard'
 import TodosPage from './pages/TodosPage'
 import ProjectsPage from './pages/ProjectsPage'
 import PeoplePage from './pages/PeoplePage'
+import TodoDetailPage from './pages/TodoDetailPage'
 
 type Tab = 'dashboard' | 'todos' | 'projects' | 'people'
 
@@ -15,6 +16,10 @@ const navItems: { id: Tab; label: string; icon: string }[] = [
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard')
+  const [selectedTodoId, setSelectedTodoId] = useState<number | null>(null)
+
+  const openTodo = (id: number) => setSelectedTodoId(id)
+  const closeTodo = () => setSelectedTodoId(null)
 
   return (
     <div className="flex h-screen bg-slate-100 overflow-hidden">
@@ -28,9 +33,9 @@ export default function App() {
           {navItems.map((item) => (
             <button
               key={item.id}
-              onClick={() => setActiveTab(item.id)}
+              onClick={() => { setActiveTab(item.id); closeTodo() }}
               className={`w-full flex items-center gap-3 px-6 py-3 text-sm font-medium transition-colors ${
-                activeTab === item.id
+                activeTab === item.id && !selectedTodoId
                   ? 'bg-indigo-700 text-white'
                   : 'text-indigo-300 hover:bg-indigo-800 hover:text-white'
               }`}
@@ -48,10 +53,20 @@ export default function App() {
 
       {/* Main content */}
       <main className="flex-1 overflow-auto">
-        {activeTab === 'dashboard' && <Dashboard />}
-        {activeTab === 'todos' && <TodosPage />}
-        {activeTab === 'projects' && <ProjectsPage />}
-        {activeTab === 'people' && <PeoplePage />}
+        {selectedTodoId !== null ? (
+          <TodoDetailPage
+            todoId={selectedTodoId}
+            onBack={closeTodo}
+            onOpenTodo={openTodo}
+          />
+        ) : (
+          <>
+            {activeTab === 'dashboard' && <Dashboard onOpenTodo={openTodo} />}
+            {activeTab === 'todos' && <TodosPage onOpenTodo={openTodo} />}
+            {activeTab === 'projects' && <ProjectsPage onOpenTodo={openTodo} />}
+            {activeTab === 'people' && <PeoplePage onOpenTodo={openTodo} />}
+          </>
+        )}
       </main>
     </div>
   )

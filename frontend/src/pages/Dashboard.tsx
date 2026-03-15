@@ -106,7 +106,7 @@ function StatCard({ label, value, color }: { label: string; value: number; color
   )
 }
 
-export default function Dashboard() {
+export default function Dashboard({ onOpenTodo }: { onOpenTodo: (id: number) => void }) {
   const { data: reminders = [], isLoading: remindersLoading } = useQuery<ScheduleStatus[]>({
     queryKey: ['reminders'],
     queryFn: fetchReminders,
@@ -203,9 +203,10 @@ export default function Dashboard() {
         ) : (
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
             {recentTodos.map((t, i) => (
-              <div
+              <button
                 key={t.id}
-                className={`flex items-center justify-between px-5 py-3 ${
+                onClick={() => onOpenTodo(t.id)}
+                className={`w-full flex items-center justify-between px-5 py-3 text-left hover:bg-slate-50 transition-colors ${
                   i < recentTodos.length - 1 ? 'border-b border-slate-100' : ''
                 }`}
               >
@@ -223,7 +224,7 @@ export default function Dashboard() {
                     {t.status}
                   </span>
                 </div>
-              </div>
+              </button>
             ))}
           </div>
         )}

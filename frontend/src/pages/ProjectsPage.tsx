@@ -148,7 +148,7 @@ function AddProjectModal({ parentId, onClose }: AddProjectModalProps) {
   )
 }
 
-export default function ProjectsPage() {
+export default function ProjectsPage({ onOpenTodo }: { onOpenTodo: (id: number) => void }) {
   const queryClient = useQueryClient()
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null)
   const [showAddProject, setShowAddProject] = useState(false)
@@ -290,6 +290,7 @@ export default function ProjectsPage() {
                       setEditingTodo(todo)
                       setShowTodoModal(true)
                     }}
+                    onOpenDetail={() => onOpenTodo(t.id)}
                     queryKeys={todoQueryKeys}
                   />
                 ))}

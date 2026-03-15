@@ -8,7 +8,7 @@ import TodoModal from '../components/TodoModal'
 const STATUS_OPTIONS = ['', 'todo', 'in-progress', 'done', 'blocked']
 const IMPORTANCE_OPTIONS = ['', 'low', 'medium', 'high', 'critical']
 
-export default function TodosPage() {
+export default function TodosPage({ onOpenTodo }: { onOpenTodo: (id: number) => void }) {
   const [selectedPerson, setSelectedPerson] = useState<string>('')
   const [selectedProject, setSelectedProject] = useState<string>('')
   const [selectedStatus, setSelectedStatus] = useState<string>('')
@@ -160,7 +160,7 @@ export default function TodosPage() {
       ) : (
         <div className="space-y-3">
           {filtered.map((t) => (
-            <TodoCard key={t.id} todo={t} onEdit={handleEdit} queryKeys={[['todos']]} />
+            <TodoCard key={t.id} todo={t} onEdit={handleEdit} onOpenDetail={() => onOpenTodo(t.id)} queryKeys={[['todos']]} />
           ))}
         </div>
       )}
