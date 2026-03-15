@@ -100,7 +100,7 @@ export default function TodoModal({ todo, onClose, invalidateKeys }: Props) {
       title: title.trim(),
       description: description.trim() || undefined,
       project_id: projectId ? parseInt(projectId) : undefined,
-      assignee_id: assigneeId ? parseInt(assigneeId) : undefined,
+      assignee_id: assigneeId ? parseInt(assigneeId) : null,
       deadline: deadline || undefined,
       importance,
       estimated_hours: parseFloat(estimatedHours) || 1,

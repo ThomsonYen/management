@@ -57,7 +57,7 @@ export const createTodo = (data: {
   title: string
   description?: string
   project_id?: number
-  assignee_id?: number
+  assignee_id?: number | null
   deadline?: string
   importance?: string
   estimated_hours?: number
@@ -71,7 +71,7 @@ export const updateTodo = (
     title?: string
     description?: string
     project_id?: number
-    assignee_id?: number
+    assignee_id?: number | null
     deadline?: string
     importance?: string
     estimated_hours?: number

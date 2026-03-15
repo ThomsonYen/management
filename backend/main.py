@@ -360,7 +360,7 @@ def update_todo(todo_id: int, data: TodoUpdate, db: Session = Depends(get_db)):
     t = db.query(Todo).get(todo_id)
     if not t:
         raise HTTPException(404, "Todo not found")
-    update_data = data.model_dump(exclude_none=True)
+    update_data = data.model_dump(exclude_unset=True)
     blocked_by_ids = update_data.pop("blocked_by_ids", None)
     for k, v in update_data.items():
         setattr(t, k, v)
@@ -422,7 +422,7 @@ def schedule_reminders(db: Session = Depends(get_db)):
     today = date.today()
     todos = (
         db.query(Todo)
-        .filter(Todo.deadline != None, Todo.assignee_id != None, Todo.status != "done")
+        .filter(Todo.deadline != None, Todo.status != "done")
         .all()
     )
     results = []
