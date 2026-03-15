@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   fetchTodo,
@@ -38,13 +39,12 @@ const statusDot = (s: string) => {
   return map[s] || 'bg-slate-400'
 }
 
-interface Props {
-  todoId: number
-  onBack: () => void
-  onOpenTodo: (id: number) => void
-}
-
-export default function TodoDetailPage({ todoId, onBack, onOpenTodo }: Props) {
+export default function TodoDetailPage() {
+  const { id } = useParams<{ id: string }>()
+  const todoId = Number(id)
+  const navigate = useNavigate()
+  const onBack = () => navigate(-1)
+  const onOpenTodo = (newId: number) => navigate(`/todos/${newId}`)
   const queryClient = useQueryClient()
   const [showModal, setShowModal] = useState(false)
   const [newSubtodoTitle, setNewSubtodoTitle] = useState('')

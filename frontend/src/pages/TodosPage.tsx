@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { fetchTodos, fetchPersons, fetchProjects } from '../api'
 import type { Todo, Person, Project } from '../types'
@@ -9,10 +10,17 @@ const STATUS_OPTIONS = ['', 'todo', 'in-progress', 'done', 'blocked']
 const IMPORTANCE_OPTIONS = ['', 'low', 'medium', 'high', 'critical']
 
 export default function TodosPage({ onOpenTodo }: { onOpenTodo: (id: number) => void }) {
-  const [selectedPerson, setSelectedPerson] = useState<string>('')
-  const [selectedProject, setSelectedProject] = useState<string>('')
-  const [selectedStatus, setSelectedStatus] = useState<string>('')
-  const [selectedImportance, setSelectedImportance] = useState<string>('')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const selectedPerson = searchParams.get('person') ?? ''
+  const selectedProject = searchParams.get('project') ?? ''
+  const selectedStatus = searchParams.get('status') ?? ''
+  const selectedImportance = searchParams.get('importance') ?? ''
+  const setParam = (key: string, value: string) =>
+    setSearchParams((prev) => { const p = new URLSearchParams(prev); value ? p.set(key, value) : p.delete(key); return p })
+  const setSelectedPerson = (v: string) => setParam('person', v)
+  const setSelectedProject = (v: string) => setParam('project', v)
+  const setSelectedStatus = (v: string) => setParam('status', v)
+  const setSelectedImportance = (v: string) => setParam('importance', v)
   const [showModal, setShowModal] = useState(false)
   const [editingTodo, setEditingTodo] = useState<Todo | null>(null)
 
@@ -132,12 +140,7 @@ export default function TodosPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
         </div>
         {(selectedPerson || selectedProject || selectedStatus || selectedImportance) && (
           <button
-            onClick={() => {
-              setSelectedPerson('')
-              setSelectedProject('')
-              setSelectedStatus('')
-              setSelectedImportance('')
-            }}
+            onClick={() => setSearchParams({})}
             className="mt-3 text-xs text-indigo-600 hover:text-indigo-800 font-medium"
           >
             Clear filters

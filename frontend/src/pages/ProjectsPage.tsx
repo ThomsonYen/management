@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { fetchProjectTree, fetchProjects, fetchTodos, createProject, deleteProject } from '../api'
 import type { ProjectTree, Project, Todo } from '../types'
@@ -150,7 +151,10 @@ function AddProjectModal({ parentId, onClose }: AddProjectModalProps) {
 
 export default function ProjectsPage({ onOpenTodo }: { onOpenTodo: (id: number) => void }) {
   const queryClient = useQueryClient()
-  const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const selectedProjectId = searchParams.get('project') ? Number(searchParams.get('project')) : null
+  const setSelectedProjectId = (id: number | null) =>
+    setSearchParams((prev) => { const p = new URLSearchParams(prev); id ? p.set('project', String(id)) : p.delete('project'); return p })
   const [showAddProject, setShowAddProject] = useState(false)
   const [addSubParentId, setAddSubParentId] = useState<number | null>(null)
   const [showTodoModal, setShowTodoModal] = useState(false)

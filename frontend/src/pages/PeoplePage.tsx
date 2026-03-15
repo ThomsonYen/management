@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { fetchPersons, fetchTodos, fetchReminders, createPerson, deletePerson } from '../api'
 import type { Person, Todo, ScheduleStatus } from '../types'
@@ -76,7 +77,10 @@ function AddPersonModal({ onClose }: { onClose: () => void }) {
 
 export default function PeoplePage({ onOpenTodo }: { onOpenTodo: (id: number) => void }) {
   const queryClient = useQueryClient()
-  const [selectedPersonId, setSelectedPersonId] = useState<number | null>(null)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const selectedPersonId = searchParams.get('person') ? Number(searchParams.get('person')) : null
+  const setSelectedPersonId = (id: number | null) =>
+    setSearchParams((prev) => { const p = new URLSearchParams(prev); id ? p.set('person', String(id)) : p.delete('person'); return p })
   const [showAddPerson, setShowAddPerson] = useState(false)
   const [showTodoModal, setShowTodoModal] = useState(false)
   const [editingTodo, setEditingTodo] = useState<Todo | null>(null)

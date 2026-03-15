@@ -1,25 +1,19 @@
-import { useState } from 'react'
+import { NavLink, Route, Routes, useNavigate } from 'react-router-dom'
 import Dashboard from './pages/Dashboard'
 import TodosPage from './pages/TodosPage'
 import ProjectsPage from './pages/ProjectsPage'
 import PeoplePage from './pages/PeoplePage'
 import TodoDetailPage from './pages/TodoDetailPage'
 
-type Tab = 'dashboard' | 'todos' | 'projects' | 'people'
-
-const navItems: { id: Tab; label: string; icon: string }[] = [
-  { id: 'dashboard', label: 'Dashboard', icon: '⊞' },
-  { id: 'todos', label: 'Todos', icon: '✓' },
-  { id: 'projects', label: 'Projects', icon: '◈' },
-  { id: 'people', label: 'People', icon: '◉' },
+const navItems = [
+  { to: '/', label: 'Dashboard', icon: '⊞', end: true },
+  { to: '/todos', label: 'Todos', icon: '✓', end: false },
+  { to: '/projects', label: 'Projects', icon: '◈', end: false },
+  { to: '/people', label: 'People', icon: '◉', end: false },
 ]
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<Tab>('dashboard')
-  const [selectedTodoId, setSelectedTodoId] = useState<number | null>(null)
-
-  const openTodo = (id: number) => setSelectedTodoId(id)
-  const closeTodo = () => setSelectedTodoId(null)
+  const navigate = useNavigate()
 
   return (
     <div className="flex h-screen bg-slate-100 overflow-hidden">
@@ -31,18 +25,21 @@ export default function App() {
         </div>
         <nav className="flex-1 py-4">
           {navItems.map((item) => (
-            <button
-              key={item.id}
-              onClick={() => { setActiveTab(item.id); closeTodo() }}
-              className={`w-full flex items-center gap-3 px-6 py-3 text-sm font-medium transition-colors ${
-                activeTab === item.id && !selectedTodoId
-                  ? 'bg-indigo-700 text-white'
-                  : 'text-indigo-300 hover:bg-indigo-800 hover:text-white'
-              }`}
+            <NavLink
+              key={item.to}
+              to={item.to}
+              end={item.end}
+              className={({ isActive }) =>
+                `w-full flex items-center gap-3 px-6 py-3 text-sm font-medium transition-colors ${
+                  isActive
+                    ? 'bg-indigo-700 text-white'
+                    : 'text-indigo-300 hover:bg-indigo-800 hover:text-white'
+                }`
+              }
             >
               <span className="text-base">{item.icon}</span>
               {item.label}
-            </button>
+            </NavLink>
           ))}
         </nav>
         <div className="px-6 py-4 border-t border-indigo-800">
@@ -53,20 +50,13 @@ export default function App() {
 
       {/* Main content */}
       <main className="flex-1 overflow-auto">
-        {selectedTodoId !== null ? (
-          <TodoDetailPage
-            todoId={selectedTodoId}
-            onBack={closeTodo}
-            onOpenTodo={openTodo}
-          />
-        ) : (
-          <>
-            {activeTab === 'dashboard' && <Dashboard onOpenTodo={openTodo} />}
-            {activeTab === 'todos' && <TodosPage onOpenTodo={openTodo} />}
-            {activeTab === 'projects' && <ProjectsPage onOpenTodo={openTodo} />}
-            {activeTab === 'people' && <PeoplePage onOpenTodo={openTodo} />}
-          </>
-        )}
+        <Routes>
+          <Route path="/" element={<Dashboard onOpenTodo={(id) => navigate(`/todos/${id}`)} />} />
+          <Route path="/todos" element={<TodosPage onOpenTodo={(id) => navigate(`/todos/${id}`)} />} />
+          <Route path="/todos/:id" element={<TodoDetailPage />} />
+          <Route path="/projects" element={<ProjectsPage onOpenTodo={(id) => navigate(`/todos/${id}`)} />} />
+          <Route path="/people" element={<PeoplePage onOpenTodo={(id) => navigate(`/todos/${id}`)} />} />
+        </Routes>
       </main>
     </div>
   )
