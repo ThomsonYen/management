@@ -2,9 +2,37 @@ import { useQuery } from '@tanstack/react-query'
 import { fetchReminders, fetchTodos } from '../api'
 import type { ScheduleStatus, Todo } from '../types'
 
-function ScheduleCard({ item }: { item: ScheduleStatus }) {
+/** Returns the longest-hours chain of pending blockers starting from todoId. */
+function longestBlockerPath(
+  todoId: number,
+  todosById: Map<number, Todo>,
+  visited = new Set<number>(),
+): Todo[] {
+  if (visited.has(todoId)) return []
+  visited.add(todoId)
+  const todo = todosById.get(todoId)
+  if (!todo) return []
+  const pending = todo.blocked_by_ids
+    .map((id) => todosById.get(id))
+    .filter((b): b is Todo => !!b && b.status !== 'done')
+  if (pending.length === 0) return []
+  let bestPath: Todo[] = []
+  let bestHours = -1
+  for (const blocker of pending) {
+    const sub = longestBlockerPath(blocker.id, todosById, new Set(visited))
+    const hours = [blocker, ...sub].reduce((s, t) => s + t.estimated_hours, 0)
+    if (hours > bestHours) {
+      bestHours = hours
+      bestPath = [blocker, ...sub]
+    }
+  }
+  return bestPath
+}
+
+function ScheduleCard({ item, todosById }: { item: ScheduleStatus; todosById: Map<number, Todo> }) {
   const isBehind = item.status === 'behind'
-  const deficit = item.estimated_hours - item.available_hours
+  const deficit = item.chain_hours - item.available_hours
+  const blockerPath = longestBlockerPath(item.todo_id, todosById)
   return (
     <div
       className={`rounded-lg p-4 border-l-4 ${
@@ -32,7 +60,10 @@ function ScheduleCard({ item }: { item: ScheduleStatus }) {
       </div>
       <div className="mt-2 flex flex-wrap gap-3 text-xs text-slate-600">
         <span>Deadline: <strong>{item.deadline}</strong></span>
-        <span>Estimated: <strong>{item.estimated_hours}h</strong></span>
+        <span>Own work: <strong>{item.estimated_hours}h</strong></span>
+        {item.chain_hours > item.estimated_hours && (
+          <span>Chain total: <strong>{item.chain_hours.toFixed(1)}h</strong></span>
+        )}
         <span>Available: <strong>{item.available_hours}h</strong></span>
         {isBehind && (
           <span className="text-red-600 font-semibold">
@@ -40,6 +71,28 @@ function ScheduleCard({ item }: { item: ScheduleStatus }) {
           </span>
         )}
       </div>
+      {blockerPath.length > 0 && (
+        <div className="mt-2">
+          <p className="text-xs text-slate-500 mb-1">Blocked by:</p>
+          <div className="flex flex-wrap items-center gap-1">
+            {blockerPath.map((b, i) => (
+              <span key={b.id} className="flex items-center gap-1">
+                <span className={`text-xs px-2 py-0.5 rounded font-medium ${
+                  b.status === 'blocked'
+                    ? 'bg-red-100 text-red-700'
+                    : 'bg-slate-100 text-slate-700'
+                }`}>
+                  {b.title}
+                  <span className="ml-1 opacity-60">({b.estimated_hours}h)</span>
+                </span>
+                {i < blockerPath.length - 1 && (
+                  <span className="text-slate-400 text-xs">→</span>
+                )}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -63,6 +116,8 @@ export default function Dashboard() {
     queryKey: ['todos'],
     queryFn: () => fetchTodos(),
   })
+
+  const todosById = new Map(todos.map((t) => [t.id, t]))
 
   const statusCounts = todos.reduce<Record<string, number>>((acc, t) => {
     acc[t.status] = (acc[t.status] || 0) + 1
@@ -132,7 +187,7 @@ export default function Dashboard() {
         ) : (
           <div className="space-y-3">
             {reminders.map((r) => (
-              <ScheduleCard key={r.todo_id} item={r} />
+              <ScheduleCard key={r.todo_id} item={r} todosById={todosById} />
             ))}
           </div>
         )}

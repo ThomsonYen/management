@@ -205,6 +205,7 @@ class ScheduleStatus(BaseModel):
     deadline: str
     estimated_hours: float
     available_hours: float
+    chain_hours: float  # estimated_hours + longest pending-blocker chain
     status: str  # 'behind' | 'warning'
 
 
@@ -417,6 +418,17 @@ def delete_subtodo(subtodo_id: int, db: Session = Depends(get_db)):
 
 # ─── Schedule / Reminders ────────────────────────────────────────────────────
 
+def _chain_hours(todo: Todo, visited: set) -> float:
+    """Return todo's estimated_hours + the longest chain of pending (not-done) blockers."""
+    if todo.id in visited:
+        return todo.estimated_hours  # cycle guard
+    visited.add(todo.id)
+    pending = [b for b in todo.blocked_by if b.status != "done"]
+    if not pending:
+        return todo.estimated_hours
+    return todo.estimated_hours + max(_chain_hours(b, visited) for b in pending)
+
+
 @app.get("/schedule/reminders", response_model=List[ScheduleStatus])
 def schedule_reminders(db: Session = Depends(get_db)):
     today = date.today()
@@ -433,9 +445,10 @@ def schedule_reminders(db: Session = Depends(get_db)):
             continue
         days = (deadline_date - today).days
         available = max(0.0, days * 9.0)
-        if available < t.estimated_hours:
+        chain = _chain_hours(t, set())
+        if available < chain:
             status = "behind"
-        elif available < t.estimated_hours + 9.0:
+        elif available < chain + 9.0:
             status = "warning"
         else:
             continue
@@ -447,6 +460,7 @@ def schedule_reminders(db: Session = Depends(get_db)):
                 deadline=t.deadline,
                 estimated_hours=t.estimated_hours,
                 available_hours=available,
+                chain_hours=chain,
                 status=status,
             )
         )

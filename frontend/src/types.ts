@@ -47,5 +47,6 @@ export interface ScheduleStatus {
   deadline: string
   estimated_hours: number
   available_hours: number
+  chain_hours: number
   status: 'behind' | 'warning'
 }
