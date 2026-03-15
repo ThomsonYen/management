@@ -1,13 +1,67 @@
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
-import { fetchTodos, fetchPersons, fetchProjects } from '../api'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { createTodo, fetchTodos, fetchPersons, fetchProjects } from '../api'
 import type { Todo, Person, Project } from '../types'
 import TodoCard from '../components/TodoCard'
 import TodoModal from '../components/TodoModal'
 
 const STATUS_OPTIONS = ['', 'todo', 'in-progress', 'done', 'blocked']
 const IMPORTANCE_OPTIONS = ['', 'low', 'medium', 'high', 'critical']
+
+function AddTodoCard({
+  defaultAssigneeId,
+  defaultProjectId,
+  defaultStatus,
+  defaultImportance,
+}: {
+  defaultAssigneeId?: number
+  defaultProjectId?: number
+  defaultStatus?: string
+  defaultImportance?: string
+}) {
+  const [title, setTitle] = useState('')
+  const queryClient = useQueryClient()
+
+  const createMutation = useMutation({
+    mutationFn: createTodo,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['todos'] })
+      setTitle('')
+    },
+  })
+
+  const handleSubmit = () => {
+    if (!title.trim() || createMutation.isPending) return
+    createMutation.mutate({
+      title: title.trim(),
+      assignee_id: defaultAssigneeId ?? null,
+      project_id: defaultProjectId,
+      status: defaultStatus || 'todo',
+      importance: defaultImportance || 'medium',
+      estimated_hours: 1,
+      blocked_by_ids: [],
+    })
+  }
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-dashed border-slate-300 overflow-hidden">
+      <div className="px-5 py-4">
+        <input
+          type="text"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') handleSubmit()
+          }}
+          placeholder={createMutation.isPending ? 'Adding...' : '+ Add a todo...'}
+          disabled={createMutation.isPending}
+          className="w-full text-sm font-medium text-slate-600 placeholder-slate-300 bg-transparent outline-none disabled:opacity-50"
+        />
+      </div>
+    </div>
+  )
+}
 
 export default function TodosPage({ onOpenTodo }: { onOpenTodo: (id: number) => void }) {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -55,6 +109,12 @@ export default function TodosPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
     setShowModal(false)
     setEditingTodo(null)
   }
+
+  // Resolve filter IDs to pass as defaults for AddTodoCard
+  const defaultAssigneeId = selectedPerson ? parseInt(selectedPerson) : undefined
+  const defaultProjectId = selectedProject ? parseInt(selectedProject) : undefined
+  const defaultStatus = selectedStatus || undefined
+  const defaultImportance = selectedImportance || undefined
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
@@ -156,15 +216,17 @@ export default function TodosPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
       {/* Todo list */}
       {isLoading ? (
         <div className="text-slate-500 text-sm">Loading...</div>
-      ) : filtered.length === 0 ? (
-        <div className="bg-white rounded-xl border border-slate-200 p-8 text-center text-slate-500 text-sm">
-          No todos found. Create one!
-        </div>
       ) : (
         <div className="space-y-3">
           {filtered.map((t) => (
             <TodoCard key={t.id} todo={t} onEdit={handleEdit} onOpenDetail={() => onOpenTodo(t.id)} queryKeys={[['todos']]} />
           ))}
+          <AddTodoCard
+            defaultAssigneeId={defaultAssigneeId}
+            defaultProjectId={defaultProjectId}
+            defaultStatus={defaultStatus}
+            defaultImportance={defaultImportance}
+          />
         </div>
       )}
 

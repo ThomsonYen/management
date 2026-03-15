@@ -1,7 +1,10 @@
 import { useState } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { deleteTodo, updateSubTodo } from '../api'
-import type { Todo } from '../types'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { deleteTodo, updateSubTodo, updateTodo, fetchPersons, fetchProjects, fetchTodos } from '../api'
+import type { Todo, Person, Project } from '../types'
+
+const IMPORTANCE_OPTIONS = ['low', 'medium', 'high', 'critical']
+const STATUS_OPTIONS = ['todo', 'in-progress', 'done', 'blocked']
 
 const importanceBadge = (imp: string) => {
   const map: Record<string, string> = {
@@ -18,6 +21,7 @@ const statusBadge = (s: string) => {
     todo: 'bg-slate-100 text-slate-600',
     'in-progress': 'bg-blue-100 text-blue-700',
     done: 'bg-green-100 text-green-700',
+    blocked: 'bg-red-100 text-red-700',
   }
   return map[s] || 'bg-slate-100 text-slate-600'
 }
@@ -29,9 +33,75 @@ interface TodoCardProps {
   queryKeys?: unknown[][]
 }
 
+function BlockerPicker({
+  allTodos,
+  excludeId,
+  selectedIds,
+  onSelect,
+}: {
+  allTodos: Todo[]
+  excludeId: number
+  selectedIds: number[]
+  onSelect: (todo: Todo) => void
+}) {
+  const [search, setSearch] = useState('')
+  const [open, setOpen] = useState(false)
+
+  const filtered = search
+    ? allTodos.filter(
+        (t) =>
+          t.id !== excludeId &&
+          !selectedIds.includes(t.id) &&
+          t.title.toLowerCase().includes(search.toLowerCase())
+      )
+    : []
+
+  return (
+    <div className="relative mt-2">
+      <input
+        type="text"
+        value={search}
+        onChange={(e) => { setSearch(e.target.value); setOpen(true) }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        placeholder="Search todos to add..."
+        className="w-full text-xs border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-400 placeholder-slate-300"
+      />
+      {open && filtered.length > 0 && (
+        <ul className="absolute z-10 left-0 right-0 mt-1 max-h-48 overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-lg">
+          {filtered.map((t) => (
+            <li
+              key={t.id}
+              onMouseDown={() => { onSelect(t); setSearch(''); setOpen(false) }}
+              className="px-3 py-2 text-sm cursor-pointer hover:bg-indigo-50 flex items-center gap-2"
+            >
+              <span className="text-slate-400 text-xs flex-shrink-0">#{t.id}</span>
+              <span className="flex-1 text-slate-700 truncate">{t.title}</span>
+              <span className="text-xs text-slate-400 capitalize flex-shrink-0">{t.status}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+const autoOpenSelect = (el: HTMLSelectElement | null) => {
+  if (el) {
+    el.focus()
+    try { el.showPicker() } catch { /* not supported in all browsers */ }
+  }
+}
+
 export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys }: TodoCardProps) {
   const [expanded, setExpanded] = useState(false)
+  const [editingField, setEditingField] = useState<string | null>(null)
+  const [editValue, setEditValue] = useState('')
   const queryClient = useQueryClient()
+
+  const { data: persons = [] } = useQuery<Person[]>({ queryKey: ['persons'], queryFn: fetchPersons })
+  const { data: projects = [] } = useQuery<Project[]>({ queryKey: ['projects'], queryFn: fetchProjects })
+  const { data: allTodos = [] } = useQuery<Todo[]>({ queryKey: ['todos'], queryFn: () => fetchTodos() })
 
   const invalidate = () => {
     const keys = queryKeys || [['todos']]
@@ -44,44 +114,89 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys }: Todo
     onSuccess: invalidate,
   })
 
-  const toggleSubTodo = useMutation({
-    mutationFn: ({ id, done }: { id: number; done: boolean }) =>
-      updateSubTodo(id, { done }),
+  const updateMutation = useMutation({
+    mutationFn: (data: Parameters<typeof updateTodo>[1]) => updateTodo(todo.id, data),
     onSuccess: invalidate,
   })
+
+  const toggleSubTodo = useMutation({
+    mutationFn: ({ id, done }: { id: number; done: boolean }) => updateSubTodo(id, { done }),
+    onSuccess: invalidate,
+  })
+
+  const saveField = (field: string, value: unknown) => {
+    updateMutation.mutate({ [field]: value } as Parameters<typeof updateTodo>[1])
+    setEditingField(null)
+  }
+
+  const startEdit = (e: React.MouseEvent, field: string, currentValue: string) => {
+    e.stopPropagation()
+    setEditingField(field)
+    setEditValue(currentValue)
+  }
 
   const doneSubs = todo.subtodos.filter((s) => s.done).length
   const totalSubs = todo.subtodos.length
 
   const isOverdue =
-    todo.deadline &&
-    todo.status !== 'done' &&
-    new Date(todo.deadline) < new Date()
+    todo.deadline && todo.status !== 'done' && new Date(todo.deadline) < new Date()
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
       {/* Header */}
       <div className="px-5 py-4">
         <div className="flex items-start gap-3">
-          <div
-            className="flex-1 min-w-0 cursor-pointer select-none"
-            onClick={() => setExpanded((e) => !e)}
-          >
+          <div className="flex-1 min-w-0">
+            {/* Badges row */}
             <div className="flex flex-wrap items-center gap-2 mb-1">
-              <span
-                className={`text-xs font-bold px-2 py-0.5 rounded-full border uppercase tracking-wide ${importanceBadge(
-                  todo.importance,
-                )}`}
-              >
-                {todo.importance}
-              </span>
-              <span
-                className={`text-xs font-medium px-2 py-0.5 rounded-full capitalize ${statusBadge(
-                  todo.status,
-                )}`}
-              >
-                {todo.status}
-              </span>
+              {/* Importance badge */}
+              {editingField === 'importance' ? (
+                <select
+                  ref={autoOpenSelect}
+                  value={todo.importance}
+                  onChange={(e) => saveField('importance', e.target.value)}
+                  onBlur={() => setEditingField(null)}
+                  onClick={(e) => e.stopPropagation()}
+                  className={`text-xs font-bold px-2 py-0.5 rounded-full border uppercase tracking-wide cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-400 ${importanceBadge(todo.importance)}`}
+                >
+                  {IMPORTANCE_OPTIONS.map((o) => (
+                    <option key={o} value={o}>{o}</option>
+                  ))}
+                </select>
+              ) : (
+                <span
+                  onClick={(e) => startEdit(e, 'importance', todo.importance)}
+                  title="Click to change importance"
+                  className={`text-xs font-bold px-2 py-0.5 rounded-full border uppercase tracking-wide cursor-pointer hover:ring-2 hover:ring-indigo-300 transition-all ${importanceBadge(todo.importance)}`}
+                >
+                  {todo.importance}
+                </span>
+              )}
+
+              {/* Status badge */}
+              {editingField === 'status' ? (
+                <select
+                  ref={autoOpenSelect}
+                  value={todo.status}
+                  onChange={(e) => saveField('status', e.target.value)}
+                  onBlur={() => setEditingField(null)}
+                  onClick={(e) => e.stopPropagation()}
+                  className={`text-xs font-medium px-2 py-0.5 rounded-full capitalize cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-400 ${statusBadge(todo.status)}`}
+                >
+                  {STATUS_OPTIONS.map((o) => (
+                    <option key={o} value={o}>{o}</option>
+                  ))}
+                </select>
+              ) : (
+                <span
+                  onClick={(e) => startEdit(e, 'status', todo.status)}
+                  title="Click to change status"
+                  className={`text-xs font-medium px-2 py-0.5 rounded-full capitalize cursor-pointer hover:ring-2 hover:ring-indigo-300 transition-all ${statusBadge(todo.status)}`}
+                >
+                  {todo.status}
+                </span>
+              )}
+
               {todo.is_blocked && (
                 <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-red-100 text-red-700">
                   blocked
@@ -93,28 +208,149 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys }: Todo
                 </span>
               )}
             </div>
-            <h3 className="font-semibold text-slate-800 text-base leading-tight">{todo.title}</h3>
+
+            {/* Title */}
+            {editingField === 'title' ? (
+              <input
+                autoFocus
+                type="text"
+                value={editValue}
+                onChange={(e) => setEditValue(e.target.value)}
+                onBlur={() => {
+                  if (editValue.trim()) saveField('title', editValue.trim())
+                  else setEditingField(null)
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && editValue.trim()) saveField('title', editValue.trim())
+                  if (e.key === 'Escape') setEditingField(null)
+                }}
+                onClick={(e) => e.stopPropagation()}
+                className="font-semibold text-slate-800 text-base leading-tight w-full border-b-2 border-indigo-400 focus:outline-none bg-transparent pb-0.5"
+              />
+            ) : (
+              <h3
+                onClick={(e) => startEdit(e, 'title', todo.title)}
+                title="Click to edit title"
+                className="font-semibold text-slate-800 text-base leading-tight cursor-pointer hover:text-indigo-600 transition-colors"
+              >
+                {todo.title}
+              </h3>
+            )}
+
+            {/* Info row */}
             <div className="flex flex-wrap gap-3 mt-1.5 text-xs text-slate-500">
-              {todo.assignee_name && (
-                <span className="flex items-center gap-1">
-                  <span>◉</span> {todo.assignee_name}
+              {/* Assignee */}
+              {editingField === 'assignee_id' ? (
+                <select
+                  ref={autoOpenSelect}
+                  value={todo.assignee_id?.toString() || ''}
+                  onChange={(e) =>
+                    saveField('assignee_id', e.target.value ? parseInt(e.target.value) : null)
+                  }
+                  onBlur={() => setEditingField(null)}
+                  onClick={(e) => e.stopPropagation()}
+                  className="text-xs border border-indigo-300 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                >
+                  <option value="">— None —</option>
+                  {persons.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+              ) : (
+                <span
+                  onClick={(e) => startEdit(e, 'assignee_id', todo.assignee_id?.toString() || '')}
+                  title="Click to change assignee"
+                  className="flex items-center gap-1 cursor-pointer hover:text-indigo-600 transition-colors"
+                >
+                  <span>◉</span>
+                  {todo.assignee_name ?? <em className="text-slate-300 not-italic">+ person</em>}
                 </span>
               )}
-              {todo.deadline && (
-                <span className={`flex items-center gap-1 ${isOverdue ? 'text-red-600 font-semibold' : ''}`}>
-                  <span>◷</span> {todo.deadline}
+
+              {/* Deadline */}
+              {editingField === 'deadline' ? (
+                <input
+                  autoFocus
+                  type="date"
+                  value={editValue}
+                  onChange={(e) => setEditValue(e.target.value)}
+                  onBlur={() => saveField('deadline', editValue || undefined)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') saveField('deadline', editValue || undefined)
+                    if (e.key === 'Escape') setEditingField(null)
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  className="text-xs border border-indigo-300 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                />
+              ) : (
+                <span
+                  onClick={(e) => startEdit(e, 'deadline', todo.deadline || '')}
+                  title="Click to change deadline"
+                  className={`flex items-center gap-1 cursor-pointer hover:text-indigo-600 transition-colors ${isOverdue ? 'text-red-600 font-semibold' : ''}`}
+                >
+                  <span>◷</span>
+                  {todo.deadline ?? <em className="text-slate-300 not-italic">+ date</em>}
                 </span>
               )}
-              {todo.project_name && (
-                <span className="flex items-center gap-1">
-                  <span>◈</span> {todo.project_name}
+
+              {/* Project */}
+              {editingField === 'project_id' ? (
+                <select
+                  ref={autoOpenSelect}
+                  value={todo.project_id?.toString() || ''}
+                  onChange={(e) =>
+                    saveField('project_id', e.target.value ? parseInt(e.target.value) : undefined)
+                  }
+                  onBlur={() => setEditingField(null)}
+                  onClick={(e) => e.stopPropagation()}
+                  className="text-xs border border-indigo-300 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                >
+                  <option value="">— None —</option>
+                  {projects.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+              ) : (
+                <span
+                  onClick={(e) => startEdit(e, 'project_id', todo.project_id?.toString() || '')}
+                  title="Click to change project"
+                  className="flex items-center gap-1 cursor-pointer hover:text-indigo-600 transition-colors"
+                >
+                  <span>◈</span>
+                  {todo.project_name ?? <em className="text-slate-300 not-italic">+ project</em>}
                 </span>
               )}
-              <span className="flex items-center gap-1">
-                <span>⏱</span> {todo.estimated_hours}h
-              </span>
+
+              {/* Estimated hours */}
+              {editingField === 'estimated_hours' ? (
+                <input
+                  autoFocus
+                  type="number"
+                  min="0.25"
+                  step="0.25"
+                  value={editValue}
+                  onChange={(e) => setEditValue(e.target.value)}
+                  onBlur={() => saveField('estimated_hours', parseFloat(editValue) || 1)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') saveField('estimated_hours', parseFloat(editValue) || 1)
+                    if (e.key === 'Escape') setEditingField(null)
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  className="text-xs border border-indigo-300 rounded px-1 py-0.5 w-16 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                />
+              ) : (
+                <span
+                  onClick={(e) => startEdit(e, 'estimated_hours', todo.estimated_hours.toString())}
+                  title="Click to change estimated hours"
+                  className="flex items-center gap-1 cursor-pointer hover:text-indigo-600 transition-colors"
+                >
+                  <span>⏱</span> {todo.estimated_hours}h
+                </span>
+              )}
             </div>
           </div>
+
+          {/* Actions */}
           <div className="flex-shrink-0 flex items-center gap-2">
             {onOpenDetail && (
               <button
@@ -127,7 +363,7 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys }: Todo
             )}
             <button
               onClick={() => setExpanded((e) => !e)}
-              title={expanded ? 'Collapse subtasks' : 'Expand subtasks'}
+              title={expanded ? 'Collapse' : 'Expand'}
               className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium text-slate-500 bg-slate-50 hover:bg-slate-100 border border-slate-200 transition-colors select-none"
             >
               {totalSubs > 0 && (
@@ -138,7 +374,7 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys }: Todo
           </div>
         </div>
 
-          {/* Sub-todo progress bar */}
+        {/* Sub-todo progress bar */}
         {totalSubs > 0 && (
           <div
             className="mt-2 h-1.5 bg-slate-100 rounded-full overflow-hidden cursor-pointer select-none"
@@ -155,14 +391,33 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys }: Todo
       {/* Expanded content */}
       {expanded && (
         <div className="border-t border-slate-100 px-5 py-4 space-y-4">
-          {todo.description && (
-            <div>
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
-                Description
+          <div>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
+              Description
+            </p>
+            {editingField === 'description' ? (
+              <textarea
+                autoFocus
+                value={editValue}
+                onChange={(e) => setEditValue(e.target.value)}
+                onBlur={() => saveField('description', editValue || null)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') setEditingField(null)
+                }}
+                onClick={(e) => e.stopPropagation()}
+                rows={3}
+                className="text-sm text-slate-700 w-full bg-transparent border border-indigo-300 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none"
+              />
+            ) : (
+              <p
+                onClick={(e) => startEdit(e, 'description', todo.description || '')}
+                title="Click to edit description"
+                className="text-sm text-slate-700 whitespace-pre-wrap cursor-pointer hover:text-indigo-600 transition-colors min-h-[1.25rem]"
+              >
+                {todo.description || <em className="text-slate-300 not-italic">+ Add a description...</em>}
               </p>
-              <p className="text-sm text-slate-700 whitespace-pre-wrap">{todo.description}</p>
-            </div>
-          )}
+            )}
+          </div>
 
           {todo.subtodos.length > 0 && (
             <div>
@@ -178,16 +433,10 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys }: Todo
                       <input
                         type="checkbox"
                         checked={s.done}
-                        onChange={(e) =>
-                          toggleSubTodo.mutate({ id: s.id, done: e.target.checked })
-                        }
+                        onChange={(e) => toggleSubTodo.mutate({ id: s.id, done: e.target.checked })}
                         className="accent-indigo-600 w-4 h-4 cursor-pointer"
                       />
-                      <span
-                        className={`text-sm ${
-                          s.done ? 'line-through text-slate-400' : 'text-slate-700'
-                        }`}
-                      >
+                      <span className={`text-sm ${s.done ? 'line-through text-slate-400' : 'text-slate-700'}`}>
                         {s.title}
                       </span>
                     </li>
@@ -196,23 +445,42 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys }: Todo
             </div>
           )}
 
-          {todo.blocked_by_ids.length > 0 && (
-            <div>
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
-                Blocked by
-              </p>
-              <p className="text-sm text-slate-600">
-                Todo IDs: {todo.blocked_by_ids.join(', ')}
-              </p>
-            </div>
-          )}
+          <div>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
+              Blocked by
+            </p>
+            {todo.blocked_by_ids.length > 0 && (
+              <ul className="space-y-1 mb-1">
+                {todo.blocked_by_ids.map((bid) => {
+                  const blocker = allTodos.find((t) => t.id === bid)
+                  return (
+                    <li key={bid} className="flex items-center gap-2">
+                      <span className="flex-1 text-sm text-slate-600 truncate">
+                        {blocker ? blocker.title : `#${bid}`}
+                      </span>
+                      <button
+                        onClick={() => updateMutation.mutate({ blocked_by_ids: todo.blocked_by_ids.filter((id) => id !== bid) })}
+                        className="flex-shrink-0 text-slate-300 hover:text-red-500 transition-colors text-lg leading-none"
+                      >×</button>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+            <BlockerPicker
+              allTodos={allTodos}
+              excludeId={todo.id}
+              selectedIds={todo.blocked_by_ids}
+              onSelect={(t) => updateMutation.mutate({ blocked_by_ids: [...todo.blocked_by_ids, t.id] })}
+            />
+          </div>
 
           <div className="flex gap-2 pt-1">
             <button
               onClick={() => onEdit(todo)}
               className="px-3 py-1.5 bg-indigo-600 text-white text-xs font-medium rounded-lg hover:bg-indigo-700 transition-colors"
             >
-              Edit
+              Edit (sub-tasks & more)
             </button>
             <button
               onClick={() => {
