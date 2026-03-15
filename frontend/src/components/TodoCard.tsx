@@ -61,12 +61,12 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys }: Todo
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
       {/* Header */}
-      <div
-        className="px-5 py-4 cursor-pointer select-none hover:bg-slate-50 transition-colors"
-        onClick={() => setExpanded((e) => !e)}
-      >
+      <div className="px-5 py-4">
         <div className="flex items-start gap-3">
-          <div className="flex-1 min-w-0">
+          <div
+            className="flex-1 min-w-0 cursor-pointer select-none"
+            onClick={() => setExpanded((e) => !e)}
+          >
             <div className="flex flex-wrap items-center gap-2 mb-1">
               <span
                 className={`text-xs font-bold px-2 py-0.5 rounded-full border uppercase tracking-wide ${importanceBadge(
@@ -115,19 +115,35 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys }: Todo
               </span>
             </div>
           </div>
-          <div className="flex-shrink-0 flex items-center gap-1">
-            {totalSubs > 0 && (
-              <span className="text-xs text-slate-500 mr-1">
-                {doneSubs}/{totalSubs}
-              </span>
+          <div className="flex-shrink-0 flex items-center gap-2">
+            {onOpenDetail && (
+              <button
+                onClick={onOpenDetail}
+                title="Open todo page"
+                className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 transition-colors"
+              >
+                <span>↗</span> Open
+              </button>
             )}
-            <span className="text-slate-400 text-sm">{expanded ? '▲' : '▼'}</span>
+            <button
+              onClick={() => setExpanded((e) => !e)}
+              title={expanded ? 'Collapse subtasks' : 'Expand subtasks'}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium text-slate-500 bg-slate-50 hover:bg-slate-100 border border-slate-200 transition-colors select-none"
+            >
+              {totalSubs > 0 && (
+                <span className="text-slate-400">{doneSubs}/{totalSubs}</span>
+              )}
+              <span>{expanded ? '▲' : '▼'}</span>
+            </button>
           </div>
         </div>
 
-        {/* Sub-todo progress bar */}
+          {/* Sub-todo progress bar */}
         {totalSubs > 0 && (
-          <div className="mt-2 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+          <div
+            className="mt-2 h-1.5 bg-slate-100 rounded-full overflow-hidden cursor-pointer select-none"
+            onClick={() => setExpanded((e) => !e)}
+          >
             <div
               className="h-full bg-indigo-500 rounded-full transition-all"
               style={{ width: `${(doneSubs / totalSubs) * 100}%` }}
@@ -192,14 +208,6 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys }: Todo
           )}
 
           <div className="flex gap-2 pt-1">
-            {onOpenDetail && (
-              <button
-                onClick={onOpenDetail}
-                className="px-3 py-1.5 bg-slate-800 text-white text-xs font-medium rounded-lg hover:bg-slate-900 transition-colors"
-              >
-                Open
-              </button>
-            )}
             <button
               onClick={() => onEdit(todo)}
               className="px-3 py-1.5 bg-indigo-600 text-white text-xs font-medium rounded-lg hover:bg-indigo-700 transition-colors"
