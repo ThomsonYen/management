@@ -13,7 +13,7 @@ import {
 } from '../api'
 import type { SubTodo, Todo, Person, Project } from '../types'
 import TodoModal from '../components/TodoModal'
-import { BlockerTreeNode } from '../components/BlockerTree'
+import { BlockerTreeNode, BlockingTreeNode } from '../components/BlockerTree'
 import { config } from '../config'
 
 const importanceBadge = (imp: string) => {
@@ -35,14 +35,6 @@ const statusBadge = (s: string) => {
   return map[s] || 'bg-slate-100 text-slate-600'
 }
 
-const statusDot = (s: string) => {
-  const map: Record<string, string> = {
-    todo: 'bg-slate-400',
-    'in-progress': 'bg-blue-500',
-    done: 'bg-green-500',
-  }
-  return map[s] || 'bg-slate-400'
-}
 
 function BlockerPicker({
   allTodos,
@@ -670,23 +662,14 @@ export default function TodoDetailPage() {
         {blocking.length > 0 && (
           <ul className="space-y-2 mb-1">
             {blocking.map((blocked) => (
-              <li key={blocked.id} className="flex items-center gap-2">
-                <button
-                  onClick={() => onOpenTodo(blocked.id)}
-                  className="flex-1 flex items-center gap-3 text-left px-3 py-2.5 rounded-lg border border-slate-100 hover:border-indigo-300 hover:bg-indigo-50 transition-colors"
-                >
-                  <span className={`w-2 h-2 rounded-full flex-shrink-0 ${statusDot(blocked.status)}`} />
-                  <span className="flex-1 text-sm font-medium text-slate-700">{blocked.title}</span>
-                  <span className={`text-xs px-2 py-0.5 rounded-full capitalize ${statusBadge(blocked.status)}`}>
-                    {blocked.status}
-                  </span>
-                  <span className="text-xs text-slate-400">→</span>
-                </button>
-                <button
-                  onClick={() => updateTodo(blocked.id, { blocked_by_ids: blocked.blocked_by_ids.filter((id) => id !== todoId) }).then(invalidate)}
-                  className="flex-shrink-0 text-slate-300 hover:text-red-500 transition-colors text-lg leading-none px-1"
-                >×</button>
-              </li>
+              <BlockingTreeNode
+                key={blocked.id}
+                todo={blocked}
+                allTodos={allTodos}
+                onOpenTodo={onOpenTodo}
+                onRemove={() => updateTodo(blocked.id, { blocked_by_ids: blocked.blocked_by_ids.filter((id) => id !== todoId) }).then(invalidate)}
+                visited={new Set([todoId])}
+              />
             ))}
           </ul>
         )}
