@@ -39,13 +39,14 @@ const scheduleStatusBadge = (s: string) => {
   return map[s] || 'bg-slate-100 text-slate-700'
 }
 
-function ScheduleCard({ item, todosById }: { item: ScheduleStatus; todosById: Map<number, Todo> }) {
+function ScheduleCard({ item, todosById, onOpenTodo }: { item: ScheduleStatus; todosById: Map<number, Todo>; onOpenTodo: (id: number) => void }) {
   const isBehind = item.status === 'behind'
   const deficit = item.chain_hours - item.available_hours
   const blockerPath = longestBlockerPath(item.todo_id, todosById)
   return (
-    <div
-      className={`rounded-lg p-4 border-l-4 ${
+    <button
+      onClick={() => onOpenTodo(item.todo_id)}
+      className={`w-full text-left rounded-lg p-4 border-l-4 hover:brightness-95 transition-all ${
         isBehind
           ? 'bg-red-50 border-red-500'
           : 'bg-yellow-50 border-yellow-400'
@@ -99,7 +100,7 @@ function ScheduleCard({ item, todosById }: { item: ScheduleStatus; todosById: Ma
           </div>
         </div>
       )}
-    </div>
+    </button>
   )
 }
 
@@ -195,7 +196,7 @@ export default function Dashboard({ onOpenTodo }: { onOpenTodo: (id: number) => 
         ) : (
           <div className="space-y-3">
             {reminders.map((r) => (
-              <ScheduleCard key={r.todo_id} item={r} todosById={todosById} />
+              <ScheduleCard key={r.todo_id} item={r} todosById={todosById} onOpenTodo={onOpenTodo} />
             ))}
           </div>
         )}

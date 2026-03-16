@@ -1,16 +1,23 @@
-from fastapi import FastAPI, Depends, HTTPException, Query
-from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import (
-    create_engine, Column, Integer, String, Text, Float,
-    Boolean, DateTime, ForeignKey, Table
-)
-from sqlalchemy.orm import (
-    DeclarativeBase, relationship, Session, sessionmaker
-)
-from pydantic import BaseModel
-from typing import Optional, List
-from datetime import datetime, date
 import math
+from datetime import date, datetime
+from typing import List, Optional
+
+from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Table,
+    Text,
+    create_engine,
+)
+from sqlalchemy.orm import DeclarativeBase, Session, relationship, sessionmaker
 
 DATABASE_URL = "sqlite:///./management.db"
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
@@ -45,7 +52,9 @@ class Project(Base):
     description = Column(Text, nullable=True)
     parent_id = Column(Integer, ForeignKey("projects.id"), nullable=True)
     deadline = Column(String, nullable=True)
-    subprojects = relationship("Project", back_populates="parent", cascade="all, delete-orphan")
+    subprojects = relationship(
+        "Project", back_populates="parent", cascade="all, delete-orphan"
+    )
     parent = relationship("Project", back_populates="subprojects", remote_side=[id])
     todos = relationship("Todo", back_populates="project")
 
@@ -62,7 +71,12 @@ class Todo(Base):
     estimated_hours = Column(Float, default=1.0)
     status = Column(String, default="todo")
     created_at = Column(String, default=lambda: datetime.utcnow().isoformat())
-    subtodos = relationship("SubTodo", back_populates="todo", cascade="all, delete-orphan", order_by="SubTodo.order")
+    subtodos = relationship(
+        "SubTodo",
+        back_populates="todo",
+        cascade="all, delete-orphan",
+        order_by="SubTodo.order",
+    )
     project = relationship("Project", back_populates="todos")
     assignee = relationship("Person", back_populates="todos")
     blocked_by = relationship(
@@ -97,9 +111,11 @@ def get_db():
 
 # ─── Pydantic Schemas ────────────────────────────────────────────────────────
 
+
 class PersonCreate(BaseModel):
     name: str
     email: Optional[str] = None
+
 
 class PersonOut(BaseModel):
     id: int
@@ -114,11 +130,13 @@ class ProjectCreate(BaseModel):
     parent_id: Optional[int] = None
     deadline: Optional[str] = None
 
+
 class ProjectUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     parent_id: Optional[int] = None
     deadline: Optional[str] = None
+
 
 class ProjectOut(BaseModel):
     id: int
@@ -127,6 +145,7 @@ class ProjectOut(BaseModel):
     parent_id: Optional[int] = None
     deadline: Optional[str] = None
     model_config = {"from_attributes": True}
+
 
 class ProjectTreeOut(BaseModel):
     id: int
@@ -137,6 +156,7 @@ class ProjectTreeOut(BaseModel):
     subprojects: List["ProjectTreeOut"] = []
     model_config = {"from_attributes": True}
 
+
 ProjectTreeOut.model_rebuild()
 
 
@@ -145,10 +165,12 @@ class SubTodoCreate(BaseModel):
     done: bool = False
     order: int = 0
 
+
 class SubTodoUpdate(BaseModel):
     title: Optional[str] = None
     done: Optional[bool] = None
     order: Optional[int] = None
+
 
 class SubTodoOut(BaseModel):
     id: int
@@ -169,6 +191,7 @@ class TodoCreate(BaseModel):
     status: str = "todo"
     blocked_by_ids: List[int] = []
 
+
 class TodoUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
@@ -179,6 +202,7 @@ class TodoUpdate(BaseModel):
     estimated_hours: Optional[float] = None
     status: Optional[str] = None
     blocked_by_ids: Optional[List[int]] = None
+
 
 class TodoOut(BaseModel):
     id: int
@@ -211,6 +235,7 @@ class ScheduleStatus(BaseModel):
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
+
 
 def todo_to_out(t: Todo) -> TodoOut:
     return TodoOut(
@@ -258,9 +283,11 @@ app.add_middleware(
 
 # ─── Persons ─────────────────────────────────────────────────────────────────
 
+
 @app.get("/persons", response_model=List[PersonOut])
 def list_persons(db: Session = Depends(get_db)):
     return db.query(Person).all()
+
 
 @app.post("/persons", response_model=PersonOut)
 def create_person(data: PersonCreate, db: Session = Depends(get_db)):
@@ -269,6 +296,7 @@ def create_person(data: PersonCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(p)
     return p
+
 
 @app.delete("/persons/{person_id}")
 def delete_person(person_id: int, db: Session = Depends(get_db)):
@@ -282,14 +310,17 @@ def delete_person(person_id: int, db: Session = Depends(get_db)):
 
 # ─── Projects ────────────────────────────────────────────────────────────────
 
+
 @app.get("/projects", response_model=List[ProjectOut])
 def list_projects(db: Session = Depends(get_db)):
     return db.query(Project).all()
+
 
 @app.get("/projects/tree", response_model=List[ProjectTreeOut])
 def projects_tree(db: Session = Depends(get_db)):
     roots = db.query(Project).filter(Project.parent_id == None).all()
     return [project_to_tree(r) for r in roots]
+
 
 @app.post("/projects", response_model=ProjectOut)
 def create_project(data: ProjectCreate, db: Session = Depends(get_db)):
@@ -298,6 +329,7 @@ def create_project(data: ProjectCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(p)
     return p
+
 
 @app.put("/projects/{project_id}", response_model=ProjectOut)
 def update_project(project_id: int, data: ProjectUpdate, db: Session = Depends(get_db)):
@@ -310,6 +342,7 @@ def update_project(project_id: int, data: ProjectUpdate, db: Session = Depends(g
     db.refresh(p)
     return p
 
+
 @app.delete("/projects/{project_id}")
 def delete_project(project_id: int, db: Session = Depends(get_db)):
     p = db.query(Project).get(project_id)
@@ -321,6 +354,7 @@ def delete_project(project_id: int, db: Session = Depends(get_db)):
 
 
 # ─── Todos ───────────────────────────────────────────────────────────────────
+
 
 @app.get("/todos", response_model=List[TodoOut])
 def list_todos(
@@ -342,12 +376,14 @@ def list_todos(
         todos = q.all()
     return [todo_to_out(t) for t in todos]
 
+
 @app.get("/todos/{todo_id}", response_model=TodoOut)
 def get_todo(todo_id: int, db: Session = Depends(get_db)):
     t = db.query(Todo).get(todo_id)
     if not t:
         raise HTTPException(404, "Todo not found")
     return todo_to_out(t)
+
 
 @app.post("/todos", response_model=TodoOut)
 def create_todo(data: TodoCreate, db: Session = Depends(get_db)):
@@ -361,6 +397,7 @@ def create_todo(data: TodoCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(t)
     return todo_to_out(t)
+
 
 @app.put("/todos/{todo_id}", response_model=TodoOut)
 def update_todo(todo_id: int, data: TodoUpdate, db: Session = Depends(get_db)):
@@ -378,6 +415,7 @@ def update_todo(todo_id: int, data: TodoUpdate, db: Session = Depends(get_db)):
     db.refresh(t)
     return todo_to_out(t)
 
+
 @app.delete("/todos/{todo_id}")
 def delete_todo(todo_id: int, db: Session = Depends(get_db)):
     t = db.query(Todo).get(todo_id)
@@ -390,6 +428,7 @@ def delete_todo(todo_id: int, db: Session = Depends(get_db)):
 
 # ─── SubTodos ────────────────────────────────────────────────────────────────
 
+
 @app.post("/todos/{todo_id}/subtodos", response_model=SubTodoOut)
 def create_subtodo(todo_id: int, data: SubTodoCreate, db: Session = Depends(get_db)):
     t = db.query(Todo).get(todo_id)
@@ -400,6 +439,7 @@ def create_subtodo(todo_id: int, data: SubTodoCreate, db: Session = Depends(get_
     db.commit()
     db.refresh(s)
     return s
+
 
 @app.put("/subtodos/{subtodo_id}", response_model=SubTodoOut)
 def update_subtodo(subtodo_id: int, data: SubTodoUpdate, db: Session = Depends(get_db)):
@@ -412,6 +452,7 @@ def update_subtodo(subtodo_id: int, data: SubTodoUpdate, db: Session = Depends(g
     db.refresh(s)
     return s
 
+
 @app.delete("/subtodos/{subtodo_id}")
 def delete_subtodo(subtodo_id: int, db: Session = Depends(get_db)):
     s = db.query(SubTodo).get(subtodo_id)
@@ -423,6 +464,7 @@ def delete_subtodo(subtodo_id: int, db: Session = Depends(get_db)):
 
 
 # ─── Schedule / Reminders ────────────────────────────────────────────────────
+
 
 def _chain_hours(todo: Todo, visited: set) -> float:
     """Return todo's estimated_hours + the longest chain of pending (not-done) blockers."""
@@ -438,11 +480,7 @@ def _chain_hours(todo: Todo, visited: set) -> float:
 @app.get("/schedule/reminders", response_model=List[ScheduleStatus])
 def schedule_reminders(db: Session = Depends(get_db)):
     today = date.today()
-    todos = (
-        db.query(Todo)
-        .filter(Todo.deadline != None, Todo.status != "done")
-        .all()
-    )
+    todos = db.query(Todo).filter(Todo.deadline != None, Todo.status != "done").all()
     results = []
     for t in todos:
         try:
