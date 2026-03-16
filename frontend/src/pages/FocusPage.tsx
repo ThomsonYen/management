@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { fetchTodos, fetchProjects, updateTodo } from '../api'
+import { fetchTodos, fetchProjects, updateTodo, createTodo } from '../api'
 import type { Todo, Project } from '../types'
 import TodoCard from '../components/TodoCard'
 import TodoModal from '../components/TodoModal'
@@ -9,6 +9,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
   const [selectedProject, setSelectedProject] = useState<string>('')
   const [showModal, setShowModal] = useState(false)
   const [editingTodo, setEditingTodo] = useState<Todo | null>(null)
+  const [newTitle, setNewTitle] = useState('')
   const queryClient = useQueryClient()
 
   const { data: todos = [], isLoading } = useQuery<Todo[]>({
@@ -25,6 +26,18 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
     mutationFn: (id: number) => updateTodo(id, { is_focused: false }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['todos'] })
+    },
+  })
+
+  const addFocusedTodo = useMutation({
+    mutationFn: async (title: string) => {
+      const todo = await createTodo({ title, status: 'todo', importance: 'medium', estimated_hours: 1 })
+      await updateTodo(todo.id, { is_focused: true })
+      return todo
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['todos'] })
+      setNewTitle('')
     },
   })
 
@@ -155,6 +168,23 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
               </div>
             </div>
           ))}
+          <div className="bg-white rounded-xl shadow-sm border border-dashed border-slate-300 overflow-hidden">
+            <div className="px-5 py-4">
+              <input
+                type="text"
+                value={newTitle}
+                onChange={(e) => setNewTitle(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && newTitle.trim() && !addFocusedTodo.isPending) {
+                    addFocusedTodo.mutate(newTitle.trim())
+                  }
+                }}
+                placeholder={addFocusedTodo.isPending ? 'Adding...' : '+ Add a focused todo...'}
+                disabled={addFocusedTodo.isPending}
+                className="w-full text-sm font-medium text-slate-600 placeholder-slate-300 bg-transparent outline-none disabled:opacity-50"
+              />
+            </div>
+          </div>
         </div>
       )}
 
