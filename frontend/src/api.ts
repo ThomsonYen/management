@@ -46,6 +46,7 @@ export interface TodoFilters {
   project_id?: number
   status?: string
   exclude_done?: boolean
+  is_focused?: boolean
 }
 
 export const fetchTodos = (filters?: TodoFilters): Promise<Todo[]> =>
@@ -77,6 +78,7 @@ export const updateTodo = (
     importance?: string
     estimated_hours?: number
     status?: string
+    is_focused?: boolean
     blocked_by_ids?: number[]
   },
 ): Promise<Todo> => api.put(`/todos/${id}`, data).then((r) => r.data)

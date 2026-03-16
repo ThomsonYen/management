@@ -32,6 +32,7 @@ interface TodoCardProps {
   onEdit: (todo: Todo) => void
   onOpenDetail?: () => void
   queryKeys?: unknown[][]
+  extraActions?: React.ReactNode
 }
 
 function BlockerPicker({
@@ -94,7 +95,7 @@ const autoOpenSelect = (el: HTMLSelectElement | null) => {
   }
 }
 
-export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys }: TodoCardProps) {
+export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraActions }: TodoCardProps) {
   const [expanded, setExpanded] = useState(false)
   const [editingField, setEditingField] = useState<string | null>(null)
   const [editValue, setEditValue] = useState('')
@@ -164,7 +165,12 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys }: Todo
 
   return (
     <div
-      className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden"
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.setData('application/x-todo-id', String(todo.id))
+        e.dataTransfer.effectAllowed = 'link'
+      }}
+      className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden cursor-grab active:cursor-grabbing"
       style={{ opacity: isDying ? 0 : 1, transition: `opacity ${config.todo_done_fade_seconds}s ease` }}
     >
       {/* Header */}
@@ -385,6 +391,7 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys }: Todo
 
           {/* Actions */}
           <div className="flex-shrink-0 flex items-center gap-2">
+            {extraActions}
             {onOpenDetail && (
               <button
                 onClick={onOpenDetail}

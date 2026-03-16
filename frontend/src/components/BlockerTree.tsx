@@ -40,7 +40,15 @@ export function BlockerTreeNode({
 
   return (
     <li>
-      <div className="flex items-center gap-2">
+      <div
+        draggable
+        onDragStart={(e) => {
+          e.stopPropagation()
+          e.dataTransfer.setData('application/x-todo-id', String(todo.id))
+          e.dataTransfer.effectAllowed = 'link'
+        }}
+        className="flex items-center gap-2 cursor-grab active:cursor-grabbing"
+      >
         <button
           onClick={() => onOpenTodo(todo.id)}
           className="flex-1 flex items-center gap-2 text-left px-3 py-2 rounded-lg border border-slate-100 hover:border-indigo-300 hover:bg-indigo-50 transition-colors"
@@ -104,7 +112,15 @@ export function BlockingTreeNode({
 
   return (
     <li>
-      <div className="flex items-center gap-2">
+      <div
+        draggable
+        onDragStart={(e) => {
+          e.stopPropagation()
+          e.dataTransfer.setData('application/x-todo-id', String(todo.id))
+          e.dataTransfer.effectAllowed = 'link'
+        }}
+        className="flex items-center gap-2 cursor-grab active:cursor-grabbing"
+      >
         <button
           onClick={() => onOpenTodo(todo.id)}
           className="flex-1 flex items-center gap-2 text-left px-3 py-2 rounded-lg border border-slate-100 hover:border-amber-300 hover:bg-amber-50 transition-colors"

@@ -13,7 +13,14 @@ function ScheduleCard({ item, allTodos, onOpenTodo }: { item: ScheduleStatus; al
     : []
 
   return (
-    <div className={`rounded-lg border-l-4 ${isBehind ? 'bg-red-50 border-red-500' : 'bg-yellow-50 border-yellow-400'}`}>
+    <div
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.setData('application/x-todo-id', String(item.todo_id))
+        e.dataTransfer.effectAllowed = 'link'
+      }}
+      className={`rounded-lg border-l-4 cursor-grab active:cursor-grabbing ${isBehind ? 'bg-red-50 border-red-500' : 'bg-yellow-50 border-yellow-400'}`}
+    >
       <button
         onClick={() => onOpenTodo(item.todo_id)}
         className="w-full text-left p-4 hover:brightness-95 transition-all"

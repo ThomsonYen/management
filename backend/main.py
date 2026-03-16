@@ -73,6 +73,7 @@ class Todo(Base):
     importance = Column(String, default="medium")
     estimated_hours = Column(Float, default=1.0)
     status = Column(String, default="todo")
+    is_focused = Column(Boolean, default=False)
     created_at = Column(String, default=lambda: datetime.utcnow().isoformat())
     done_at = Column(String, nullable=True)
     subtodos = relationship(
@@ -103,6 +104,13 @@ class SubTodo(Base):
 
 
 Base.metadata.create_all(bind=engine)
+
+# Migrate: add is_focused column if missing
+with engine.connect() as conn:
+    columns = [c["name"] for c in inspect(engine).get_columns("todos")]
+    if "is_focused" not in columns:
+        conn.execute(text("ALTER TABLE todos ADD COLUMN is_focused BOOLEAN DEFAULT 0"))
+        conn.commit()
 
 
 def get_db():
@@ -193,6 +201,7 @@ class TodoCreate(BaseModel):
     importance: str = "medium"
     estimated_hours: float = 1.0
     status: str = "todo"
+    is_focused: bool = False
     blocked_by_ids: List[int] = []
 
 
@@ -205,6 +214,7 @@ class TodoUpdate(BaseModel):
     importance: Optional[str] = None
     estimated_hours: Optional[float] = None
     status: Optional[str] = None
+    is_focused: Optional[bool] = None
     blocked_by_ids: Optional[List[int]] = None
 
 
@@ -221,6 +231,7 @@ class TodoOut(BaseModel):
     estimated_hours: float
     status: str
     is_blocked: bool
+    is_focused: bool
     created_at: str
     done_at: Optional[str] = None
     subtodos: List[SubTodoOut] = []
@@ -256,6 +267,7 @@ def todo_to_out(t: Todo) -> TodoOut:
         estimated_hours=t.estimated_hours,
         status=t.status,
         is_blocked=any(b.status != "done" for b in t.blocked_by),
+        is_focused=t.is_focused or False,
         created_at=t.created_at,
         done_at=t.done_at,
         subtodos=[SubTodoOut.model_validate(s) for s in t.subtodos],
@@ -368,6 +380,7 @@ def list_todos(
     project_id: Optional[int] = Query(None),
     status: Optional[str] = Query(None),
     exclude_done: bool = Query(False),
+    is_focused: Optional[bool] = Query(None),
     db: Session = Depends(get_db),
 ):
     q = db.query(Todo)
@@ -375,6 +388,8 @@ def list_todos(
         q = q.filter(Todo.assignee_id == assignee_id)
     if project_id is not None:
         q = q.filter(Todo.project_id == project_id)
+    if is_focused is not None:
+        q = q.filter(Todo.is_focused == is_focused)
     if exclude_done:
         q = q.filter(Todo.status != "done")
     if status == "blocked":

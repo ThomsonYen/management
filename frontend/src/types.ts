@@ -36,6 +36,7 @@ export interface Todo {
   estimated_hours: number
   status: string
   is_blocked: boolean
+  is_focused: boolean
   created_at: string
   done_at?: string
   subtodos: SubTodo[]
