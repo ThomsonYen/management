@@ -1,0 +1,82 @@
+import type { Todo } from '../types'
+
+const statusBadge = (s: string) => {
+  const map: Record<string, string> = {
+    todo: 'bg-slate-100 text-slate-600',
+    'in-progress': 'bg-blue-100 text-blue-700',
+    done: 'bg-green-100 text-green-700',
+  }
+  return map[s] || 'bg-slate-100 text-slate-600'
+}
+
+const statusDot = (s: string) => {
+  const map: Record<string, string> = {
+    todo: 'bg-slate-400',
+    'in-progress': 'bg-blue-500',
+    done: 'bg-green-500',
+  }
+  return map[s] || 'bg-slate-400'
+}
+
+export function BlockerTreeNode({
+  todo,
+  allTodos,
+  onOpenTodo,
+  onRemove,
+  depth = 0,
+  visited,
+}: {
+  todo: Todo
+  allTodos: Todo[]
+  onOpenTodo: (id: number) => void
+  onRemove?: () => void
+  depth?: number
+  visited: Set<number>
+}) {
+  const childVisited = new Set([...visited, todo.id])
+  const childBlockers = allTodos.filter(
+    (t) => todo.blocked_by_ids.includes(t.id) && !visited.has(t.id)
+  )
+
+  return (
+    <li>
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => onOpenTodo(todo.id)}
+          className="flex-1 flex items-center gap-2 text-left px-3 py-2 rounded-lg border border-slate-100 hover:border-indigo-300 hover:bg-indigo-50 transition-colors"
+        >
+          <span className={`w-2 h-2 rounded-full flex-shrink-0 ${statusDot(todo.status)}`} />
+          <span className="flex-1 text-sm font-medium text-slate-700 truncate">{todo.title}</span>
+          {todo.assignee_name && (
+            <span className="text-xs text-slate-400 flex-shrink-0">{todo.assignee_name}</span>
+          )}
+          <span className="text-xs text-slate-500 flex-shrink-0 font-medium">{todo.estimated_hours}h</span>
+          <span className={`text-xs px-2 py-0.5 rounded-full capitalize flex-shrink-0 ${statusBadge(todo.status)}`}>
+            {todo.status}
+          </span>
+          <span className="text-xs text-slate-400 flex-shrink-0">→</span>
+        </button>
+        {onRemove && (
+          <button
+            onClick={onRemove}
+            className="flex-shrink-0 text-slate-300 hover:text-red-500 transition-colors text-lg leading-none px-1"
+          >×</button>
+        )}
+      </div>
+      {childBlockers.length > 0 && (
+        <ul className="ml-5 mt-1 space-y-1 border-l-2 border-slate-100 pl-3">
+          {childBlockers.map((child) => (
+            <BlockerTreeNode
+              key={child.id}
+              todo={child}
+              allTodos={allTodos}
+              onOpenTodo={onOpenTodo}
+              depth={depth + 1}
+              visited={childVisited}
+            />
+          ))}
+        </ul>
+      )}
+    </li>
+  )
+}

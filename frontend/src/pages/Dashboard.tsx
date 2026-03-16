@@ -2,105 +2,62 @@ import { useQuery } from '@tanstack/react-query'
 import { fetchReminders, fetchRecentlyDone, fetchTodos } from '../api'
 import type { ScheduleStatus, Todo } from '../types'
 import { ListTodo, Loader2, CheckCircle2, ShieldAlert, type LucideIcon } from 'lucide-react'
+import { BlockerTreeNode } from '../components/BlockerTree'
 
-/** Returns the longest-hours chain of pending blockers starting from todoId. */
-function longestBlockerPath(
-  todoId: number,
-  todosById: Map<number, Todo>,
-  visited = new Set<number>(),
-): Todo[] {
-  if (visited.has(todoId)) return []
-  visited.add(todoId)
-  const todo = todosById.get(todoId)
-  if (!todo) return []
-  const pending = todo.blocked_by_ids
-    .map((id) => todosById.get(id))
-    .filter((b): b is Todo => !!b && b.status !== 'done')
-  if (pending.length === 0) return []
-  let bestPath: Todo[] = []
-  let bestHours = -1
-  for (const blocker of pending) {
-    const sub = longestBlockerPath(blocker.id, todosById, new Set(visited))
-    const hours = [blocker, ...sub].reduce((s, t) => s + t.estimated_hours, 0)
-    if (hours > bestHours) {
-      bestHours = hours
-      bestPath = [blocker, ...sub]
-    }
-  }
-  return bestPath
-}
-
-const scheduleStatusBadge = (s: string) => {
-  const map: Record<string, string> = {
-    todo: 'bg-slate-100 text-slate-700',
-    'in-progress': 'bg-blue-100 text-blue-700',
-    done: 'bg-green-100 text-green-700',
-  }
-  return map[s] || 'bg-slate-100 text-slate-700'
-}
-
-function ScheduleCard({ item, todosById, onOpenTodo }: { item: ScheduleStatus; todosById: Map<number, Todo>; onOpenTodo: (id: number) => void }) {
+function ScheduleCard({ item, allTodos, onOpenTodo }: { item: ScheduleStatus; allTodos: Todo[]; onOpenTodo: (id: number) => void }) {
   const isBehind = item.status === 'behind'
   const deficit = item.chain_hours - item.available_hours
-  const blockerPath = longestBlockerPath(item.todo_id, todosById)
+  const mainTodo = allTodos.find((t) => t.id === item.todo_id)
+  const directBlockers = mainTodo
+    ? allTodos.filter((t) => mainTodo.blocked_by_ids.includes(t.id))
+    : []
+
   return (
-    <button
-      onClick={() => onOpenTodo(item.todo_id)}
-      className={`w-full text-left rounded-lg p-4 border-l-4 hover:brightness-95 transition-all ${
-        isBehind
-          ? 'bg-red-50 border-red-500'
-          : 'bg-yellow-50 border-yellow-400'
-      }`}
-    >
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <p className="font-semibold text-slate-800 text-sm">{item.title}</p>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Assigned to <span className="font-medium text-slate-700">{item.assignee_name}</span>
-          </p>
-        </div>
-        <span
-          className={`text-xs font-bold px-2 py-1 rounded-full flex-shrink-0 ${
-            isBehind
-              ? 'bg-red-100 text-red-700'
-              : 'bg-yellow-100 text-yellow-700'
-          }`}
-        >
-          {isBehind ? 'BEHIND' : 'WARNING'}
-        </span>
-      </div>
-      <div className="mt-2 flex flex-wrap gap-3 text-xs text-slate-600">
-        <span>Deadline: <strong>{item.deadline}</strong></span>
-        <span>Own work: <strong>{item.estimated_hours}h</strong></span>
-        {item.chain_hours > item.estimated_hours && (
-          <span>Chain total: <strong>{item.chain_hours.toFixed(1)}h</strong></span>
-        )}
-        <span>Available: <strong>{item.available_hours}h</strong></span>
-        {isBehind && (
-          <span className="text-red-600 font-semibold">
-            Deficit: {deficit.toFixed(1)}h
-          </span>
-        )}
-      </div>
-      {blockerPath.length > 0 && (
-        <div className="mt-2">
-          <p className="text-xs text-slate-500 mb-1">Blocked by:</p>
-          <div className="flex flex-wrap items-center gap-1">
-            {blockerPath.map((b, i) => (
-              <span key={b.id} className="flex items-center gap-1">
-                <span className={`text-xs px-2 py-0.5 rounded font-medium ${scheduleStatusBadge(b.status)}`}>
-                  {b.title}
-                  <span className="ml-1 opacity-60">({b.estimated_hours}h)</span>
-                </span>
-                {i < blockerPath.length - 1 && (
-                  <span className="text-slate-400 text-xs">→</span>
-                )}
-              </span>
-            ))}
+    <div className={`rounded-lg border-l-4 ${isBehind ? 'bg-red-50 border-red-500' : 'bg-yellow-50 border-yellow-400'}`}>
+      <button
+        onClick={() => onOpenTodo(item.todo_id)}
+        className="w-full text-left p-4 hover:brightness-95 transition-all"
+      >
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <p className="font-semibold text-slate-800 text-sm">{item.title}</p>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Assigned to <span className="font-medium text-slate-700">{item.assignee_name}</span>
+            </p>
           </div>
+          <span className={`text-xs font-bold px-2 py-1 rounded-full flex-shrink-0 ${isBehind ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>
+            {isBehind ? 'BEHIND' : 'WARNING'}
+          </span>
+        </div>
+        <div className="mt-2 flex flex-wrap gap-3 text-xs text-slate-600">
+          <span>Deadline: <strong>{item.deadline}</strong></span>
+          <span>Own work: <strong>{item.estimated_hours}h</strong></span>
+          {item.chain_hours > item.estimated_hours && (
+            <span>Chain total: <strong>{item.chain_hours.toFixed(1)}h</strong></span>
+          )}
+          <span>Available: <strong>{item.available_hours}h</strong></span>
+          {isBehind && (
+            <span className="text-red-600 font-semibold">Deficit: {deficit.toFixed(1)}h</span>
+          )}
+        </div>
+      </button>
+      {directBlockers.length > 0 && (
+        <div className="px-4 pb-3">
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Blocked by</p>
+          <ul className="space-y-1">
+            {directBlockers.map((blocker) => (
+              <BlockerTreeNode
+                key={blocker.id}
+                todo={blocker}
+                allTodos={allTodos}
+                onOpenTodo={onOpenTodo}
+                visited={new Set([item.todo_id])}
+              />
+            ))}
+          </ul>
         </div>
       )}
-    </button>
+    </div>
   )
 }
 
@@ -127,12 +84,15 @@ export default function Dashboard({ onOpenTodo }: { onOpenTodo: (id: number) => 
     queryFn: () => fetchTodos({ exclude_done: true }),
   })
 
+  const { data: allTodos = [] } = useQuery<Todo[]>({
+    queryKey: ['todos'],
+    queryFn: () => fetchTodos(),
+  })
+
   const { data: recentlyDone = [] } = useQuery<Todo[]>({
     queryKey: ['recently-done'],
     queryFn: () => fetchRecentlyDone(),
   })
-
-  const todosById = new Map(todos.map((t) => [t.id, t]))
 
   const statusCounts = todos.reduce<Record<string, number>>((acc, t) => {
     acc[t.status] = (acc[t.status] || 0) + 1
@@ -201,7 +161,7 @@ export default function Dashboard({ onOpenTodo }: { onOpenTodo: (id: number) => 
         ) : (
           <div className="space-y-3">
             {reminders.map((r) => (
-              <ScheduleCard key={r.todo_id} item={r} todosById={todosById} onOpenTodo={onOpenTodo} />
+              <ScheduleCard key={r.todo_id} item={r} allTodos={allTodos} onOpenTodo={onOpenTodo} />
             ))}
           </div>
         )}

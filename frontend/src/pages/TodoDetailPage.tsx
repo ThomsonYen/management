@@ -13,6 +13,7 @@ import {
 } from '../api'
 import type { SubTodo, Todo, Person, Project } from '../types'
 import TodoModal from '../components/TodoModal'
+import { BlockerTreeNode } from '../components/BlockerTree'
 import { config } from '../config'
 
 const importanceBadge = (imp: string) => {
@@ -631,23 +632,14 @@ export default function TodoDetailPage() {
         {blockers.length > 0 && (
           <ul className="space-y-2 mb-1">
             {blockers.map((blocker) => (
-              <li key={blocker.id} className="flex items-center gap-2">
-                <button
-                  onClick={() => onOpenTodo(blocker.id)}
-                  className="flex-1 flex items-center gap-3 text-left px-3 py-2.5 rounded-lg border border-slate-100 hover:border-indigo-300 hover:bg-indigo-50 transition-colors"
-                >
-                  <span className={`w-2 h-2 rounded-full flex-shrink-0 ${statusDot(blocker.status)}`} />
-                  <span className="flex-1 text-sm font-medium text-slate-700">{blocker.title}</span>
-                  <span className={`text-xs px-2 py-0.5 rounded-full capitalize ${statusBadge(blocker.status)}`}>
-                    {blocker.status}
-                  </span>
-                  <span className="text-xs text-slate-400">→</span>
-                </button>
-                <button
-                  onClick={() => updateMutation.mutate({ blocked_by_ids: todo.blocked_by_ids.filter((id) => id !== blocker.id) })}
-                  className="flex-shrink-0 text-slate-300 hover:text-red-500 transition-colors text-lg leading-none px-1"
-                >×</button>
-              </li>
+              <BlockerTreeNode
+                key={blocker.id}
+                todo={blocker}
+                allTodos={allTodos}
+                onOpenTodo={onOpenTodo}
+                onRemove={() => updateMutation.mutate({ blocked_by_ids: todo.blocked_by_ids.filter((id) => id !== blocker.id) })}
+                visited={new Set([todoId])}
+              />
             ))}
             {todo.blocked_by_ids
               .filter((id) => !blockers.find((b) => b.id === id))
@@ -655,7 +647,7 @@ export default function TodoDetailPage() {
                 <li key={id} className="flex items-center gap-2">
                   <span className="flex-1 px-3 py-2 text-sm text-slate-400">Todo #{id} (not found)</span>
                   <button
-                    onClick={() => updateMutation.mutate({ blocked_by_ids: todo.blocked_by_ids.filter((bid) => bid !== id) })}
+                    onClick={() => updateMutation.mutate({ blocked_by_ids: todo.blocked_by_ids.filter((bid: number) => bid !== id) })}
                     className="flex-shrink-0 text-slate-300 hover:text-red-500 transition-colors text-lg leading-none px-1"
                   >×</button>
                 </li>
