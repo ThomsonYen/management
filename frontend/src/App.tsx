@@ -1,16 +1,18 @@
 import { NavLink, Route, Routes, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, CheckSquare, FolderKanban, Users } from 'lucide-react'
+import { LayoutDashboard, CheckSquare, FolderKanban, Users, CheckCircle2 } from 'lucide-react'
 import Dashboard from './pages/Dashboard'
 import TodosPage from './pages/TodosPage'
 import ProjectsPage from './pages/ProjectsPage'
 import PeoplePage from './pages/PeoplePage'
 import TodoDetailPage from './pages/TodoDetailPage'
+import RecentlyDonePage from './pages/RecentlyDonePage'
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
   { to: '/todos', label: 'Todos', icon: CheckSquare, end: false },
   { to: '/projects', label: 'Projects', icon: FolderKanban, end: false },
   { to: '/people', label: 'People', icon: Users, end: false },
+  { to: '/done', label: 'Recently Done', icon: CheckCircle2, end: false },
 ]
 
 export default function App() {
@@ -67,6 +69,7 @@ export default function App() {
           <Route path="/todos/:id" element={<TodoDetailPage />} />
           <Route path="/projects" element={<ProjectsPage onOpenTodo={(id) => navigate(`/todos/${id}`)} />} />
           <Route path="/people" element={<PeoplePage onOpenTodo={(id) => navigate(`/todos/${id}`)} />} />
+          <Route path="/done" element={<RecentlyDonePage />} />
         </Routes>
       </main>
     </div>

@@ -6,20 +6,18 @@ import type { Person, Todo, ScheduleStatus } from '../types'
 import TodoCard from '../components/TodoCard'
 import TodoModal from '../components/TodoModal'
 
-const STATUS_ORDER = ['todo', 'in-progress', 'blocked', 'done']
+const STATUS_ORDER = ['todo', 'in-progress', 'blocked']
 
 const statusLabel: Record<string, string> = {
   todo: 'To Do',
   'in-progress': 'In Progress',
   blocked: 'Blocked',
-  done: 'Done',
 }
 
 const statusColor: Record<string, string> = {
   todo: 'text-slate-600',
   'in-progress': 'text-blue-600',
   blocked: 'text-red-600',
-  done: 'text-green-600',
 }
 
 function AddPersonModal({ onClose }: { onClose: () => void }) {
@@ -91,13 +89,13 @@ export default function PeoplePage({ onOpenTodo }: { onOpenTodo: (id: number) =>
   })
 
   const { data: allTodos = [] } = useQuery<Todo[]>({
-    queryKey: ['todos'],
-    queryFn: () => fetchTodos(),
+    queryKey: ['todos', { exclude_done: true }],
+    queryFn: () => fetchTodos({ exclude_done: true }),
   })
 
   const { data: personTodos = [], isLoading: todosLoading } = useQuery<Todo[]>({
     queryKey: ['todos', 'person', selectedPersonId],
-    queryFn: () => fetchTodos({ assignee_id: selectedPersonId! }),
+    queryFn: () => fetchTodos({ assignee_id: selectedPersonId!, exclude_done: true }),
     enabled: !!selectedPersonId,
   })
 

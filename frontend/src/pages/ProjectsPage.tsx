@@ -214,7 +214,7 @@ export default function ProjectsPage({ onOpenTodo }: { onOpenTodo: (id: number) 
 
   const { data: projectTodos = [], isLoading: todosLoading } = useQuery<Todo[]>({
     queryKey: ['todos', 'project', selectedProjectId],
-    queryFn: () => fetchTodos({ project_id: selectedProjectId! }),
+    queryFn: () => fetchTodos({ project_id: selectedProjectId!, exclude_done: true }),
     enabled: !!selectedProjectId,
   })
 

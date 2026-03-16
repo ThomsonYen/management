@@ -45,6 +45,7 @@ export interface TodoFilters {
   assignee_id?: number
   project_id?: number
   status?: string
+  exclude_done?: boolean
 }
 
 export const fetchTodos = (filters?: TodoFilters): Promise<Todo[]> =>
@@ -97,6 +98,9 @@ export const updateSubTodo = (
 
 export const deleteSubTodo = (id: number): Promise<void> =>
   api.delete(`/subtodos/${id}`).then((r) => r.data)
+
+export const fetchRecentlyDone = (limit = 50): Promise<Todo[]> =>
+  api.get('/todos/recently-done', { params: { limit } }).then((r) => r.data)
 
 // ─── Schedule ────────────────────────────────────────────────────────────────
 

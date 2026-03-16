@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
@@ -13,6 +13,7 @@ import {
 } from '../api'
 import type { SubTodo, Todo, Person, Project } from '../types'
 import TodoModal from '../components/TodoModal'
+import { config } from '../config'
 
 const importanceBadge = (imp: string) => {
   const map: Record<string, string> = {
@@ -110,6 +111,12 @@ export default function TodoDetailPage() {
   const [editValue, setEditValue] = useState('')
   const [editingSubId, setEditingSubId] = useState<number | null>(null)
   const [editingSubTitle, setEditingSubTitle] = useState('')
+  const [isDying, setIsDying] = useState(false)
+  const dyingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    return () => { if (dyingTimeoutRef.current) clearTimeout(dyingTimeoutRef.current) }
+  }, [])
 
   const { data: todo, isLoading } = useQuery<Todo>({
     queryKey: ['todo', todoId],
@@ -135,12 +142,26 @@ export default function TodoDetailPage() {
     queryClient.invalidateQueries({ queryKey: ['todo', todoId] })
     queryClient.invalidateQueries({ queryKey: ['todos'] })
     queryClient.invalidateQueries({ queryKey: ['reminders'] })
+    queryClient.invalidateQueries({ queryKey: ['recently-done'] })
   }
 
   const updateMutation = useMutation({
     mutationFn: (data: Parameters<typeof updateTodo>[1]) => updateTodo(todoId, data),
     onSuccess: invalidate,
   })
+
+  const handleDoneCheck = (checked: boolean) => {
+    if (checked && todo?.status !== 'done') {
+      setIsDying(true)
+      dyingTimeoutRef.current = setTimeout(() => {
+        updateMutation.mutate({ status: 'done' })
+      }, config.todo_done_fade_seconds * 1000)
+    } else if (!checked) {
+      if (dyingTimeoutRef.current) clearTimeout(dyingTimeoutRef.current)
+      setIsDying(false)
+      if (todo?.status === 'done') updateMutation.mutate({ status: 'todo' })
+    }
+  }
 
   const saveField = (field: string, value: unknown) => {
     updateMutation.mutate({ [field]: value } as Parameters<typeof updateTodo>[1])
@@ -246,7 +267,10 @@ export default function TodoDetailPage() {
   }
 
   return (
-    <div className="p-6 max-w-3xl mx-auto">
+    <div
+      className="p-6 max-w-3xl mx-auto"
+      style={{ opacity: isDying ? 0 : 1, transition: `opacity ${config.todo_done_fade_seconds}s ease` }}
+    >
       {/* Back */}
       <button
         onClick={onBack}
@@ -317,12 +341,23 @@ export default function TodoDetailPage() {
             </div>
             <h1 className="text-2xl font-bold text-slate-800 leading-tight">{todo.title}</h1>
           </div>
-          <button
-            onClick={() => setShowModal(true)}
-            className="flex-shrink-0 px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 transition-colors"
-          >
-            Edit
-          </button>
+          <div className="flex-shrink-0 flex items-center gap-3">
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={isDying || todo.status === 'done'}
+                onChange={(e) => handleDoneCheck(e.target.checked)}
+                className="w-4 h-4 rounded cursor-pointer accent-green-600"
+              />
+              <span className="text-sm text-slate-500">Done</span>
+            </label>
+            <button
+              onClick={() => setShowModal(true)}
+              className="px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 transition-colors"
+            >
+              Edit
+            </button>
+          </div>
         </div>
 
         {/* Meta grid */}

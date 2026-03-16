@@ -16,6 +16,9 @@ from sqlalchemy import (
     Table,
     Text,
     create_engine,
+    inspect,
+    nullslast,
+    text,
 )
 from sqlalchemy.orm import DeclarativeBase, Session, relationship, sessionmaker
 
@@ -71,6 +74,7 @@ class Todo(Base):
     estimated_hours = Column(Float, default=1.0)
     status = Column(String, default="todo")
     created_at = Column(String, default=lambda: datetime.utcnow().isoformat())
+    done_at = Column(String, nullable=True)
     subtodos = relationship(
         "SubTodo",
         back_populates="todo",
@@ -218,6 +222,7 @@ class TodoOut(BaseModel):
     status: str
     is_blocked: bool
     created_at: str
+    done_at: Optional[str] = None
     subtodos: List[SubTodoOut] = []
     blocked_by_ids: List[int] = []
     model_config = {"from_attributes": True}
@@ -252,6 +257,7 @@ def todo_to_out(t: Todo) -> TodoOut:
         status=t.status,
         is_blocked=any(b.status != "done" for b in t.blocked_by),
         created_at=t.created_at,
+        done_at=t.done_at,
         subtodos=[SubTodoOut.model_validate(s) for s in t.subtodos],
         blocked_by_ids=[b.id for b in t.blocked_by],
     )
@@ -361,6 +367,7 @@ def list_todos(
     assignee_id: Optional[int] = Query(None),
     project_id: Optional[int] = Query(None),
     status: Optional[str] = Query(None),
+    exclude_done: bool = Query(False),
     db: Session = Depends(get_db),
 ):
     q = db.query(Todo)
@@ -368,12 +375,26 @@ def list_todos(
         q = q.filter(Todo.assignee_id == assignee_id)
     if project_id is not None:
         q = q.filter(Todo.project_id == project_id)
+    if exclude_done:
+        q = q.filter(Todo.status != "done")
     if status == "blocked":
         todos = [t for t in q.all() if any(b.status != "done" for b in t.blocked_by)]
     else:
         if status is not None:
             q = q.filter(Todo.status == status)
         todos = q.all()
+    return [todo_to_out(t) for t in todos]
+
+
+@app.get("/todos/recently-done", response_model=List[TodoOut])
+def recently_done_todos(limit: int = Query(50), db: Session = Depends(get_db)):
+    todos = (
+        db.query(Todo)
+        .filter(Todo.status == "done")
+        .order_by(nullslast(Todo.done_at.desc()), Todo.created_at.desc())
+        .limit(limit)
+        .all()
+    )
     return [todo_to_out(t) for t in todos]
 
 
@@ -406,8 +427,15 @@ def update_todo(todo_id: int, data: TodoUpdate, db: Session = Depends(get_db)):
         raise HTTPException(404, "Todo not found")
     update_data = data.model_dump(exclude_unset=True)
     blocked_by_ids = update_data.pop("blocked_by_ids", None)
+    old_status = t.status
     for k, v in update_data.items():
         setattr(t, k, v)
+    if "status" in update_data:
+        new_status = update_data["status"]
+        if new_status == "done" and old_status != "done":
+            t.done_at = datetime.now().isoformat()
+        elif new_status != "done" and old_status == "done":
+            t.done_at = None
     if blocked_by_ids is not None:
         blockers = db.query(Todo).filter(Todo.id.in_(blocked_by_ids)).all()
         t.blocked_by = blockers

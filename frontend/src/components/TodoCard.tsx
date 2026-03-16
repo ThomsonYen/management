@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { deleteTodo, updateSubTodo, updateTodo, fetchPersons, fetchProjects, fetchTodos } from '../api'
 import type { Todo, Person, Project } from '../types'
+import { config } from '../config'
 
 const IMPORTANCE_OPTIONS = ['low', 'medium', 'high', 'critical']
 const STATUS_OPTIONS = ['todo', 'in-progress', 'done', 'blocked']
@@ -97,7 +98,13 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys }: Todo
   const [expanded, setExpanded] = useState(false)
   const [editingField, setEditingField] = useState<string | null>(null)
   const [editValue, setEditValue] = useState('')
+  const [isDying, setIsDying] = useState(false)
+  const dyingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const queryClient = useQueryClient()
+
+  useEffect(() => {
+    return () => { if (dyingTimeoutRef.current) clearTimeout(dyingTimeoutRef.current) }
+  }, [])
 
   const { data: persons = [] } = useQuery<Person[]>({ queryKey: ['persons'], queryFn: fetchPersons })
   const { data: projects = [] } = useQuery<Project[]>({ queryKey: ['projects'], queryFn: fetchProjects })
@@ -107,6 +114,20 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys }: Todo
     const keys = queryKeys || [['todos']]
     keys.forEach((k) => queryClient.invalidateQueries({ queryKey: k as string[] }))
     queryClient.invalidateQueries({ queryKey: ['reminders'] })
+    queryClient.invalidateQueries({ queryKey: ['recently-done'] })
+  }
+
+  const handleDoneCheck = (checked: boolean) => {
+    if (checked && todo.status !== 'done') {
+      setIsDying(true)
+      dyingTimeoutRef.current = setTimeout(() => {
+        updateMutation.mutate({ status: 'done' })
+      }, config.todo_done_fade_seconds * 1000)
+    } else if (!checked) {
+      if (dyingTimeoutRef.current) clearTimeout(dyingTimeoutRef.current)
+      setIsDying(false)
+      if (todo.status === 'done') updateMutation.mutate({ status: 'todo' })
+    }
   }
 
   const deleteMutation = useMutation({
@@ -142,10 +163,22 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys }: Todo
     todo.deadline && todo.status !== 'done' && new Date(todo.deadline) < new Date()
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+    <div
+      className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden"
+      style={{ opacity: isDying ? 0 : 1, transition: `opacity ${config.todo_done_fade_seconds}s ease` }}
+    >
       {/* Header */}
       <div className="px-5 py-4">
         <div className="flex items-start gap-3">
+          {/* Done checkbox */}
+          <input
+            type="checkbox"
+            checked={isDying || todo.status === 'done'}
+            onChange={(e) => handleDoneCheck(e.target.checked)}
+            onClick={(e) => e.stopPropagation()}
+            title="Mark as done"
+            className="mt-1 w-4 h-4 rounded cursor-pointer accent-green-600 flex-shrink-0"
+          />
           <div className="flex-1 min-w-0">
             {/* Badges row */}
             <div className="flex flex-wrap items-center gap-2 mb-1">

@@ -6,7 +6,7 @@ import type { Todo, Person, Project } from '../types'
 import TodoCard from '../components/TodoCard'
 import TodoModal from '../components/TodoModal'
 
-const STATUS_OPTIONS = ['', 'todo', 'in-progress', 'done', 'blocked']
+const STATUS_OPTIONS = ['', 'todo', 'in-progress', 'blocked']
 const IMPORTANCE_OPTIONS = ['', 'low', 'medium', 'high', 'critical']
 
 function AddTodoCard({
@@ -93,6 +93,7 @@ export default function TodosPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
         assignee_id: selectedPerson ? parseInt(selectedPerson) : undefined,
         project_id: selectedProject ? parseInt(selectedProject) : undefined,
         status: selectedStatus || undefined,
+        exclude_done: true,
       }),
   })
 

@@ -1,0 +1,5 @@
+# Frontend configuration
+
+# How many seconds a todo fades before it is marked as done.
+# During this window the user can uncheck to cancel.
+todo_done_fade_seconds: 2

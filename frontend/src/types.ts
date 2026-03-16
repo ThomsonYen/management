@@ -37,6 +37,7 @@ export interface Todo {
   status: string
   is_blocked: boolean
   created_at: string
+  done_at?: string
   subtodos: SubTodo[]
   blocked_by_ids: number[]
 }

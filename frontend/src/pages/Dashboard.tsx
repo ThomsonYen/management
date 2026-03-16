@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { fetchReminders, fetchTodos } from '../api'
+import { fetchReminders, fetchRecentlyDone, fetchTodos } from '../api'
 import type { ScheduleStatus, Todo } from '../types'
 import { ListTodo, Loader2, CheckCircle2, ShieldAlert, type LucideIcon } from 'lucide-react'
 
@@ -123,8 +123,13 @@ export default function Dashboard({ onOpenTodo }: { onOpenTodo: (id: number) => 
   })
 
   const { data: todos = [], isLoading: todosLoading } = useQuery<Todo[]>({
-    queryKey: ['todos'],
-    queryFn: () => fetchTodos(),
+    queryKey: ['todos', { exclude_done: true }],
+    queryFn: () => fetchTodos({ exclude_done: true }),
+  })
+
+  const { data: recentlyDone = [] } = useQuery<Todo[]>({
+    queryKey: ['recently-done'],
+    queryFn: () => fetchRecentlyDone(),
   })
 
   const todosById = new Map(todos.map((t) => [t.id, t]))
@@ -168,7 +173,7 @@ export default function Dashboard({ onOpenTodo }: { onOpenTodo: (id: number) => 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
         <StatCard label="Total Todos" value={todos.length} color="bg-indigo-600" icon={ListTodo} />
         <StatCard label="In Progress" value={statusCounts['in-progress'] || 0} color="bg-blue-500" icon={Loader2} />
-        <StatCard label="Done" value={statusCounts['done'] || 0} color="bg-green-500" icon={CheckCircle2} />
+        <StatCard label="Completed" value={recentlyDone.length} color="bg-green-500" icon={CheckCircle2} />
         <StatCard label="Blocked" value={todos.filter((t) => t.is_blocked).length} color="bg-slate-500" icon={ShieldAlert} />
       </div>
 
