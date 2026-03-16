@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { fetchReminders, fetchTodos } from '../api'
 import type { ScheduleStatus, Todo } from '../types'
+import { ListTodo, Loader2, CheckCircle2, ShieldAlert, type LucideIcon } from 'lucide-react'
 
 /** Returns the longest-hours chain of pending blockers starting from todoId. */
 function longestBlockerPath(
@@ -102,10 +103,13 @@ function ScheduleCard({ item, todosById }: { item: ScheduleStatus; todosById: Ma
   )
 }
 
-function StatCard({ label, value, color }: { label: string; value: number; color: string }) {
+function StatCard({ label, value, color, icon: Icon }: { label: string; value: number; color: string; icon: LucideIcon }) {
   return (
     <div className={`rounded-xl p-5 text-white ${color}`}>
-      <p className="text-3xl font-bold">{value}</p>
+      <div className="flex items-start justify-between">
+        <p className="text-3xl font-bold">{value}</p>
+        <Icon size={20} className="opacity-70 mt-1" />
+      </div>
       <p className="text-sm opacity-90 mt-1">{label}</p>
     </div>
   )
@@ -161,10 +165,10 @@ export default function Dashboard({ onOpenTodo }: { onOpenTodo: (id: number) => 
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-        <StatCard label="Total Todos" value={todos.length} color="bg-indigo-600" />
-        <StatCard label="In Progress" value={statusCounts['in-progress'] || 0} color="bg-blue-500" />
-        <StatCard label="Done" value={statusCounts['done'] || 0} color="bg-green-500" />
-        <StatCard label="Blocked" value={todos.filter((t) => t.is_blocked).length} color="bg-slate-500" />
+        <StatCard label="Total Todos" value={todos.length} color="bg-indigo-600" icon={ListTodo} />
+        <StatCard label="In Progress" value={statusCounts['in-progress'] || 0} color="bg-blue-500" icon={Loader2} />
+        <StatCard label="Done" value={statusCounts['done'] || 0} color="bg-green-500" icon={CheckCircle2} />
+        <StatCard label="Blocked" value={todos.filter((t) => t.is_blocked).length} color="bg-slate-500" icon={ShieldAlert} />
       </div>
 
       {/* Schedule alerts */}
