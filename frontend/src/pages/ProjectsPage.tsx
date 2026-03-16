@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { fetchProjectTree, fetchProjects, fetchTodos, createProject, deleteProject } from '../api'
+import { fetchProjectTree, fetchProjects, fetchTodos, createProject, createTodo, deleteProject } from '../api'
 import type { ProjectTree, Project, Todo } from '../types'
 import TodoCard from '../components/TodoCard'
 import TodoModal from '../components/TodoModal'
@@ -149,6 +149,48 @@ function AddProjectModal({ parentId, onClose }: AddProjectModalProps) {
   )
 }
 
+function AddTodoCard({ projectId, queryKeys }: { projectId: number; queryKeys: unknown[][] }) {
+  const [title, setTitle] = useState('')
+  const queryClient = useQueryClient()
+
+  const createMutation = useMutation({
+    mutationFn: createTodo,
+    onSuccess: () => {
+      queryKeys.forEach((k) => queryClient.invalidateQueries({ queryKey: k as string[] }))
+      setTitle('')
+    },
+  })
+
+  const handleSubmit = () => {
+    if (!title.trim() || createMutation.isPending) return
+    createMutation.mutate({
+      title: title.trim(),
+      assignee_id: null,
+      project_id: projectId,
+      status: 'todo',
+      importance: 'medium',
+      estimated_hours: 1,
+      blocked_by_ids: [],
+    })
+  }
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-dashed border-slate-300 overflow-hidden">
+      <div className="px-5 py-4">
+        <input
+          type="text"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit() }}
+          placeholder={createMutation.isPending ? 'Adding...' : '+ Add a todo...'}
+          disabled={createMutation.isPending}
+          className="w-full text-sm font-medium text-slate-600 placeholder-slate-300 bg-transparent outline-none disabled:opacity-50"
+        />
+      </div>
+    </div>
+  )
+}
+
 export default function ProjectsPage({ onOpenTodo }: { onOpenTodo: (id: number) => void }) {
   const queryClient = useQueryClient()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -280,10 +322,6 @@ export default function ProjectsPage({ onOpenTodo }: { onOpenTodo: (id: number) 
             </h3>
             {todosLoading ? (
               <div className="text-slate-500 text-sm">Loading...</div>
-            ) : projectTodos.length === 0 ? (
-              <div className="bg-white rounded-xl border border-slate-200 p-8 text-center text-slate-400 text-sm">
-                No todos in this project yet.
-              </div>
             ) : (
               <div className="space-y-3">
                 {projectTodos.map((t) => (
@@ -298,6 +336,7 @@ export default function ProjectsPage({ onOpenTodo }: { onOpenTodo: (id: number) 
                     queryKeys={todoQueryKeys}
                   />
                 ))}
+                <AddTodoCard projectId={selectedProjectId} queryKeys={todoQueryKeys} />
               </div>
             )}
           </>
