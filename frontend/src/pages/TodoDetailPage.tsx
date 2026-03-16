@@ -10,6 +10,7 @@ import {
   updateSubTodo,
   createSubTodo,
   deleteSubTodo,
+  createTodo,
 } from '../api'
 import type { SubTodo, Todo, Person, Project } from '../types'
 import TodoModal from '../components/TodoModal'
@@ -41,23 +42,28 @@ function BlockerPicker({
   excludeId,
   selectedIds,
   onSelect,
+  onCreate,
 }: {
   allTodos: Todo[]
   excludeId: number
   selectedIds: number[]
   onSelect: (todo: Todo) => void
+  onCreate?: (title: string) => void
 }) {
   const [search, setSearch] = useState('')
   const [open, setOpen] = useState(false)
 
-  const filtered = search
+  const trimmed = search.trim()
+  const filtered = trimmed
     ? allTodos.filter(
         (t) =>
           t.id !== excludeId &&
           !selectedIds.includes(t.id) &&
-          t.title.toLowerCase().includes(search.toLowerCase())
+          t.title.toLowerCase().includes(trimmed.toLowerCase())
       )
     : []
+
+  const showCreate = onCreate && trimmed && !filtered.some((t) => t.title.toLowerCase() === trimmed.toLowerCase())
 
   return (
     <div className="relative mt-3">
@@ -70,7 +76,7 @@ function BlockerPicker({
         placeholder="Search todos to add..."
         className="w-full text-xs border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-400 placeholder-slate-300"
       />
-      {open && filtered.length > 0 && (
+      {open && (filtered.length > 0 || showCreate) && (
         <ul className="absolute z-10 left-0 right-0 mt-1 max-h-48 overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-lg">
           {filtered.map((t) => (
             <li
@@ -83,6 +89,15 @@ function BlockerPicker({
               <span className="text-xs text-slate-400 capitalize flex-shrink-0">{t.status}</span>
             </li>
           ))}
+          {showCreate && (
+            <li
+              onMouseDown={() => { onCreate(trimmed); setSearch(''); setOpen(false) }}
+              className="px-3 py-2 text-sm cursor-pointer hover:bg-green-50 flex items-center gap-2 border-t border-slate-100"
+            >
+              <span className="text-green-600 text-xs flex-shrink-0">+</span>
+              <span className="flex-1 text-green-700">Create &quot;{trimmed}&quot;</span>
+            </li>
+          )}
         </ul>
       )}
     </div>
@@ -651,6 +666,7 @@ export default function TodoDetailPage() {
           excludeId={todoId}
           selectedIds={todo.blocked_by_ids}
           onSelect={(t) => updateMutation.mutate({ blocked_by_ids: [...todo.blocked_by_ids, t.id] })}
+          onCreate={(title) => createTodo({ title }).then((newTodo) => updateMutation.mutate({ blocked_by_ids: [...todo.blocked_by_ids, newTodo.id] }))}
         />
       </div>
 
@@ -678,6 +694,7 @@ export default function TodoDetailPage() {
           excludeId={todoId}
           selectedIds={blocking.map((t) => t.id)}
           onSelect={(t) => updateTodo(t.id, { blocked_by_ids: [...t.blocked_by_ids, todoId] }).then(invalidate)}
+          onCreate={(title) => createTodo({ title, blocked_by_ids: [todoId] }).then(() => invalidate())}
         />
       </div>
 
