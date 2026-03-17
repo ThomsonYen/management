@@ -123,8 +123,13 @@ export default function TodoDetailPage() {
   const dyingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
-    return () => { if (dyingTimeoutRef.current) clearTimeout(dyingTimeoutRef.current) }
-  }, [])
+    return () => {
+      if (dyingTimeoutRef.current) {
+        clearTimeout(dyingTimeoutRef.current)
+        updateTodo(todoId, { status: 'done' })
+      }
+    }
+  }, [todoId])
 
   const { data: todo, isLoading } = useQuery<Todo>({
     queryKey: ['todo', todoId],

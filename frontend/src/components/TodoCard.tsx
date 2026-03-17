@@ -104,8 +104,13 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
   const queryClient = useQueryClient()
 
   useEffect(() => {
-    return () => { if (dyingTimeoutRef.current) clearTimeout(dyingTimeoutRef.current) }
-  }, [])
+    return () => {
+      if (dyingTimeoutRef.current) {
+        clearTimeout(dyingTimeoutRef.current)
+        updateTodo(todo.id, { status: 'done' })
+      }
+    }
+  }, [todo.id])
 
   const { data: persons = [] } = useQuery<Person[]>({ queryKey: ['persons'], queryFn: fetchPersons })
   const { data: projects = [] } = useQuery<Project[]>({ queryKey: ['projects'], queryFn: fetchProjects })
