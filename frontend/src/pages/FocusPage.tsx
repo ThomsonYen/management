@@ -41,11 +41,13 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
     },
   })
 
+  const notDone = todos.filter((t) => t.status !== 'done')
+
   const filtered = selectedProject
     ? selectedProject === 'none'
-      ? todos.filter((t) => !t.project_id)
-      : todos.filter((t) => t.project_id === parseInt(selectedProject))
-    : todos
+      ? notDone.filter((t) => !t.project_id)
+      : notDone.filter((t) => t.project_id === parseInt(selectedProject))
+    : notDone
 
   // Group by project
   const grouped = filtered.reduce<Record<string, Todo[]>>((acc, t) => {
