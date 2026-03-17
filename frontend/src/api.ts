@@ -79,9 +79,14 @@ export const updateTodo = (
     estimated_hours?: number
     status?: string
     is_focused?: boolean
+    focus_order?: number
     blocked_by_ids?: number[]
   },
 ): Promise<Todo> => api.put(`/todos/${id}`, data).then((r) => r.data)
+
+export const reorderFocus = (
+  items: { id: number; focus_order: number }[],
+): Promise<void> => api.put('/todos/reorder-focus', items).then((r) => r.data)
 
 export const deleteTodo = (id: number): Promise<void> =>
   api.delete(`/todos/${id}`).then((r) => r.data)

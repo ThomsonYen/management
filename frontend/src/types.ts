@@ -37,6 +37,7 @@ export interface Todo {
   status: string
   is_blocked: boolean
   is_focused: boolean
+  focus_order: number
   created_at: string
   done_at?: string
   subtodos: SubTodo[]

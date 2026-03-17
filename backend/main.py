@@ -74,6 +74,7 @@ class Todo(Base):
     estimated_hours = Column(Float, default=1.0)
     status = Column(String, default="todo")
     is_focused = Column(Boolean, default=False)
+    focus_order = Column(Integer, default=0)
     created_at = Column(String, default=lambda: datetime.utcnow().isoformat())
     done_at = Column(String, nullable=True)
     subtodos = relationship(
@@ -110,6 +111,9 @@ with engine.connect() as conn:
     columns = [c["name"] for c in inspect(engine).get_columns("todos")]
     if "is_focused" not in columns:
         conn.execute(text("ALTER TABLE todos ADD COLUMN is_focused BOOLEAN DEFAULT 0"))
+        conn.commit()
+    if "focus_order" not in columns:
+        conn.execute(text("ALTER TABLE todos ADD COLUMN focus_order INTEGER DEFAULT 0"))
         conn.commit()
 
 
@@ -215,6 +219,7 @@ class TodoUpdate(BaseModel):
     estimated_hours: Optional[float] = None
     status: Optional[str] = None
     is_focused: Optional[bool] = None
+    focus_order: Optional[int] = None
     blocked_by_ids: Optional[List[int]] = None
 
 
@@ -232,6 +237,7 @@ class TodoOut(BaseModel):
     status: str
     is_blocked: bool
     is_focused: bool
+    focus_order: int
     created_at: str
     done_at: Optional[str] = None
     subtodos: List[SubTodoOut] = []
@@ -268,6 +274,7 @@ def todo_to_out(t: Todo) -> TodoOut:
         status=t.status,
         is_blocked=any(b.status != "done" for b in t.blocked_by),
         is_focused=t.is_focused or False,
+        focus_order=t.focus_order or 0,
         created_at=t.created_at,
         done_at=t.done_at,
         subtodos=[SubTodoOut.model_validate(s) for s in t.subtodos],
@@ -411,6 +418,21 @@ def recently_done_todos(limit: int = Query(50), db: Session = Depends(get_db)):
         .all()
     )
     return [todo_to_out(t) for t in todos]
+
+
+class FocusOrderItem(BaseModel):
+    id: int
+    focus_order: int
+
+
+@app.put("/todos/reorder-focus")
+def reorder_focus(items: List[FocusOrderItem], db: Session = Depends(get_db)):
+    for item in items:
+        t = db.query(Todo).get(item.id)
+        if t:
+            t.focus_order = item.focus_order
+    db.commit()
+    return {"ok": True}
 
 
 @app.get("/todos/{todo_id}", response_model=TodoOut)
