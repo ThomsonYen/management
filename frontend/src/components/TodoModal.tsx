@@ -140,14 +140,14 @@ export default function TodoModal({ todo, onClose, invalidateKeys }: Props) {
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-        <div className="px-6 py-5 border-b border-slate-200 flex items-center justify-between sticky top-0 bg-white z-10">
-          <h2 className="text-lg font-bold text-slate-800">
+      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+        <div className="px-6 py-5 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between sticky top-0 bg-white dark:bg-slate-800 z-10">
+          <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">
             {isEdit ? 'Edit Todo' : 'New Todo'}
           </h2>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-slate-600 text-xl font-bold transition-colors"
+            className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 text-xl font-bold transition-colors"
           >
             ×
           </button>
@@ -155,14 +155,14 @@ export default function TodoModal({ todo, onClose, invalidateKeys }: Props) {
 
         <form onSubmit={handleSubmit} className="px-6 py-5 space-y-5">
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-2 rounded-lg text-sm">
+            <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 px-4 py-2 rounded-lg text-sm">
               {error}
             </div>
           )}
 
           {/* Title */}
           <div>
-            <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">
+            <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wide mb-1">
               Title *
             </label>
             <input
@@ -170,13 +170,13 @@ export default function TodoModal({ todo, onClose, invalidateKeys }: Props) {
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Todo title..."
-              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              className="w-full border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
             />
           </div>
 
           {/* Description */}
           <div>
-            <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">
+            <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wide mb-1">
               Description
             </label>
             <textarea
@@ -184,20 +184,20 @@ export default function TodoModal({ todo, onClose, invalidateKeys }: Props) {
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Optional description..."
               rows={3}
-              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
+              className="w-full border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
             />
           </div>
 
           {/* Row: project + assignee */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">
+              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wide mb-1">
                 Project
               </label>
               <select
                 value={projectId}
                 onChange={(e) => setProjectId(e.target.value)}
-                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
               >
                 <option value="">— None —</option>
                 {projects.map((p) => (
@@ -208,13 +208,13 @@ export default function TodoModal({ todo, onClose, invalidateKeys }: Props) {
               </select>
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">
+              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wide mb-1">
                 Assignee
               </label>
               <select
                 value={assigneeId}
                 onChange={(e) => setAssigneeId(e.target.value)}
-                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
               >
                 <option value="">— None —</option>
                 {persons.map((p) => (
@@ -229,18 +229,18 @@ export default function TodoModal({ todo, onClose, invalidateKeys }: Props) {
           {/* Row: deadline + estimated hours */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">
+              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wide mb-1">
                 Deadline
               </label>
               <input
                 type="date"
                 value={deadline}
                 onChange={(e) => setDeadline(e.target.value)}
-                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">
+              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wide mb-1">
                 Estimated Hours
               </label>
               <input
@@ -249,7 +249,7 @@ export default function TodoModal({ todo, onClose, invalidateKeys }: Props) {
                 step="0.25"
                 value={estimatedHours}
                 onChange={(e) => setEstimatedHours(e.target.value)}
-                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
             </div>
           </div>
@@ -257,13 +257,13 @@ export default function TodoModal({ todo, onClose, invalidateKeys }: Props) {
           {/* Row: importance + status */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">
+              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wide mb-1">
                 Importance
               </label>
               <select
                 value={importance}
                 onChange={(e) => setImportance(e.target.value)}
-                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
               >
                 {IMPORTANCE_OPTIONS.map((o) => (
                   <option key={o} value={o} className="capitalize">
@@ -273,13 +273,13 @@ export default function TodoModal({ todo, onClose, invalidateKeys }: Props) {
               </select>
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">
+              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wide mb-1">
                 Status
               </label>
               <select
                 value={status}
                 onChange={(e) => setStatus(e.target.value)}
-                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
               >
                 {STATUS_OPTIONS.map((o) => (
                   <option key={o} value={o}>
@@ -293,10 +293,10 @@ export default function TodoModal({ todo, onClose, invalidateKeys }: Props) {
           {/* Blocked by */}
           {otherTodos.length > 0 && (
             <div>
-              <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-2">
+              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wide mb-2">
                 Blocked by
               </label>
-              <div className="border border-slate-200 rounded-lg px-3 py-2 max-h-36 overflow-y-auto space-y-1.5">
+              <div className="border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 max-h-36 overflow-y-auto space-y-1.5">
                 {otherTodos.map((t) => (
                   <label key={t.id} className="flex items-center gap-2 cursor-pointer">
                     <input
@@ -305,7 +305,7 @@ export default function TodoModal({ todo, onClose, invalidateKeys }: Props) {
                       onChange={() => toggleBlocker(t.id)}
                       className="accent-indigo-600"
                     />
-                    <span className="text-sm text-slate-700">
+                    <span className="text-sm text-slate-700 dark:text-slate-300">
                       #{t.id} — {t.title}
                     </span>
                   </label>
@@ -316,7 +316,7 @@ export default function TodoModal({ todo, onClose, invalidateKeys }: Props) {
 
           {/* Sub-todos */}
           <div>
-            <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-2">
+            <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wide mb-2">
               Sub-tasks
             </label>
             <div className="space-y-1.5 mb-2">
@@ -341,7 +341,7 @@ export default function TodoModal({ todo, onClose, invalidateKeys }: Props) {
                     />
                     <span
                       className={`flex-1 text-sm ${
-                        s.done ? 'line-through text-slate-400' : 'text-slate-700'
+                        s.done ? 'line-through text-slate-400 dark:text-slate-500' : 'text-slate-700 dark:text-slate-300'
                       }`}
                     >
                       {s.title}
@@ -374,12 +374,12 @@ export default function TodoModal({ todo, onClose, invalidateKeys }: Props) {
                   }
                 }}
                 placeholder="Add sub-task..."
-                className="flex-1 border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="flex-1 border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
               <button
                 type="button"
                 onClick={handleAddSubTodo}
-                className="px-3 py-1.5 bg-slate-100 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-200 transition-colors"
+                className="px-3 py-1.5 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-sm font-medium rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
               >
                 Add
               </button>
@@ -402,7 +402,7 @@ export default function TodoModal({ todo, onClose, invalidateKeys }: Props) {
             <button
               type="button"
               onClick={onClose}
-              className="px-5 py-2.5 bg-slate-100 text-slate-700 rounded-lg font-semibold text-sm hover:bg-slate-200 transition-colors"
+              className="px-5 py-2.5 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg font-semibold text-sm hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
             >
               Cancel
             </button>

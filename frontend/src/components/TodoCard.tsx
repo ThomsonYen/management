@@ -12,19 +12,19 @@ const importanceBadge = (imp: string) => {
     critical: 'bg-red-100 text-red-700 border-red-200',
     high: 'bg-orange-100 text-orange-700 border-orange-200',
     medium: 'bg-blue-100 text-blue-700 border-blue-200',
-    low: 'bg-slate-100 text-slate-600 border-slate-200',
+    low: 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700',
   }
-  return map[imp] || 'bg-slate-100 text-slate-600 border-slate-200'
+  return map[imp] || 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700'
 }
 
 const statusBadge = (s: string) => {
   const map: Record<string, string> = {
-    todo: 'bg-slate-100 text-slate-600',
+    todo: 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400',
     'in-progress': 'bg-blue-100 text-blue-700',
     done: 'bg-green-100 text-green-700',
     blocked: 'bg-red-100 text-red-700',
   }
-  return map[s] || 'bg-slate-100 text-slate-600'
+  return map[s] || 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400'
 }
 
 interface TodoCardProps {
@@ -71,28 +71,28 @@ function BlockerPicker({
         onFocus={() => setOpen(true)}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
         placeholder="Search todos to add..."
-        className="w-full text-xs border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-400 placeholder-slate-300"
+        className="w-full text-xs border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-400 placeholder-slate-300 dark:placeholder-slate-500 dark:bg-slate-800 dark:text-slate-100"
       />
       {open && (filtered.length > 0 || showCreateOption) && (
-        <ul className="absolute z-10 left-0 right-0 mt-1 max-h-48 overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-lg">
+        <ul className="absolute z-10 left-0 right-0 mt-1 max-h-48 overflow-y-auto bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg">
           {showCreateOption && (
             <li
               onMouseDown={() => { onCreate(search.trim()); setSearch(''); setOpen(false) }}
-              className="px-3 py-2 text-sm cursor-pointer hover:bg-green-50 flex items-center gap-2 border-b border-slate-100"
+              className="px-3 py-2 text-sm cursor-pointer hover:bg-green-50 dark:hover:bg-green-900/30 flex items-center gap-2 border-b border-slate-100 dark:border-slate-700"
             >
               <span className="text-green-600 text-xs font-semibold flex-shrink-0">+ Create</span>
-              <span className="flex-1 text-slate-700 truncate">&ldquo;{search.trim()}&rdquo;</span>
+              <span className="flex-1 text-slate-700 dark:text-slate-300 truncate">&ldquo;{search.trim()}&rdquo;</span>
             </li>
           )}
           {filtered.map((t) => (
             <li
               key={t.id}
               onMouseDown={() => { onSelect(t); setSearch(''); setOpen(false) }}
-              className="px-3 py-2 text-sm cursor-pointer hover:bg-indigo-50 flex items-center gap-2"
+              className="px-3 py-2 text-sm cursor-pointer hover:bg-indigo-50 dark:hover:bg-indigo-900/30 flex items-center gap-2"
             >
-              <span className="text-slate-400 text-xs flex-shrink-0">#{t.id}</span>
-              <span className="flex-1 text-slate-700 truncate">{t.title}</span>
-              <span className="text-xs text-slate-400 capitalize flex-shrink-0">{t.status}</span>
+              <span className="text-slate-400 dark:text-slate-500 text-xs flex-shrink-0">#{t.id}</span>
+              <span className="flex-1 text-slate-700 dark:text-slate-300 truncate">{t.title}</span>
+              <span className="text-xs text-slate-400 dark:text-slate-500 capitalize flex-shrink-0">{t.status}</span>
             </li>
           ))}
         </ul>
@@ -198,7 +198,7 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
         e.dataTransfer.setData('application/x-todo-id', String(todo.id))
         e.dataTransfer.effectAllowed = 'link'
       }}
-      className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden cursor-grab active:cursor-grabbing"
+      className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden cursor-grab active:cursor-grabbing"
       style={{ opacity: isDying ? 0 : 1, transition: `opacity ${config.todo_done_fade_seconds}s ease` }}
     >
       {/* Header */}
@@ -292,20 +292,20 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
                   if (e.key === 'Escape') setEditingField(null)
                 }}
                 onClick={(e) => e.stopPropagation()}
-                className="font-semibold text-slate-800 text-base leading-tight w-full border-b-2 border-indigo-400 focus:outline-none bg-transparent pb-0.5"
+                className="font-semibold text-slate-800 dark:text-slate-100 text-base leading-tight w-full border-b-2 border-indigo-400 focus:outline-none bg-transparent pb-0.5"
               />
             ) : (
               <h3
                 onClick={(e) => startEdit(e, 'title', todo.title)}
                 title="Click to edit title"
-                className="font-semibold text-slate-800 text-base leading-tight cursor-pointer hover:text-indigo-600 transition-colors"
+                className="font-semibold text-slate-800 dark:text-slate-100 text-base leading-tight cursor-pointer hover:text-indigo-600 transition-colors"
               >
                 {todo.title}
               </h3>
             )}
 
             {/* Info row */}
-            <div className="flex flex-wrap gap-3 mt-1.5 text-xs text-slate-500">
+            <div className="flex flex-wrap gap-3 mt-1.5 text-xs text-slate-500 dark:text-slate-400">
               {/* Assignee */}
               {editingField === 'assignee_id' ? (
                 <select
@@ -330,7 +330,7 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
                   className="flex items-center gap-1 cursor-pointer hover:text-indigo-600 transition-colors"
                 >
                   <span>◉</span>
-                  {todo.assignee_name ?? <em className="text-slate-300 not-italic">+ person</em>}
+                  {todo.assignee_name ?? <em className="text-slate-300 dark:text-slate-600 not-italic">+ person</em>}
                 </span>
               )}
 
@@ -356,7 +356,7 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
                   className={`flex items-center gap-1 cursor-pointer hover:text-indigo-600 transition-colors ${isOverdue ? 'text-red-600 font-semibold' : ''}`}
                 >
                   <span>◷</span>
-                  {todo.deadline ?? <em className="text-slate-300 not-italic">+ date</em>}
+                  {todo.deadline ?? <em className="text-slate-300 dark:text-slate-600 not-italic">+ date</em>}
                 </span>
               )}
 
@@ -384,7 +384,7 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
                   className="flex items-center gap-1 cursor-pointer hover:text-indigo-600 transition-colors"
                 >
                   <span>◈</span>
-                  {todo.project_name ?? <em className="text-slate-300 not-italic">+ project</em>}
+                  {todo.project_name ?? <em className="text-slate-300 dark:text-slate-600 not-italic">+ project</em>}
                 </span>
               )}
 
@@ -424,7 +424,7 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
               <button
                 onClick={onOpenDetail}
                 title="Open todo page"
-                className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 transition-colors"
+                className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 border border-indigo-200 transition-colors"
               >
                 <span>↗</span> Open
               </button>
@@ -432,10 +432,10 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
             <button
               onClick={() => setExpanded((e) => !e)}
               title={expanded ? 'Collapse' : 'Expand'}
-              className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium text-slate-500 bg-slate-50 hover:bg-slate-100 border border-slate-200 transition-colors select-none"
+              className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 transition-colors select-none"
             >
               {totalSubs > 0 && (
-                <span className="text-slate-400">{doneSubs}/{totalSubs}</span>
+                <span className="text-slate-400 dark:text-slate-500">{doneSubs}/{totalSubs}</span>
               )}
               <span>{expanded ? '▲' : '▼'}</span>
             </button>
@@ -445,7 +445,7 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
         {/* Sub-todo progress bar */}
         {totalSubs > 0 && (
           <div
-            className="mt-2 h-1.5 bg-slate-100 rounded-full overflow-hidden cursor-pointer select-none"
+            className="mt-2 h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden cursor-pointer select-none"
             onClick={() => setExpanded((e) => !e)}
           >
             <div
@@ -458,9 +458,9 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
 
       {/* Expanded content */}
       {expanded && (
-        <div className="border-t border-slate-100 px-5 py-4 space-y-4">
+        <div className="border-t border-slate-100 dark:border-slate-700 px-5 py-4 space-y-4">
           <div>
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
+            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">
               Description
             </p>
             {editingField === 'description' ? (
@@ -474,21 +474,21 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
                 }}
                 onClick={(e) => e.stopPropagation()}
                 rows={3}
-                className="text-sm text-slate-700 w-full bg-transparent border border-indigo-300 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none"
+                className="text-sm text-slate-700 dark:text-slate-300 w-full bg-transparent border border-indigo-300 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none"
               />
             ) : (
               <p
                 onClick={(e) => startEdit(e, 'description', todo.description || '')}
                 title="Click to edit description"
-                className="text-sm text-slate-700 whitespace-pre-wrap cursor-pointer hover:text-indigo-600 transition-colors min-h-[1.25rem]"
+                className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap cursor-pointer hover:text-indigo-600 transition-colors min-h-[1.25rem]"
               >
-                {todo.description || <em className="text-slate-300 not-italic">+ Add a description...</em>}
+                {todo.description || <em className="text-slate-300 dark:text-slate-600 not-italic">+ Add a description...</em>}
               </p>
             )}
           </div>
 
           <div>
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-2">
               Sub-tasks{totalSubs > 0 && ` (${doneSubs}/${totalSubs})`}
             </p>
             {totalSubs > 0 && (() => {
@@ -549,7 +549,7 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
                             e.dataTransfer.effectAllowed = 'move'
                             setSubDragId(s.id)
                           }}
-                          className="text-slate-300 text-xs select-none cursor-grab active:cursor-grabbing"
+                          className="text-slate-300 dark:text-slate-600 text-xs select-none cursor-grab active:cursor-grabbing"
                           title="Drag to reorder"
                         >⠿</span>
                         <input
@@ -580,7 +580,7 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
                         ) : (
                           <span
                             onClick={() => { setEditingSubId(s.id); setEditingSubTitle(s.title) }}
-                            className={`flex-1 text-sm cursor-pointer hover:text-indigo-600 transition-colors ${s.done ? 'line-through text-slate-400' : 'text-slate-700'}`}
+                            className={`flex-1 text-sm cursor-pointer hover:text-indigo-600 transition-colors ${s.done ? 'line-through text-slate-400 dark:text-slate-500' : 'text-slate-700 dark:text-slate-300'}`}
                           >
                             {s.title}
                           </span>
@@ -603,12 +603,12 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
               }}
               placeholder={addSubTodo.isPending ? 'Adding...' : '+ Add sub-task...'}
               disabled={addSubTodo.isPending}
-              className="mt-2 w-full text-sm border border-dashed border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent placeholder-slate-300 disabled:opacity-50"
+              className="mt-2 w-full text-sm border border-dashed border-slate-200 dark:border-slate-700 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent placeholder-slate-300 dark:placeholder-slate-500 disabled:opacity-50 dark:bg-transparent dark:text-slate-100"
             />
           </div>
 
           <div>
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
+            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">
               Blocked by
             </p>
             {todo.blocked_by_ids.length > 0 && (
@@ -617,12 +617,12 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
                   const blocker = allTodos.find((t) => t.id === bid)
                   return (
                     <li key={bid} className="flex items-center gap-2">
-                      <span className="flex-1 text-sm text-slate-600 truncate">
+                      <span className="flex-1 text-sm text-slate-600 dark:text-slate-400 truncate">
                         {blocker ? blocker.title : `#${bid}`}
                       </span>
                       <button
                         onClick={() => updateMutation.mutate({ blocked_by_ids: todo.blocked_by_ids.filter((id) => id !== bid) })}
-                        className="flex-shrink-0 text-slate-300 hover:text-red-500 transition-colors text-lg leading-none"
+                        className="flex-shrink-0 text-slate-300 dark:text-slate-600 hover:text-red-500 transition-colors text-lg leading-none"
                       >×</button>
                     </li>
                   )

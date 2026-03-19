@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { NavLink, Route, Routes, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, CheckSquare, FolderKanban, Users, CheckCircle2, Crosshair } from 'lucide-react'
+import { LayoutDashboard, CheckSquare, FolderKanban, Users, CheckCircle2, Crosshair, Settings } from 'lucide-react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { updateTodo } from './api'
 import Dashboard from './pages/Dashboard'
@@ -10,6 +10,7 @@ import PeoplePage from './pages/PeoplePage'
 import TodoDetailPage from './pages/TodoDetailPage'
 import RecentlyDonePage from './pages/RecentlyDonePage'
 import FocusPage from './pages/FocusPage'
+import SettingsPage from './pages/SettingsPage'
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
@@ -56,9 +57,9 @@ export default function App() {
   }
 
   return (
-    <div className="flex h-screen bg-slate-100 overflow-hidden">
+    <div className="flex h-screen bg-slate-100 dark:bg-slate-950 overflow-hidden">
       {/* Sidebar */}
-      <aside className="w-56 bg-slate-900 text-white flex flex-col flex-shrink-0 shadow-xl">
+      <aside className="w-56 bg-slate-900 dark:bg-slate-900 dark:border-r dark:border-slate-800 text-white flex flex-col flex-shrink-0 shadow-xl">
         <div className="px-5 py-5 border-b border-slate-800">
           <div className="flex items-center gap-2.5">
             <div className="w-7 h-7 bg-indigo-500 rounded-lg flex items-center justify-center flex-shrink-0">
@@ -101,14 +102,31 @@ export default function App() {
             )
           })}
         </nav>
-        <div className="px-5 py-4 border-t border-slate-800">
-          <p className="text-slate-500 text-xs">9h/day per person</p>
-          <p className="text-slate-500 text-xs mt-0.5">3 windows × 3h</p>
+        <div className="border-t border-slate-800">
+          <div className="px-2 py-2">
+            <NavLink
+              to="/settings"
+              className={({ isActive }) =>
+                `w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                  isActive
+                    ? 'bg-indigo-600 text-white'
+                    : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                }`
+              }
+            >
+              <Settings size={16} />
+              Settings
+            </NavLink>
+          </div>
+          <div className="px-5 py-3 border-t border-slate-800">
+            <p className="text-slate-500 text-xs">9h/day per person</p>
+            <p className="text-slate-500 text-xs mt-0.5">3 windows × 3h</p>
+          </div>
         </div>
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 overflow-auto">
+      <main className="flex-1 overflow-auto dark:bg-slate-950">
         <Routes>
           <Route path="/" element={<Dashboard onOpenTodo={(id) => navigate(`/todos/${id}`)} />} />
           <Route path="/focus" element={<FocusPage onOpenTodo={(id) => navigate(`/todos/${id}`)} />} />
@@ -117,6 +135,7 @@ export default function App() {
           <Route path="/projects" element={<ProjectsPage onOpenTodo={(id) => navigate(`/todos/${id}`)} />} />
           <Route path="/people" element={<PeoplePage onOpenTodo={(id) => navigate(`/todos/${id}`)} />} />
           <Route path="/done" element={<RecentlyDonePage />} />
+          <Route path="/settings" element={<SettingsPage />} />
         </Routes>
       </main>
     </div>

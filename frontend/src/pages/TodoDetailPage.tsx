@@ -19,21 +19,21 @@ import { config } from '../config'
 
 const importanceBadge = (imp: string) => {
   const map: Record<string, string> = {
-    critical: 'bg-red-100 text-red-700 border-red-200',
-    high: 'bg-orange-100 text-orange-700 border-orange-200',
-    medium: 'bg-blue-100 text-blue-700 border-blue-200',
-    low: 'bg-slate-100 text-slate-600 border-slate-200',
+    critical: 'bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800',
+    high: 'bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-900/30 dark:text-orange-400 dark:border-orange-800',
+    medium: 'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800',
+    low: 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-700 dark:text-slate-400 dark:border-slate-700',
   }
-  return map[imp] || 'bg-slate-100 text-slate-600 border-slate-200'
+  return map[imp] || 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-700 dark:text-slate-400 dark:border-slate-700'
 }
 
 const statusBadge = (s: string) => {
   const map: Record<string, string> = {
-    todo: 'bg-slate-100 text-slate-600',
-    'in-progress': 'bg-blue-100 text-blue-700',
-    done: 'bg-green-100 text-green-700',
+    todo: 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-400',
+    'in-progress': 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+    done: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
   }
-  return map[s] || 'bg-slate-100 text-slate-600'
+  return map[s] || 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-400'
 }
 
 
@@ -74,25 +74,25 @@ function BlockerPicker({
         onFocus={() => setOpen(true)}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
         placeholder="Search todos to add..."
-        className="w-full text-xs border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-400 placeholder-slate-300"
+        className="w-full text-xs border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-400 placeholder-slate-300 dark:placeholder-slate-500 dark:bg-slate-700 dark:text-slate-100"
       />
       {open && (filtered.length > 0 || showCreate) && (
-        <ul className="absolute z-10 left-0 right-0 mt-1 max-h-48 overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-lg">
+        <ul className="absolute z-10 left-0 right-0 mt-1 max-h-48 overflow-y-auto bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg">
           {filtered.map((t) => (
             <li
               key={t.id}
               onMouseDown={() => { onSelect(t); setSearch(''); setOpen(false) }}
-              className="px-3 py-2 text-sm cursor-pointer hover:bg-indigo-50 flex items-center gap-2"
+              className="px-3 py-2 text-sm cursor-pointer hover:bg-indigo-50 dark:hover:bg-indigo-900/30 flex items-center gap-2"
             >
-              <span className="text-slate-400 text-xs flex-shrink-0">#{t.id}</span>
-              <span className="flex-1 text-slate-700 truncate">{t.title}</span>
-              <span className="text-xs text-slate-400 capitalize flex-shrink-0">{t.status}</span>
+              <span className="text-slate-400 dark:text-slate-500 text-xs flex-shrink-0">#{t.id}</span>
+              <span className="flex-1 text-slate-700 dark:text-slate-300 truncate">{t.title}</span>
+              <span className="text-xs text-slate-400 dark:text-slate-500 capitalize flex-shrink-0">{t.status}</span>
             </li>
           ))}
           {showCreate && (
             <li
               onMouseDown={() => { onCreate(trimmed); setSearch(''); setOpen(false) }}
-              className="px-3 py-2 text-sm cursor-pointer hover:bg-green-50 flex items-center gap-2 border-t border-slate-100"
+              className="px-3 py-2 text-sm cursor-pointer hover:bg-green-50 dark:hover:bg-green-900/30 flex items-center gap-2 border-t border-slate-100 dark:border-slate-700"
             >
               <span className="text-green-600 text-xs flex-shrink-0">+</span>
               <span className="flex-1 text-green-700">Create &quot;{trimmed}&quot;</span>
@@ -230,7 +230,7 @@ export default function TodoDetailPage() {
         >
           ← Back
         </button>
-        <div className="text-slate-500">Loading...</div>
+        <div className="text-slate-500 dark:text-slate-400">Loading...</div>
       </div>
     )
   }
@@ -293,7 +293,7 @@ export default function TodoDetailPage() {
       </button>
 
       {/* Header card */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 mb-4">
+      <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-6 mb-4">
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1 min-w-0">
             <div className="flex flex-wrap gap-2 mb-3">
@@ -352,7 +352,7 @@ export default function TodoDetailPage() {
                 </span>
               )}
             </div>
-            <h1 className="text-2xl font-bold text-slate-800 leading-tight">{todo.title}</h1>
+            <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100 leading-tight">{todo.title}</h1>
           </div>
           <div className="flex-shrink-0 flex items-center gap-3">
             <label className="flex items-center gap-2 cursor-pointer select-none">
@@ -362,7 +362,7 @@ export default function TodoDetailPage() {
                 onChange={(e) => handleDoneCheck(e.target.checked)}
                 className="w-4 h-4 rounded cursor-pointer accent-green-600"
               />
-              <span className="text-sm text-slate-500">Done</span>
+              <span className="text-sm text-slate-500 dark:text-slate-400">Done</span>
             </label>
             <button
               onClick={() => setShowModal(true)}
@@ -378,9 +378,9 @@ export default function TodoDetailPage() {
           <div
             onClick={(e) => startEdit(e, 'assignee_id', todo.assignee_id?.toString() || '')}
             title="Click to change assignee"
-            className="bg-slate-50 rounded-lg p-3 cursor-pointer hover:bg-indigo-50 hover:ring-1 hover:ring-indigo-200 transition-all"
+            className="bg-slate-50 dark:bg-slate-700 rounded-lg p-3 cursor-pointer hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:ring-1 hover:ring-indigo-200 transition-all"
           >
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
+            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">
               Assignee
             </p>
             {editingField === 'assignee_id' ? (
@@ -396,17 +396,17 @@ export default function TodoDetailPage() {
                 {persons.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             ) : (
-              <p className="text-sm font-medium text-slate-800">
-                {todo.assignee_name || <span className="text-slate-400 font-normal">Unassigned</span>}
+              <p className="text-sm font-medium text-slate-800 dark:text-slate-100">
+                {todo.assignee_name || <span className="text-slate-400 dark:text-slate-500 font-normal">Unassigned</span>}
               </p>
             )}
           </div>
           <div
             onClick={(e) => startEdit(e, 'deadline', todo.deadline || '')}
             title="Click to change deadline"
-            className="bg-slate-50 rounded-lg p-3 cursor-pointer hover:bg-indigo-50 hover:ring-1 hover:ring-indigo-200 transition-all"
+            className="bg-slate-50 dark:bg-slate-700 rounded-lg p-3 cursor-pointer hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:ring-1 hover:ring-indigo-200 transition-all"
           >
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
+            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">
               Deadline
             </p>
             {editingField === 'deadline' ? (
@@ -425,16 +425,16 @@ export default function TodoDetailPage() {
               />
             ) : (
               <p className={`text-sm font-medium ${isOverdue ? 'text-red-600' : 'text-slate-800'}`}>
-                {todo.deadline || <span className="text-slate-400 font-normal">None</span>}
+                {todo.deadline || <span className="text-slate-400 dark:text-slate-500 font-normal">None</span>}
               </p>
             )}
           </div>
           <div
             onClick={(e) => startEdit(e, 'project_id', todo.project_id?.toString() || '')}
             title="Click to change project"
-            className="bg-slate-50 rounded-lg p-3 cursor-pointer hover:bg-indigo-50 hover:ring-1 hover:ring-indigo-200 transition-all"
+            className="bg-slate-50 dark:bg-slate-700 rounded-lg p-3 cursor-pointer hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:ring-1 hover:ring-indigo-200 transition-all"
           >
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
+            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">
               Project
             </p>
             {editingField === 'project_id' ? (
@@ -450,17 +450,17 @@ export default function TodoDetailPage() {
                 {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             ) : (
-              <p className="text-sm font-medium text-slate-800">
-                {todo.project_name || <span className="text-slate-400 font-normal">None</span>}
+              <p className="text-sm font-medium text-slate-800 dark:text-slate-100">
+                {todo.project_name || <span className="text-slate-400 dark:text-slate-500 font-normal">None</span>}
               </p>
             )}
           </div>
           <div
             onClick={(e) => startEdit(e, 'estimated_hours', todo.estimated_hours.toString())}
             title="Click to change estimated hours"
-            className="bg-slate-50 rounded-lg p-3 cursor-pointer hover:bg-indigo-50 hover:ring-1 hover:ring-indigo-200 transition-all"
+            className="bg-slate-50 dark:bg-slate-700 rounded-lg p-3 cursor-pointer hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:ring-1 hover:ring-indigo-200 transition-all"
           >
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
+            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">
               Est. Hours
             </p>
             {editingField === 'estimated_hours' ? (
@@ -480,14 +480,14 @@ export default function TodoDetailPage() {
                 className="text-sm w-full bg-transparent border-b border-indigo-400 focus:outline-none"
               />
             ) : (
-              <p className="text-sm font-medium text-slate-800">{todo.estimated_hours}h</p>
+              <p className="text-sm font-medium text-slate-800 dark:text-slate-100">{todo.estimated_hours}h</p>
             )}
           </div>
         </div>
 
         {/* Description */}
-        <div className="mt-5 pt-5 border-t border-slate-100">
-          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+        <div className="mt-5 pt-5 border-t border-slate-100 dark:border-slate-700">
+          <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-2">
             Description
           </p>
           {editingField === 'description' ? (
@@ -501,39 +501,39 @@ export default function TodoDetailPage() {
               }}
               onClick={(e) => e.stopPropagation()}
               rows={4}
-              className="text-sm text-slate-700 w-full bg-transparent border border-indigo-300 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none leading-relaxed"
+              className="text-sm text-slate-700 dark:text-slate-300 w-full bg-transparent border border-indigo-300 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none leading-relaxed"
             />
           ) : (
             <p
               onClick={(e) => startEdit(e, 'description', todo.description || '')}
               title="Click to edit description"
-              className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed cursor-pointer hover:text-indigo-600 transition-colors min-h-[1.5rem]"
+              className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap leading-relaxed cursor-pointer hover:text-indigo-600 transition-colors min-h-[1.5rem]"
             >
-              {todo.description || <em className="text-slate-300 not-italic">+ Add a description...</em>}
+              {todo.description || <em className="text-slate-300 dark:text-slate-600 not-italic">+ Add a description...</em>}
             </p>
           )}
         </div>
 
-        <p className="mt-4 text-xs text-slate-400">
+        <p className="mt-4 text-xs text-slate-400 dark:text-slate-500">
           Created {new Date(todo.created_at).toLocaleDateString()}
         </p>
       </div>
 
       {/* Subtasks card */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 mb-4">
+      <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-5 mb-4">
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-semibold text-slate-700 uppercase tracking-wide">
+          <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wide">
             Subtasks
           </h2>
           {totalSubs > 0 && (
-            <span className="text-sm text-slate-500">
+            <span className="text-sm text-slate-500 dark:text-slate-400">
               {doneSubs}/{totalSubs}
             </span>
           )}
         </div>
 
         {totalSubs > 0 && (
-          <div className="mb-4 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+          <div className="mb-4 h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
             <div
               className="h-full bg-indigo-500 rounded-full transition-all"
               style={{ width: `${(doneSubs / totalSubs) * 100}%` }}
@@ -553,11 +553,11 @@ export default function TodoDetailPage() {
                 onDrop={handleDrop}
                 onDragEnd={handleDragEnd}
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors select-none border-t-2
-                  ${dragIdx === idx ? 'opacity-40' : 'hover:bg-slate-50'}
+                  ${dragIdx === idx ? 'opacity-40' : 'hover:bg-slate-50 dark:hover:bg-slate-700'}
                   ${dragOverIdx === idx && dragIdx !== null && dragIdx !== idx ? 'border-indigo-400' : 'border-transparent'}
                 `}
               >
-                <span className="cursor-grab text-slate-300 hover:text-slate-500 text-lg leading-none flex-shrink-0">
+                <span className="cursor-grab text-slate-300 dark:text-slate-600 hover:text-slate-500 text-lg leading-none flex-shrink-0">
                   ⠿
                 </span>
                 <input
@@ -584,14 +584,14 @@ export default function TodoDetailPage() {
                       if (e.key === 'Escape') setEditingSubId(null)
                     }}
                     onClick={(e) => e.stopPropagation()}
-                    className="flex-1 text-sm text-slate-700 bg-transparent border-b border-indigo-400 focus:outline-none"
+                    className="flex-1 text-sm text-slate-700 dark:text-slate-300 bg-transparent border-b border-indigo-400 focus:outline-none"
                   />
                 ) : (
                   <span
                     onClick={() => { setEditingSubId(s.id); setEditingSubTitle(s.title) }}
                     title="Click to edit"
                     className={`flex-1 text-sm cursor-pointer hover:text-indigo-600 transition-colors ${
-                      s.done ? 'line-through text-slate-400' : 'text-slate-700'
+                      s.done ? 'line-through text-slate-400 dark:text-slate-500' : 'text-slate-700 dark:text-slate-300'
                     }`}
                   >
                     {s.title}
@@ -599,7 +599,7 @@ export default function TodoDetailPage() {
                 )}
                 <button
                   onClick={() => removeSubTodo.mutate(s.id)}
-                  className="flex-shrink-0 text-slate-300 hover:text-red-500 transition-colors text-lg leading-none"
+                  className="flex-shrink-0 text-slate-300 dark:text-slate-600 hover:text-red-500 transition-colors text-lg leading-none"
                 >
                   ×
                 </button>
@@ -607,7 +607,7 @@ export default function TodoDetailPage() {
             ))}
           </ul>
         ) : (
-          <p className="text-sm text-slate-400 mb-4">No subtasks yet.</p>
+          <p className="text-sm text-slate-400 dark:text-slate-500 mb-4">No subtasks yet.</p>
         )}
 
         {/* Add new subtask — also acts as the drop zone for the last position */}
@@ -624,7 +624,7 @@ export default function TodoDetailPage() {
             onChange={(e) => setNewSubtodoTitle(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleAddSubtodo()}
             placeholder="Add a subtask..."
-            className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="flex-1 border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-slate-700 dark:text-slate-100"
           />
           <button
             onClick={handleAddSubtodo}
@@ -637,8 +637,8 @@ export default function TodoDetailPage() {
       </div>
 
       {/* Blocked by */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 mb-4">
-        <h2 className="text-sm font-semibold text-slate-700 uppercase tracking-wide mb-3">
+      <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-5 mb-4">
+        <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-3">
           Blocked by
         </h2>
         {blockers.length > 0 && (
@@ -657,10 +657,10 @@ export default function TodoDetailPage() {
               .filter((id) => !blockers.find((b) => b.id === id))
               .map((id) => (
                 <li key={id} className="flex items-center gap-2">
-                  <span className="flex-1 px-3 py-2 text-sm text-slate-400">Todo #{id} (not found)</span>
+                  <span className="flex-1 px-3 py-2 text-sm text-slate-400 dark:text-slate-500">Todo #{id} (not found)</span>
                   <button
                     onClick={() => updateMutation.mutate({ blocked_by_ids: todo.blocked_by_ids.filter((bid: number) => bid !== id) })}
-                    className="flex-shrink-0 text-slate-300 hover:text-red-500 transition-colors text-lg leading-none px-1"
+                    className="flex-shrink-0 text-slate-300 dark:text-slate-600 hover:text-red-500 transition-colors text-lg leading-none px-1"
                   >×</button>
                 </li>
               ))}
@@ -676,8 +676,8 @@ export default function TodoDetailPage() {
       </div>
 
       {/* Blocking others */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 mb-4">
-        <h2 className="text-sm font-semibold text-slate-700 uppercase tracking-wide mb-3">
+      <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-5 mb-4">
+        <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-3">
           Blocking
         </h2>
         {blocking.length > 0 && (

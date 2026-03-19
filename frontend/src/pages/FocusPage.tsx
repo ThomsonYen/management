@@ -140,8 +140,8 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
     <div className="p-6 max-w-4xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-2xl font-bold text-slate-800">Focus</h2>
-          <p className="text-sm text-slate-500 mt-0.5">
+          <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Focus</h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
             Drag cards to reorder. Drag any todo onto "Focus" in the sidebar to add it here.
           </p>
         </div>
@@ -149,15 +149,15 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
 
       {/* Filter bar */}
       {focusedProjects.length > 1 && (
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 mb-6">
+        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-4 mb-6">
           <div className="flex items-center gap-3">
-            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+            <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
               Filter by project
             </label>
             <select
               value={selectedProject}
               onChange={(e) => setSelectedProject(e.target.value)}
-              className="border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             >
               <option value="">All projects</option>
               {focusedProjects.map((p) => (
@@ -182,15 +182,15 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
       )}
 
       {/* Count */}
-      <p className="text-sm text-slate-500 mb-3">
+      <p className="text-sm text-slate-500 dark:text-slate-400 mb-3">
         {filtered.length} focused todo{filtered.length !== 1 ? 's' : ''}
       </p>
 
       {isLoading ? (
-        <div className="text-slate-500 text-sm">Loading...</div>
+        <div className="text-slate-500 dark:text-slate-400 text-sm">Loading...</div>
       ) : filtered.length === 0 ? (
-        <div className="bg-white rounded-xl border border-dashed border-slate-300 p-8 text-center">
-          <p className="text-slate-400 text-sm">
+        <div className="bg-white dark:bg-slate-800 rounded-xl border border-dashed border-slate-300 dark:border-slate-600 p-8 text-center">
+          <p className="text-slate-400 dark:text-slate-500 text-sm">
             No focused todos yet. Drag todo cards onto "Focus" in the sidebar to add them.
           </p>
         </div>
@@ -236,7 +236,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
               <div className="h-1 bg-indigo-400 rounded-full mx-2 transition-all" />
             )}
           </div>
-          <div className="bg-white rounded-xl shadow-sm border border-dashed border-slate-300 overflow-hidden">
+          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-dashed border-slate-300 dark:border-slate-600 overflow-hidden">
             <div className="px-5 py-4">
               <input
                 type="text"
@@ -249,7 +249,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
                 }}
                 placeholder={addFocusedTodo.isPending ? 'Adding...' : '+ Add a focused todo...'}
                 disabled={addFocusedTodo.isPending}
-                className="w-full text-sm font-medium text-slate-600 placeholder-slate-300 bg-transparent outline-none disabled:opacity-50"
+                className="w-full text-sm font-medium text-slate-600 dark:text-slate-400 placeholder-slate-300 dark:placeholder-slate-500 bg-transparent outline-none disabled:opacity-50"
               />
             </div>
           </div>

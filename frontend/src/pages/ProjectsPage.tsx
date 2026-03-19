@@ -27,14 +27,14 @@ function ProjectNode({
       <div
         className={`flex items-center gap-1 group cursor-pointer rounded-lg px-2 py-1.5 text-sm ${
           selectedId === node.id
-            ? 'bg-indigo-100 text-indigo-800 font-semibold'
-            : 'text-slate-700 hover:bg-slate-100'
+            ? 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/50 dark:text-indigo-300 font-semibold'
+            : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
         }`}
         style={{ paddingLeft: `${8 + depth * 16}px` }}
       >
         <button
           onClick={() => setOpen((o) => !o)}
-          className="w-4 flex-shrink-0 text-slate-400 text-xs"
+          className="w-4 flex-shrink-0 text-slate-400 dark:text-slate-500 text-xs"
         >
           {hasChildren ? (open ? '▼' : '▶') : ' '}
         </button>
@@ -98,8 +98,8 @@ function AddProjectModal({ parentId, onClose }: AddProjectModalProps) {
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
-        <h3 className="text-lg font-bold text-slate-800 mb-4">
+      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-md p-6">
+        <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-4">
           {parentId ? 'Add Subproject' : 'Add Project'}
         </h3>
         <div className="space-y-4">
@@ -108,24 +108,24 @@ function AddProjectModal({ parentId, onClose }: AddProjectModalProps) {
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Project name"
-            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="w-full border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
           <textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             placeholder="Description (optional)"
             rows={2}
-            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+            className="w-full border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
           />
           <div>
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
+            <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">
               Deadline
             </label>
             <input
               type="date"
               value={deadline}
               onChange={(e) => setDeadline(e.target.value)}
-              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-full border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
           </div>
         </div>
@@ -139,7 +139,7 @@ function AddProjectModal({ parentId, onClose }: AddProjectModalProps) {
           </button>
           <button
             onClick={onClose}
-            className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg font-semibold text-sm hover:bg-slate-200 transition-colors"
+            className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg font-semibold text-sm hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
           >
             Cancel
           </button>
@@ -175,7 +175,7 @@ function AddTodoCard({ projectId, queryKeys }: { projectId: number; queryKeys: u
   }
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-dashed border-slate-300 overflow-hidden">
+    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-dashed border-slate-300 dark:border-slate-600 overflow-hidden">
       <div className="px-5 py-4">
         <input
           type="text"
@@ -184,7 +184,7 @@ function AddTodoCard({ projectId, queryKeys }: { projectId: number; queryKeys: u
           onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit() }}
           placeholder={createMutation.isPending ? 'Adding...' : '+ Add a todo...'}
           disabled={createMutation.isPending}
-          className="w-full text-sm font-medium text-slate-600 placeholder-slate-300 bg-transparent outline-none disabled:opacity-50"
+          className="w-full text-sm font-medium text-slate-600 dark:text-slate-400 placeholder-slate-300 dark:placeholder-slate-500 bg-transparent outline-none disabled:opacity-50"
         />
       </div>
     </div>
@@ -245,9 +245,9 @@ export default function ProjectsPage({ onOpenTodo }: { onOpenTodo: (id: number) 
   return (
     <div className="flex h-full">
       {/* Left panel */}
-      <div className="w-64 bg-white border-r border-slate-200 flex flex-col flex-shrink-0">
-        <div className="px-4 py-4 border-b border-slate-200 flex items-center justify-between">
-          <h3 className="font-semibold text-slate-800 text-sm">Projects</h3>
+      <div className="w-64 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col flex-shrink-0">
+        <div className="px-4 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+          <h3 className="font-semibold text-slate-800 dark:text-slate-100 text-sm">Projects</h3>
           <button
             onClick={() => setShowAddProject(true)}
             className="text-indigo-600 hover:text-indigo-800 text-xs font-semibold"
@@ -257,7 +257,7 @@ export default function ProjectsPage({ onOpenTodo }: { onOpenTodo: (id: number) 
         </div>
         <div className="flex-1 overflow-y-auto py-2">
           {tree.length === 0 ? (
-            <p className="px-4 py-3 text-xs text-slate-400">No projects yet</p>
+            <p className="px-4 py-3 text-xs text-slate-400 dark:text-slate-500">No projects yet</p>
           ) : (
             tree.map((node) => (
               <ProjectNode
@@ -276,21 +276,21 @@ export default function ProjectsPage({ onOpenTodo }: { onOpenTodo: (id: number) 
       {/* Right panel */}
       <div className="flex-1 overflow-y-auto p-6">
         {!selectedProjectId ? (
-          <div className="flex items-center justify-center h-64 text-slate-400 text-sm">
+          <div className="flex items-center justify-center h-64 text-slate-400 dark:text-slate-500 text-sm">
             Select a project to view its todos
           </div>
         ) : (
           <>
             {selectedProject && (
-              <div className="bg-white rounded-xl border border-slate-200 p-5 mb-5">
+              <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-5 mb-5">
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <h2 className="text-xl font-bold text-slate-800">{selectedProject.name}</h2>
+                    <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">{selectedProject.name}</h2>
                     {selectedProject.description && (
-                      <p className="text-sm text-slate-500 mt-1">{selectedProject.description}</p>
+                      <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{selectedProject.description}</p>
                     )}
                     {selectedProject.deadline && (
-                      <p className="text-xs text-slate-400 mt-1">
+                      <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
                         Deadline: <span className="font-medium">{selectedProject.deadline}</span>
                       </p>
                     )}
@@ -317,11 +317,11 @@ export default function ProjectsPage({ onOpenTodo }: { onOpenTodo: (id: number) 
               </div>
             )}
 
-            <h3 className="text-sm font-semibold text-slate-600 uppercase tracking-wide mb-3">
+            <h3 className="text-sm font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wide mb-3">
               Todos ({projectTodos.length})
             </h3>
             {todosLoading ? (
-              <div className="text-slate-500 text-sm">Loading...</div>
+              <div className="text-slate-500 dark:text-slate-400 text-sm">Loading...</div>
             ) : (
               <div className="space-y-3">
                 {projectTodos.map((t) => (

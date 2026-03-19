@@ -61,7 +61,7 @@ export default function MarkDoneButton({ todo, queryKeys }: Props) {
         <span className="text-xs text-green-600 font-medium">✓ Done!</span>
         <button
           onClick={handleUndo}
-          className="text-xs px-2 py-1 rounded-lg bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 transition-colors font-medium"
+          className="text-xs px-2 py-1 rounded-lg bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800 hover:bg-amber-100 dark:hover:bg-amber-800 transition-colors font-medium"
         >
           Undo ({undoInfo.remaining}s)
         </button>
@@ -74,7 +74,7 @@ export default function MarkDoneButton({ todo, queryKeys }: Props) {
       <button
         onClick={() => updateMutation.mutate({ status: 'todo' })}
         disabled={updateMutation.isPending}
-        className="text-xs px-2.5 py-1 rounded-lg bg-slate-50 text-slate-500 border border-slate-200 hover:bg-slate-100 transition-colors font-medium disabled:opacity-40"
+        className="text-xs px-2.5 py-1 rounded-lg bg-slate-50 dark:bg-slate-700 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors font-medium disabled:opacity-40"
       >
         ↩ Reopen
       </button>
@@ -85,7 +85,7 @@ export default function MarkDoneButton({ todo, queryKeys }: Props) {
     <button
       onClick={markDone}
       disabled={updateMutation.isPending}
-      className="text-xs px-2.5 py-1 rounded-lg bg-green-50 text-green-700 border border-green-200 hover:bg-green-100 transition-colors font-medium disabled:opacity-40"
+      className="text-xs px-2.5 py-1 rounded-lg bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-800 hover:bg-green-100 dark:hover:bg-green-800 transition-colors font-medium disabled:opacity-40"
     >
       ✓ Done
     </button>

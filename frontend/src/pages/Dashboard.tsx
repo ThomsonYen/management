@@ -19,7 +19,7 @@ function ScheduleCard({ item, allTodos, onOpenTodo }: { item: ScheduleStatus; al
         e.dataTransfer.setData('application/x-todo-id', String(item.todo_id))
         e.dataTransfer.effectAllowed = 'link'
       }}
-      className={`rounded-lg border-l-4 cursor-grab active:cursor-grabbing ${isBehind ? 'bg-red-50 border-red-500' : 'bg-yellow-50 border-yellow-400'}`}
+      className={`rounded-lg border-l-4 cursor-grab active:cursor-grabbing ${isBehind ? 'bg-red-50 dark:bg-red-900/30 border-red-500' : 'bg-yellow-50 dark:bg-yellow-900/30 border-yellow-400'}`}
     >
       <button
         onClick={() => onOpenTodo(item.todo_id)}
@@ -27,16 +27,16 @@ function ScheduleCard({ item, allTodos, onOpenTodo }: { item: ScheduleStatus; al
       >
         <div className="flex items-start justify-between gap-2">
           <div>
-            <p className="font-semibold text-slate-800 text-sm">{item.title}</p>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Assigned to <span className="font-medium text-slate-700">{item.assignee_name}</span>
+            <p className="font-semibold text-slate-800 dark:text-slate-100 text-sm">{item.title}</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              Assigned to <span className="font-medium text-slate-700 dark:text-slate-300">{item.assignee_name}</span>
             </p>
           </div>
           <span className={`text-xs font-bold px-2 py-1 rounded-full flex-shrink-0 ${isBehind ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>
             {isBehind ? 'BEHIND' : 'WARNING'}
           </span>
         </div>
-        <div className="mt-2 flex flex-wrap gap-3 text-xs text-slate-600">
+        <div className="mt-2 flex flex-wrap gap-3 text-xs text-slate-600 dark:text-slate-400">
           <span>Deadline: <strong>{item.deadline}</strong></span>
           <span>Own work: <strong>{item.estimated_hours}h</strong></span>
           {item.chain_hours > item.estimated_hours && (
@@ -50,7 +50,7 @@ function ScheduleCard({ item, allTodos, onOpenTodo }: { item: ScheduleStatus; al
       </button>
       {directBlockers.length > 0 && (
         <div className="px-4 pb-3">
-          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Blocked by</p>
+          <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-2">Blocked by</p>
           <ul className="space-y-1">
             {directBlockers.map((blocker) => (
               <BlockerTreeNode
@@ -118,23 +118,23 @@ export default function Dashboard({ onOpenTodo }: { onOpenTodo: (id: number) => 
       critical: 'bg-red-100 text-red-700',
       high: 'bg-orange-100 text-orange-700',
       medium: 'bg-blue-100 text-blue-700',
-      low: 'bg-slate-100 text-slate-600',
+      low: 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-400',
     }
-    return map[imp] || 'bg-slate-100 text-slate-600'
+    return map[imp] || 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-400'
   }
 
   const statusBadge = (s: string) => {
     const map: Record<string, string> = {
-      todo: 'bg-slate-100 text-slate-600',
+      todo: 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-400',
       'in-progress': 'bg-blue-100 text-blue-700',
       done: 'bg-green-100 text-green-700',
     }
-    return map[s] || 'bg-slate-100 text-slate-600'
+    return map[s] || 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-400'
   }
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
-      <h2 className="text-2xl font-bold text-slate-800 mb-6">Dashboard</h2>
+      <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100 mb-6">Dashboard</h2>
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
@@ -147,7 +147,7 @@ export default function Dashboard({ onOpenTodo }: { onOpenTodo: (id: number) => 
       {/* Schedule alerts */}
       <div className="mb-8">
         <div className="flex items-center gap-3 mb-3">
-          <h3 className="text-lg font-semibold text-slate-800">Schedule Alerts</h3>
+          <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100">Schedule Alerts</h3>
           {behindCount > 0 && (
             <span className="bg-red-100 text-red-700 text-xs font-bold px-2 py-0.5 rounded-full">
               {behindCount} behind
@@ -160,9 +160,9 @@ export default function Dashboard({ onOpenTodo }: { onOpenTodo: (id: number) => 
           )}
         </div>
         {remindersLoading ? (
-          <div className="text-slate-500 text-sm">Loading...</div>
+          <div className="text-slate-500 dark:text-slate-400 text-sm">Loading...</div>
         ) : reminders.length === 0 ? (
-          <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-green-700 text-sm">
+          <div className="bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 rounded-lg p-4 text-green-700 dark:text-green-400 text-sm">
             All todos are on schedule!
           </div>
         ) : (
@@ -176,25 +176,25 @@ export default function Dashboard({ onOpenTodo }: { onOpenTodo: (id: number) => 
 
       {/* Recent todos */}
       <div>
-        <h3 className="text-lg font-semibold text-slate-800 mb-3">Recent Todos</h3>
+        <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100 mb-3">Recent Todos</h3>
         {todosLoading ? (
-          <div className="text-slate-500 text-sm">Loading...</div>
+          <div className="text-slate-500 dark:text-slate-400 text-sm">Loading...</div>
         ) : recentTodos.length === 0 ? (
-          <div className="text-slate-500 text-sm">No todos yet.</div>
+          <div className="text-slate-500 dark:text-slate-400 text-sm">No todos yet.</div>
         ) : (
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
             {recentTodos.map((t, i) => (
               <button
                 key={t.id}
                 onClick={() => onOpenTodo(t.id)}
-                className={`w-full flex items-center justify-between px-5 py-3 text-left hover:bg-slate-50 transition-colors ${
-                  i < recentTodos.length - 1 ? 'border-b border-slate-100' : ''
+                className={`w-full flex items-center justify-between px-5 py-3 text-left hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors ${
+                  i < recentTodos.length - 1 ? 'border-b border-slate-100 dark:border-slate-700' : ''
                 }`}
               >
                 <div>
-                  <p className="font-medium text-slate-800 text-sm">{t.title}</p>
+                  <p className="font-medium text-slate-800 dark:text-slate-100 text-sm">{t.title}</p>
                   {t.assignee_name && (
-                    <p className="text-xs text-slate-500">{t.assignee_name}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">{t.assignee_name}</p>
                   )}
                 </div>
                 <div className="flex items-center gap-2">
