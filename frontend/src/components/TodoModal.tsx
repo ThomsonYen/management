@@ -11,6 +11,7 @@ import {
   deleteSubTodo,
 } from '../api'
 import type { Todo, SubTodo } from '../types'
+import { useTodoDefaults } from '../TodoDefaultsContext'
 
 interface Props {
   todo?: Todo | null
@@ -23,15 +24,18 @@ const STATUS_OPTIONS = ['todo', 'in-progress', 'done']
 
 export default function TodoModal({ todo, onClose, invalidateKeys }: Props) {
   const queryClient = useQueryClient()
+  const { defaults } = useTodoDefaults()
   const isEdit = !!todo
+
+  const todayStr = new Date().toISOString().slice(0, 10)
 
   const [title, setTitle] = useState(todo?.title || '')
   const [description, setDescription] = useState(todo?.description || '')
   const [projectId, setProjectId] = useState<string>(todo?.project_id?.toString() || '')
-  const [assigneeId, setAssigneeId] = useState<string>(todo?.assignee_id?.toString() || '')
-  const [deadline, setDeadline] = useState(todo?.deadline || '')
-  const [importance, setImportance] = useState(todo?.importance || 'medium')
-  const [estimatedHours, setEstimatedHours] = useState(todo?.estimated_hours?.toString() || '1')
+  const [assigneeId, setAssigneeId] = useState<string>(todo?.assignee_id?.toString() || (isEdit ? '' : defaults.assigneeId))
+  const [deadline, setDeadline] = useState(todo?.deadline || (isEdit ? '' : defaults.deadlineToToday ? todayStr : ''))
+  const [importance, setImportance] = useState(todo?.importance || (isEdit ? 'medium' : defaults.importance))
+  const [estimatedHours, setEstimatedHours] = useState(todo?.estimated_hours?.toString() || (isEdit ? '1' : defaults.estimatedHours))
   const rawStatus = todo?.status || 'todo'
   const [status, setStatus] = useState(STATUS_OPTIONS.includes(rawStatus) ? rawStatus : 'todo')
   const [blockedByIds, setBlockedByIds] = useState<number[]>(todo?.blocked_by_ids || [])

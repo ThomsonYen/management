@@ -5,6 +5,7 @@ import { fetchProjectTree, fetchProjects, fetchTodos, createProject, createTodo,
 import type { ProjectTree, Project, Todo } from '../types'
 import TodoCard from '../components/TodoCard'
 import TodoModal from '../components/TodoModal'
+import { useTodoDefaults } from '../TodoDefaultsContext'
 
 function ProjectNode({
   node,
@@ -152,6 +153,7 @@ function AddProjectModal({ parentId, onClose }: AddProjectModalProps) {
 function AddTodoCard({ projectId, queryKeys }: { projectId: number; queryKeys: unknown[][] }) {
   const [title, setTitle] = useState('')
   const queryClient = useQueryClient()
+  const { defaults } = useTodoDefaults()
 
   const createMutation = useMutation({
     mutationFn: createTodo,
@@ -165,11 +167,12 @@ function AddTodoCard({ projectId, queryKeys }: { projectId: number; queryKeys: u
     if (!title.trim() || createMutation.isPending) return
     createMutation.mutate({
       title: title.trim(),
-      assignee_id: null,
+      assignee_id: defaults.assigneeId ? parseInt(defaults.assigneeId) : null,
       project_id: projectId,
       status: 'todo',
-      importance: 'medium',
-      estimated_hours: 1,
+      importance: defaults.importance,
+      estimated_hours: parseFloat(defaults.estimatedHours) || 1,
+      deadline: defaults.deadlineToToday ? new Date().toISOString().slice(0, 10) : undefined,
       blocked_by_ids: [],
     })
   }

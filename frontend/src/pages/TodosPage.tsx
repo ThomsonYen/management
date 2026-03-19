@@ -5,6 +5,7 @@ import { createTodo, fetchTodos, fetchPersons, fetchProjects } from '../api'
 import type { Todo, Person, Project } from '../types'
 import TodoCard from '../components/TodoCard'
 import TodoModal from '../components/TodoModal'
+import { useTodoDefaults } from '../TodoDefaultsContext'
 
 const STATUS_OPTIONS = ['', 'todo', 'in-progress', 'blocked']
 const IMPORTANCE_OPTIONS = ['', 'low', 'medium', 'high', 'critical']
@@ -22,6 +23,7 @@ function AddTodoCard({
 }) {
   const [title, setTitle] = useState('')
   const queryClient = useQueryClient()
+  const { defaults } = useTodoDefaults()
 
   const createMutation = useMutation({
     mutationFn: createTodo,
@@ -33,13 +35,15 @@ function AddTodoCard({
 
   const handleSubmit = () => {
     if (!title.trim() || createMutation.isPending) return
+    const assignee = defaultAssigneeId ?? (defaults.assigneeId ? parseInt(defaults.assigneeId) : null)
     createMutation.mutate({
       title: title.trim(),
-      assignee_id: defaultAssigneeId ?? null,
+      assignee_id: assignee,
       project_id: defaultProjectId,
       status: defaultStatus || 'todo',
-      importance: defaultImportance || 'medium',
-      estimated_hours: 1,
+      importance: defaultImportance || defaults.importance,
+      estimated_hours: parseFloat(defaults.estimatedHours) || 1,
+      deadline: defaults.deadlineToToday ? new Date().toISOString().slice(0, 10) : undefined,
       blocked_by_ids: [],
     })
   }
