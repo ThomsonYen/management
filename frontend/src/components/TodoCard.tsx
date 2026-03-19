@@ -119,6 +119,8 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
   const [editingSubTitle, setEditingSubTitle] = useState('')
   const [isDying, setIsDying] = useState(false)
   const dyingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [isUnfocusing, setIsUnfocusing] = useState(false)
+  const unfocusingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const queryClient = useQueryClient()
 
   useEffect(() => {
@@ -126,6 +128,10 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
       if (dyingTimeoutRef.current) {
         clearTimeout(dyingTimeoutRef.current)
         updateTodo(todo.id, { status: 'done' })
+      }
+      if (unfocusingTimeoutRef.current) {
+        clearTimeout(unfocusingTimeoutRef.current)
+        updateTodo(todo.id, { is_focused: false })
       }
     }
   }, [todo.id])
@@ -208,16 +214,29 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
           <button
             onClick={(e) => {
               e.stopPropagation()
-              updateMutation.mutate({ is_focused: !todo.is_focused })
+              if (todo.is_focused && !isUnfocusing) {
+                setIsUnfocusing(true)
+                unfocusingTimeoutRef.current = setTimeout(() => {
+                  updateMutation.mutate({ is_focused: false })
+                  setIsUnfocusing(false)
+                }, config.unfocus_fade_seconds * 1000)
+              } else if (isUnfocusing) {
+                if (unfocusingTimeoutRef.current) clearTimeout(unfocusingTimeoutRef.current)
+                setIsUnfocusing(false)
+              } else {
+                updateMutation.mutate({ is_focused: true })
+              }
             }}
-            title={todo.is_focused ? 'Remove from Focus' : 'Add to Focus'}
+            title={isUnfocusing ? 'Click to cancel unfocus' : todo.is_focused ? 'Remove from Focus' : 'Add to Focus'}
             className={`mt-0.5 text-lg leading-none flex-shrink-0 transition-colors ${
-              todo.is_focused
-                ? 'text-amber-500 hover:text-amber-600'
-                : 'text-slate-300 dark:text-slate-600 hover:text-amber-400'
+              isUnfocusing
+                ? 'text-amber-300 dark:text-amber-700 animate-pulse'
+                : todo.is_focused
+                  ? 'text-amber-500 hover:text-amber-600'
+                  : 'text-slate-300 dark:text-slate-600 hover:text-amber-400'
             }`}
           >
-            {todo.is_focused ? '★' : '☆'}
+            {todo.is_focused || isUnfocusing ? '★' : '☆'}
           </button>
           {/* Done checkbox */}
           <input

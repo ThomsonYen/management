@@ -121,12 +121,18 @@ export default function TodoDetailPage() {
   const [editingSubTitle, setEditingSubTitle] = useState('')
   const [isDying, setIsDying] = useState(false)
   const dyingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [isUnfocusing, setIsUnfocusing] = useState(false)
+  const unfocusingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     return () => {
       if (dyingTimeoutRef.current) {
         clearTimeout(dyingTimeoutRef.current)
         updateTodo(todoId, { status: 'done' })
+      }
+      if (unfocusingTimeoutRef.current) {
+        clearTimeout(unfocusingTimeoutRef.current)
+        updateTodo(todoId, { is_focused: false })
       }
     }
   }, [todoId])
@@ -298,15 +304,30 @@ export default function TodoDetailPage() {
           <div className="flex-1 min-w-0">
             <div className="flex flex-wrap gap-2 mb-3 items-center">
               <button
-                onClick={() => updateMutation.mutate({ is_focused: !todo.is_focused })}
-                title={todo.is_focused ? 'Remove from Focus' : 'Add to Focus'}
+                onClick={() => {
+                  if (todo.is_focused && !isUnfocusing) {
+                    setIsUnfocusing(true)
+                    unfocusingTimeoutRef.current = setTimeout(() => {
+                      updateMutation.mutate({ is_focused: false })
+                      setIsUnfocusing(false)
+                    }, config.unfocus_fade_seconds * 1000)
+                  } else if (isUnfocusing) {
+                    if (unfocusingTimeoutRef.current) clearTimeout(unfocusingTimeoutRef.current)
+                    setIsUnfocusing(false)
+                  } else {
+                    updateMutation.mutate({ is_focused: true })
+                  }
+                }}
+                title={isUnfocusing ? 'Click to cancel unfocus' : todo.is_focused ? 'Remove from Focus' : 'Add to Focus'}
                 className={`text-xl leading-none transition-colors ${
-                  todo.is_focused
-                    ? 'text-amber-500 hover:text-amber-600'
-                    : 'text-slate-300 dark:text-slate-600 hover:text-amber-400'
+                  isUnfocusing
+                    ? 'text-amber-300 dark:text-amber-700 animate-pulse'
+                    : todo.is_focused
+                      ? 'text-amber-500 hover:text-amber-600'
+                      : 'text-slate-300 dark:text-slate-600 hover:text-amber-400'
                 }`}
               >
-                {todo.is_focused ? '★' : '☆'}
+                {todo.is_focused || isUnfocusing ? '★' : '☆'}
               </button>
               {editingField === 'importance' ? (
                 <select

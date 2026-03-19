@@ -3,3 +3,7 @@
 # How many seconds a todo fades before it is marked as done.
 # During this window the user can uncheck to cancel.
 todo_done_fade_seconds: 2
+
+# How many seconds before an unfocused todo is actually removed from Focus.
+# During this window the user can click again to cancel.
+unfocus_fade_seconds: 3
