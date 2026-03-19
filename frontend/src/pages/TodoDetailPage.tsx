@@ -296,7 +296,18 @@ export default function TodoDetailPage() {
       <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-6 mb-4">
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1 min-w-0">
-            <div className="flex flex-wrap gap-2 mb-3">
+            <div className="flex flex-wrap gap-2 mb-3 items-center">
+              <button
+                onClick={() => updateMutation.mutate({ is_focused: !todo.is_focused })}
+                title={todo.is_focused ? 'Remove from Focus' : 'Add to Focus'}
+                className={`text-xl leading-none transition-colors ${
+                  todo.is_focused
+                    ? 'text-amber-500 hover:text-amber-600'
+                    : 'text-slate-300 dark:text-slate-600 hover:text-amber-400'
+                }`}
+              >
+                {todo.is_focused ? '★' : '☆'}
+              </button>
               {editingField === 'importance' ? (
                 <select
                   ref={autoOpenSelect}

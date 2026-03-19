@@ -204,6 +204,21 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
       {/* Header */}
       <div className="px-5 py-4">
         <div className="flex items-start gap-3">
+          {/* Focus toggle */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              updateMutation.mutate({ is_focused: !todo.is_focused })
+            }}
+            title={todo.is_focused ? 'Remove from Focus' : 'Add to Focus'}
+            className={`mt-0.5 text-lg leading-none flex-shrink-0 transition-colors ${
+              todo.is_focused
+                ? 'text-amber-500 hover:text-amber-600'
+                : 'text-slate-300 dark:text-slate-600 hover:text-amber-400'
+            }`}
+          >
+            {todo.is_focused ? '★' : '☆'}
+          </button>
           {/* Done checkbox */}
           <input
             type="checkbox"
