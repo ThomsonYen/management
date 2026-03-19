@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { deleteTodo, updateSubTodo, updateTodo, fetchPersons, fetchProjects, fetchTodos } from '../api'
+import { createTodo, createSubTodo, deleteTodo, updateSubTodo, updateTodo, fetchPersons, fetchProjects, fetchTodos } from '../api'
 import type { Todo, Person, Project } from '../types'
 import { config } from '../config'
 
@@ -40,11 +40,13 @@ function BlockerPicker({
   excludeId,
   selectedIds,
   onSelect,
+  onCreate,
 }: {
   allTodos: Todo[]
   excludeId: number
   selectedIds: number[]
   onSelect: (todo: Todo) => void
+  onCreate: (title: string) => void
 }) {
   const [search, setSearch] = useState('')
   const [open, setOpen] = useState(false)
@@ -58,6 +60,8 @@ function BlockerPicker({
       )
     : []
 
+  const showCreateOption = search.trim().length > 0
+
   return (
     <div className="relative mt-2">
       <input
@@ -69,8 +73,17 @@ function BlockerPicker({
         placeholder="Search todos to add..."
         className="w-full text-xs border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-400 placeholder-slate-300"
       />
-      {open && filtered.length > 0 && (
+      {open && (filtered.length > 0 || showCreateOption) && (
         <ul className="absolute z-10 left-0 right-0 mt-1 max-h-48 overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-lg">
+          {showCreateOption && (
+            <li
+              onMouseDown={() => { onCreate(search.trim()); setSearch(''); setOpen(false) }}
+              className="px-3 py-2 text-sm cursor-pointer hover:bg-green-50 flex items-center gap-2 border-b border-slate-100"
+            >
+              <span className="text-green-600 text-xs font-semibold flex-shrink-0">+ Create</span>
+              <span className="flex-1 text-slate-700 truncate">&ldquo;{search.trim()}&rdquo;</span>
+            </li>
+          )}
           {filtered.map((t) => (
             <li
               key={t.id}
@@ -99,6 +112,11 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
   const [expanded, setExpanded] = useState(false)
   const [editingField, setEditingField] = useState<string | null>(null)
   const [editValue, setEditValue] = useState('')
+  const [newSubTitle, setNewSubTitle] = useState('')
+  const [subDragId, setSubDragId] = useState<number | null>(null)
+  const [subDropIdx, setSubDropIdx] = useState<number | null>(null)
+  const [editingSubId, setEditingSubId] = useState<number | null>(null)
+  const [editingSubTitle, setEditingSubTitle] = useState('')
   const [isDying, setIsDying] = useState(false)
   const dyingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const queryClient = useQueryClient()
@@ -149,6 +167,11 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
   const toggleSubTodo = useMutation({
     mutationFn: ({ id, done }: { id: number; done: boolean }) => updateSubTodo(id, { done }),
     onSuccess: invalidate,
+  })
+
+  const addSubTodo = useMutation({
+    mutationFn: (title: string) => createSubTodo(todo.id, { title, order: todo.subtodos.length }),
+    onSuccess: () => { invalidate(); setNewSubTitle('') },
   })
 
   const saveField = (field: string, value: unknown) => {
@@ -464,31 +487,125 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
             )}
           </div>
 
-          {todo.subtodos.length > 0 && (
-            <div>
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
-                Sub-tasks ({doneSubs}/{totalSubs})
-              </p>
-              <ul className="space-y-1.5">
-                {todo.subtodos
-                  .slice()
-                  .sort((a, b) => a.order - b.order)
-                  .map((s) => (
-                    <li key={s.id} className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={s.done}
-                        onChange={(e) => toggleSubTodo.mutate({ id: s.id, done: e.target.checked })}
-                        className="accent-indigo-600 w-4 h-4 cursor-pointer"
-                      />
-                      <span className={`text-sm ${s.done ? 'line-through text-slate-400' : 'text-slate-700'}`}>
-                        {s.title}
-                      </span>
+          <div>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+              Sub-tasks{totalSubs > 0 && ` (${doneSubs}/${totalSubs})`}
+            </p>
+            {totalSubs > 0 && (() => {
+              const sorted = todo.subtodos.slice().sort((a, b) => a.order - b.order)
+              const handleSubDragOver = (e: React.DragEvent, dropIndex: number) => {
+                if (!e.dataTransfer.types.includes('application/x-subtodo-id')) return
+                e.preventDefault()
+                e.stopPropagation()
+                setSubDropIdx(dropIndex)
+              }
+              const handleSubDrop = (e: React.DragEvent, dropIndex: number) => {
+                e.preventDefault()
+                e.stopPropagation()
+                setSubDropIdx(null)
+                setSubDragId(null)
+                const draggedId = parseInt(e.dataTransfer.getData('application/x-subtodo-id'))
+                const fromIdx = sorted.findIndex((x) => x.id === draggedId)
+                if (fromIdx === -1 || dropIndex === fromIdx || dropIndex === fromIdx + 1) return
+                const reordered = sorted.filter((x) => x.id !== draggedId)
+                const insertAt = dropIndex > fromIdx ? dropIndex - 1 : dropIndex
+                reordered.splice(insertAt, 0, sorted[fromIdx])
+                reordered.forEach((item, i) => {
+                  if (item.order !== i) updateSubTodo(item.id, { order: i })
+                })
+                invalidate()
+              }
+              const dropLine = (
+                <div className="h-0.5 bg-indigo-400 rounded-full mx-1 transition-all" />
+              )
+              const dropZone = (idx: number) => (
+                <div
+                  key={`drop-${idx}`}
+                  onDragOver={(e) => handleSubDragOver(e, idx)}
+                  onDrop={(e) => handleSubDrop(e, idx)}
+                  className={`transition-all ${subDragId !== null ? 'py-1.5' : 'py-0'}`}
+                >
+                  {subDropIdx === idx && dropLine}
+                </div>
+              )
+              return (
+                <ul
+                  onDragLeave={(e) => {
+                    if (!e.currentTarget.contains(e.relatedTarget as Node)) setSubDropIdx(null)
+                  }}
+                  onDragEnd={() => { setSubDragId(null); setSubDropIdx(null) }}
+                >
+                  {dropZone(0)}
+                  {sorted.map((s, idx) => (
+                    <li key={s.id}>
+                      <div
+                        className={`flex items-center gap-2 rounded px-1 -mx-1 py-1 ${subDragId === s.id ? 'opacity-40' : ''}`}
+                      >
+                        <span
+                          draggable
+                          onDragStart={(e) => {
+                            e.stopPropagation()
+                            e.dataTransfer.setData('application/x-subtodo-id', String(s.id))
+                            e.dataTransfer.effectAllowed = 'move'
+                            setSubDragId(s.id)
+                          }}
+                          className="text-slate-300 text-xs select-none cursor-grab active:cursor-grabbing"
+                          title="Drag to reorder"
+                        >⠿</span>
+                        <input
+                          type="checkbox"
+                          checked={s.done}
+                          onChange={(e) => toggleSubTodo.mutate({ id: s.id, done: e.target.checked })}
+                          className="accent-indigo-600 w-4 h-4 cursor-pointer"
+                        />
+                        {editingSubId === s.id ? (
+                          <input
+                            autoFocus
+                            type="text"
+                            value={editingSubTitle}
+                            onChange={(e) => setEditingSubTitle(e.target.value)}
+                            onBlur={() => {
+                              if (editingSubTitle.trim()) updateSubTodo(s.id, { title: editingSubTitle.trim() }).then(invalidate)
+                              setEditingSubId(null)
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' && editingSubTitle.trim()) {
+                                updateSubTodo(s.id, { title: editingSubTitle.trim() }).then(invalidate)
+                                setEditingSubId(null)
+                              }
+                              if (e.key === 'Escape') setEditingSubId(null)
+                            }}
+                            className="flex-1 text-sm border-b-2 border-indigo-400 focus:outline-none bg-transparent"
+                          />
+                        ) : (
+                          <span
+                            onClick={() => { setEditingSubId(s.id); setEditingSubTitle(s.title) }}
+                            className={`flex-1 text-sm cursor-pointer hover:text-indigo-600 transition-colors ${s.done ? 'line-through text-slate-400' : 'text-slate-700'}`}
+                          >
+                            {s.title}
+                          </span>
+                        )}
+                      </div>
+                      {dropZone(idx + 1)}
                     </li>
                   ))}
-              </ul>
-            </div>
-          )}
+                </ul>
+              )
+            })()}
+            <input
+              type="text"
+              value={newSubTitle}
+              onChange={(e) => setNewSubTitle(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && newSubTitle.trim() && !addSubTodo.isPending) {
+                  addSubTodo.mutate(newSubTitle.trim())
+                }
+              }}
+              placeholder={addSubTodo.isPending ? 'Adding...' : '+ Add sub-task...'}
+              disabled={addSubTodo.isPending}
+              className="mt-2 w-full text-sm border border-dashed border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent placeholder-slate-300 disabled:opacity-50"
+            />
+          </div>
 
           <div>
             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
@@ -517,6 +634,17 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
               excludeId={todo.id}
               selectedIds={todo.blocked_by_ids}
               onSelect={(t) => updateMutation.mutate({ blocked_by_ids: [...todo.blocked_by_ids, t.id] })}
+              onCreate={async (title) => {
+                const newTodo = await createTodo({
+                  title,
+                  project_id: todo.project_id ?? undefined,
+                  status: 'todo',
+                  importance: 'medium',
+                  estimated_hours: 1,
+                  blocked_by_ids: [],
+                })
+                updateMutation.mutate({ blocked_by_ids: [...todo.blocked_by_ids, newTodo.id] })
+              }}
             />
           </div>
 
