@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { fetchPersons, fetchTodos, fetchReminders, createPerson, deletePerson } from '../api'
+import { fetchPersons, fetchTodos, fetchReminders, createPerson, createTodo, deletePerson } from '../api'
 import type { Person, Todo, ScheduleStatus } from '../types'
 import TodoCard from '../components/TodoCard'
 import TodoModal from '../components/TodoModal'
@@ -82,6 +82,7 @@ export default function PeoplePage({ onOpenTodo }: { onOpenTodo: (id: number) =>
   const [showAddPerson, setShowAddPerson] = useState(false)
   const [showTodoModal, setShowTodoModal] = useState(false)
   const [editingTodo, setEditingTodo] = useState<Todo | null>(null)
+  const [newTitle, setNewTitle] = useState('')
 
   const { data: persons = [] } = useQuery<Person[]>({
     queryKey: ['persons'],
@@ -109,6 +110,15 @@ export default function PeoplePage({ onOpenTodo }: { onOpenTodo: (id: number) =>
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['persons'] })
       setSelectedPersonId(null)
+    },
+  })
+
+  const addTodoForPerson = useMutation({
+    mutationFn: (title: string) =>
+      createTodo({ title, status: 'todo', importance: 'medium', estimated_hours: 1, assignee_id: selectedPersonId! }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['todos'] })
+      setNewTitle('')
     },
   })
 
@@ -309,31 +319,50 @@ export default function PeoplePage({ onOpenTodo }: { onOpenTodo: (id: number) =>
             {todosLoading ? (
               <div className="text-slate-500 dark:text-slate-400 text-sm">Loading...</div>
             ) : (
-              STATUS_ORDER.map((status) => {
-                const todos = groupedByStatus[status] || []
-                if (todos.length === 0) return null
-                return (
-                  <div key={status} className="mb-6">
-                    <h3 className={`text-sm font-bold uppercase tracking-wide mb-2 ${statusColor[status]}`}>
-                      {statusLabel[status]} ({todos.length})
-                    </h3>
-                    <div className="space-y-3">
-                      {todos.map((t) => (
-                        <TodoCard
-                          key={t.id}
-                          todo={t}
-                          onEdit={(todo) => {
-                            setEditingTodo(todo)
-                            setShowTodoModal(true)
-                          }}
-                          onOpenDetail={() => onOpenTodo(t.id)}
-                          queryKeys={todoQueryKeys}
-                        />
-                      ))}
+              <>
+                {STATUS_ORDER.map((status) => {
+                  const todos = groupedByStatus[status] || []
+                  if (todos.length === 0) return null
+                  return (
+                    <div key={status} className="mb-6">
+                      <h3 className={`text-sm font-bold uppercase tracking-wide mb-2 ${statusColor[status]}`}>
+                        {statusLabel[status]} ({todos.length})
+                      </h3>
+                      <div className="space-y-3">
+                        {todos.map((t) => (
+                          <TodoCard
+                            key={t.id}
+                            todo={t}
+                            onEdit={(todo) => {
+                              setEditingTodo(todo)
+                              setShowTodoModal(true)
+                            }}
+                            onOpenDetail={() => onOpenTodo(t.id)}
+                            queryKeys={todoQueryKeys}
+                          />
+                        ))}
+                      </div>
                     </div>
+                  )
+                })}
+                <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-dashed border-slate-300 dark:border-slate-600 overflow-hidden">
+                  <div className="px-5 py-4">
+                    <input
+                      type="text"
+                      value={newTitle}
+                      onChange={(e) => setNewTitle(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && newTitle.trim() && !addTodoForPerson.isPending) {
+                          addTodoForPerson.mutate(newTitle.trim())
+                        }
+                      }}
+                      placeholder={addTodoForPerson.isPending ? 'Adding...' : '+ Add a todo...'}
+                      disabled={addTodoForPerson.isPending}
+                      className="w-full text-sm font-medium text-slate-600 dark:text-slate-400 placeholder-slate-300 dark:placeholder-slate-500 bg-transparent outline-none disabled:opacity-50"
+                    />
                   </div>
-                )
-              })
+                </div>
+              </>
             )}
           </>
         )}
@@ -349,6 +378,7 @@ export default function PeoplePage({ onOpenTodo }: { onOpenTodo: (id: number) =>
             setEditingTodo(null)
           }}
           invalidateKeys={todoQueryKeys}
+          defaultAssigneeId={selectedPersonId ?? undefined}
         />
       )}
     </div>
