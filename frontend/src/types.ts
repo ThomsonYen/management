@@ -8,6 +8,7 @@ export interface Project {
   id: number
   name: string
   description?: string
+  notes?: string
   parent_id?: number
   deadline?: string
 }

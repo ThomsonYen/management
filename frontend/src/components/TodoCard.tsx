@@ -399,9 +399,9 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
                   type="date"
                   value={editValue}
                   onChange={(e) => setEditValue(e.target.value)}
-                  onBlur={() => saveField('deadline', editValue || undefined)}
+                  onBlur={() => saveField('deadline', editValue || null)}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter') saveField('deadline', editValue || undefined)
+                    if (e.key === 'Enter') saveField('deadline', editValue || null)
                     if (e.key === 'Escape') setEditingField(null)
                   }}
                   onClick={(e) => e.stopPropagation()}

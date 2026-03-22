@@ -27,13 +27,14 @@ export const fetchProjectTree = (): Promise<ProjectTree[]> =>
 export const createProject = (data: {
   name: string
   description?: string
+  notes?: string
   parent_id?: number
   deadline?: string
 }): Promise<Project> => api.post('/projects', data).then((r) => r.data)
 
 export const updateProject = (
   id: number,
-  data: { name?: string; description?: string; parent_id?: number; deadline?: string },
+  data: { name?: string; description?: string; notes?: string; parent_id?: number; deadline?: string },
 ): Promise<Project> => api.put(`/projects/${id}`, data).then((r) => r.data)
 
 export const deleteProject = (id: number): Promise<void> =>

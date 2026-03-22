@@ -53,6 +53,7 @@ class Project(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False)
     description = Column(Text, nullable=True)
+    notes = Column(Text, nullable=True)
     parent_id = Column(Integer, ForeignKey("projects.id"), nullable=True)
     deadline = Column(String, nullable=True)
     subprojects = relationship(
@@ -115,6 +116,10 @@ with engine.connect() as conn:
     if "focus_order" not in columns:
         conn.execute(text("ALTER TABLE todos ADD COLUMN focus_order INTEGER DEFAULT 0"))
         conn.commit()
+    proj_columns = [c["name"] for c in inspect(engine).get_columns("projects")]
+    if "notes" not in proj_columns:
+        conn.execute(text("ALTER TABLE projects ADD COLUMN notes TEXT"))
+        conn.commit()
 
 
 def get_db():
@@ -143,6 +148,7 @@ class PersonOut(BaseModel):
 class ProjectCreate(BaseModel):
     name: str
     description: Optional[str] = None
+    notes: Optional[str] = None
     parent_id: Optional[int] = None
     deadline: Optional[str] = None
 
@@ -150,6 +156,7 @@ class ProjectCreate(BaseModel):
 class ProjectUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
+    notes: Optional[str] = None
     parent_id: Optional[int] = None
     deadline: Optional[str] = None
 
@@ -158,6 +165,7 @@ class ProjectOut(BaseModel):
     id: int
     name: str
     description: Optional[str] = None
+    notes: Optional[str] = None
     parent_id: Optional[int] = None
     deadline: Optional[str] = None
     model_config = {"from_attributes": True}
@@ -167,6 +175,7 @@ class ProjectTreeOut(BaseModel):
     id: int
     name: str
     description: Optional[str] = None
+    notes: Optional[str] = None
     parent_id: Optional[int] = None
     deadline: Optional[str] = None
     subprojects: List["ProjectTreeOut"] = []
@@ -287,6 +296,7 @@ def project_to_tree(p: Project) -> ProjectTreeOut:
         id=p.id,
         name=p.name,
         description=p.description,
+        notes=p.notes,
         parent_id=p.parent_id,
         deadline=p.deadline,
         subprojects=[project_to_tree(sp) for sp in p.subprojects],
