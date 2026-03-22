@@ -5,6 +5,7 @@ import { createTodo, fetchTodos, fetchPersons, fetchProjects } from '../api'
 import type { Todo, Person, Project } from '../types'
 import TodoCard from '../components/TodoCard'
 import TodoModal from '../components/TodoModal'
+import BulkActionBar from '../components/BulkActionBar'
 import { useTodoDefaults } from '../TodoDefaultsContext'
 
 const STATUS_OPTIONS = ['', 'todo', 'in-progress', 'blocked']
@@ -81,6 +82,16 @@ export default function TodosPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
   const setSelectedImportance = (v: string) => setParam('importance', v)
   const [showModal, setShowModal] = useState(false)
   const [editingTodo, setEditingTodo] = useState<Todo | null>(null)
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+
+  const toggleSelect = (id: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   const { data: persons = [] } = useQuery<Person[]>({
     queryKey: ['persons'],
@@ -224,7 +235,15 @@ export default function TodosPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
       ) : (
         <div className="space-y-3">
           {filtered.map((t) => (
-            <TodoCard key={t.id} todo={t} onEdit={handleEdit} onOpenDetail={() => onOpenTodo(t.id)} queryKeys={[['todos']]} />
+            <TodoCard
+              key={t.id}
+              todo={t}
+              onEdit={handleEdit}
+              onOpenDetail={() => onOpenTodo(t.id)}
+              queryKeys={[['todos']]}
+              isSelected={selectedIds.has(t.id)}
+              onToggleSelect={toggleSelect}
+            />
           ))}
           <AddTodoCard
             defaultAssigneeId={defaultAssigneeId}
@@ -234,6 +253,12 @@ export default function TodosPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
           />
         </div>
       )}
+
+      <BulkActionBar
+        selectedIds={selectedIds}
+        onClearSelection={() => setSelectedIds(new Set())}
+        queryKeys={[['todos']]}
+      />
 
       {showModal && (
         <TodoModal

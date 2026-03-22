@@ -33,6 +33,8 @@ interface TodoCardProps {
   onOpenDetail?: () => void
   queryKeys?: unknown[][]
   extraActions?: React.ReactNode
+  isSelected?: boolean
+  onToggleSelect?: (id: number) => void
 }
 
 function BlockerPicker({
@@ -108,7 +110,7 @@ const autoOpenSelect = (el: HTMLSelectElement | null) => {
   }
 }
 
-export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraActions }: TodoCardProps) {
+export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraActions, isSelected, onToggleSelect }: TodoCardProps) {
   const [expanded, setExpanded] = useState(false)
   const [editingField, setEditingField] = useState<string | null>(null)
   const [editValue, setEditValue] = useState('')
@@ -197,6 +199,26 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
   const isOverdue =
     todo.deadline && todo.status !== 'done' && new Date(todo.deadline) < new Date()
 
+  const dragStartPos = useRef<{ x: number; y: number } | null>(null)
+
+  const handleCardMouseDown = (e: React.MouseEvent) => {
+    dragStartPos.current = { x: e.clientX, y: e.clientY }
+  }
+
+  const handleCardClick = (e: React.MouseEvent) => {
+    if (!onToggleSelect) return
+    // Ignore if this was a drag (moved more than 5px)
+    if (dragStartPos.current) {
+      const dx = Math.abs(e.clientX - dragStartPos.current.x)
+      const dy = Math.abs(e.clientY - dragStartPos.current.y)
+      if (dx > 5 || dy > 5) return
+    }
+    // Ignore clicks on interactive elements
+    const target = e.target as HTMLElement
+    if (target.closest('button, input, select, textarea, a, [role="button"]')) return
+    onToggleSelect(todo.id)
+  }
+
   return (
     <div
       draggable
@@ -204,7 +226,9 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
         e.dataTransfer.setData('application/x-todo-id', String(todo.id))
         e.dataTransfer.effectAllowed = 'link'
       }}
-      className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden cursor-grab active:cursor-grabbing"
+      onMouseDown={handleCardMouseDown}
+      onClick={handleCardClick}
+      className={`bg-white dark:bg-slate-800 rounded-xl shadow-sm border overflow-hidden cursor-grab active:cursor-grabbing ${isSelected ? 'border-indigo-400 ring-2 ring-indigo-200 dark:ring-indigo-800' : 'border-slate-200 dark:border-slate-700'}`}
       style={{ opacity: isDying ? 0 : 1, transition: `opacity ${config.todo_done_fade_seconds}s ease` }}
     >
       {/* Header */}

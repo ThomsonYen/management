@@ -5,6 +5,7 @@ import { fetchPersons, fetchTodos, fetchReminders, createPerson, createTodo, del
 import type { Person, Todo, ScheduleStatus } from '../types'
 import TodoCard from '../components/TodoCard'
 import TodoModal from '../components/TodoModal'
+import BulkActionBar from '../components/BulkActionBar'
 
 const STATUS_ORDER = ['todo', 'in-progress', 'blocked']
 
@@ -83,6 +84,16 @@ export default function PeoplePage({ onOpenTodo }: { onOpenTodo: (id: number) =>
   const [showTodoModal, setShowTodoModal] = useState(false)
   const [editingTodo, setEditingTodo] = useState<Todo | null>(null)
   const [newTitle, setNewTitle] = useState('')
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+
+  const toggleSelect = (id: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   const { data: persons = [] } = useQuery<Person[]>({
     queryKey: ['persons'],
@@ -339,6 +350,8 @@ export default function PeoplePage({ onOpenTodo }: { onOpenTodo: (id: number) =>
                             }}
                             onOpenDetail={() => onOpenTodo(t.id)}
                             queryKeys={todoQueryKeys}
+                            isSelected={selectedIds.has(t.id)}
+                            onToggleSelect={toggleSelect}
                           />
                         ))}
                       </div>
@@ -366,6 +379,11 @@ export default function PeoplePage({ onOpenTodo }: { onOpenTodo: (id: number) =>
             )}
           </>
         )}
+        <BulkActionBar
+          selectedIds={selectedIds}
+          onClearSelection={() => setSelectedIds(new Set())}
+          queryKeys={todoQueryKeys}
+        />
       </div>
 
       {showAddPerson && <AddPersonModal onClose={() => setShowAddPerson(false)} />}

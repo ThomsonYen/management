@@ -5,6 +5,7 @@ import { fetchProjectTree, fetchProjects, fetchTodos, createProject, createTodo,
 import type { ProjectTree, Project, Todo } from '../types'
 import TodoCard from '../components/TodoCard'
 import TodoModal from '../components/TodoModal'
+import BulkActionBar from '../components/BulkActionBar'
 import { useTodoDefaults } from '../TodoDefaultsContext'
 
 function ProjectNode({
@@ -32,14 +33,15 @@ function ProjectNode({
             : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
         }`}
         style={{ paddingLeft: `${8 + depth * 16}px` }}
+        onClick={() => onSelect(node.id)}
       >
         <button
-          onClick={() => setOpen((o) => !o)}
+          onClick={(e) => { e.stopPropagation(); setOpen((o) => !o) }}
           className="w-4 flex-shrink-0 text-slate-400 dark:text-slate-500 text-xs"
         >
           {hasChildren ? (open ? '▼' : '▶') : ' '}
         </button>
-        <span className="flex-1" onClick={() => onSelect(node.id)}>
+        <span className="flex-1">
           {node.name}
         </span>
         <button
@@ -204,6 +206,16 @@ export default function ProjectsPage({ onOpenTodo }: { onOpenTodo: (id: number) 
   const [addSubParentId, setAddSubParentId] = useState<number | null>(null)
   const [showTodoModal, setShowTodoModal] = useState(false)
   const [editingTodo, setEditingTodo] = useState<Todo | null>(null)
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+
+  const toggleSelect = (id: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   const { data: tree = [] } = useQuery<ProjectTree[]>({
     queryKey: ['projects-tree'],
@@ -337,6 +349,8 @@ export default function ProjectsPage({ onOpenTodo }: { onOpenTodo: (id: number) 
                     }}
                     onOpenDetail={() => onOpenTodo(t.id)}
                     queryKeys={todoQueryKeys}
+                    isSelected={selectedIds.has(t.id)}
+                    onToggleSelect={toggleSelect}
                   />
                 ))}
                 <AddTodoCard projectId={selectedProjectId} queryKeys={todoQueryKeys} />
@@ -344,6 +358,11 @@ export default function ProjectsPage({ onOpenTodo }: { onOpenTodo: (id: number) 
             )}
           </>
         )}
+        <BulkActionBar
+          selectedIds={selectedIds}
+          onClearSelection={() => setSelectedIds(new Set())}
+          queryKeys={todoQueryKeys}
+        />
       </div>
 
       {(showAddProject || addSubParentId !== null) && (

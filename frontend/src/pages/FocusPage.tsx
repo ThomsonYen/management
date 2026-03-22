@@ -4,12 +4,14 @@ import { fetchTodos, fetchProjects, updateTodo, createTodo, reorderFocus } from 
 import type { Todo, Project } from '../types'
 import TodoCard from '../components/TodoCard'
 import TodoModal from '../components/TodoModal'
+import BulkActionBar from '../components/BulkActionBar'
 
 export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => void }) {
   const [selectedProject, setSelectedProject] = useState<string>('')
   const [showModal, setShowModal] = useState(false)
   const [editingTodo, setEditingTodo] = useState<Todo | null>(null)
   const [newTitle, setNewTitle] = useState('')
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
   const dragItemId = useRef<number | null>(null)
   const queryClient = useQueryClient()
@@ -92,6 +94,15 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
   const handleCloseModal = () => {
     setShowModal(false)
     setEditingTodo(null)
+  }
+
+  const toggleSelect = (id: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
   }
 
   const handleDragStart = useCallback((todoId: number) => {
@@ -213,6 +224,8 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
                   onEdit={handleEdit}
                   onOpenDetail={() => onOpenTodo(t.id)}
                   queryKeys={[['todos'], ['todos', { is_focused: true }]]}
+                  isSelected={selectedIds.has(t.id)}
+                  onToggleSelect={toggleSelect}
                   extraActions={
                     <button
                       onClick={() => removeFocus.mutate(t.id)}
@@ -255,6 +268,12 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
           </div>
         </div>
       )}
+
+      <BulkActionBar
+        selectedIds={selectedIds}
+        onClearSelection={() => setSelectedIds(new Set())}
+        queryKeys={[['todos'], ['todos', { is_focused: true }]]}
+      />
 
       {showModal && (
         <TodoModal
