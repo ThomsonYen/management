@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import ReactMarkdown from 'react-markdown'
 import { createTodo, createSubTodo, deleteTodo, updateSubTodo, updateTodo, fetchPersons, fetchProjects, fetchTodos } from '../api'
 import type { Todo, Person, Project } from '../types'
 import { config } from '../config'
@@ -522,26 +523,41 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
               Description
             </p>
             {editingField === 'description' ? (
-              <textarea
-                autoFocus
-                value={editValue}
-                onChange={(e) => setEditValue(e.target.value)}
-                onBlur={() => saveField('description', editValue || null)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Escape') setEditingField(null)
-                }}
-                onClick={(e) => e.stopPropagation()}
-                rows={3}
-                className="text-sm text-slate-700 dark:text-slate-300 w-full bg-transparent border border-indigo-300 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none"
-              />
+              <div className="flex gap-3">
+                <textarea
+                  autoFocus
+                  value={editValue}
+                  onChange={(e) => setEditValue(e.target.value)}
+                  onBlur={() => saveField('description', editValue || null)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') setEditingField(null)
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  rows={3}
+                  className="flex-1 min-w-0 text-sm text-slate-700 dark:text-slate-300 bg-transparent border border-indigo-300 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-y font-mono"
+                />
+                {editValue && (
+                  <div className="flex-1 min-w-0 overflow-y-auto max-h-[200px] px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg">
+                    <div className="prose prose-sm dark:prose-invert max-w-none text-slate-700 dark:text-slate-300">
+                      <ReactMarkdown>{editValue}</ReactMarkdown>
+                    </div>
+                  </div>
+                )}
+              </div>
             ) : (
-              <p
+              <div
                 onClick={(e) => startEdit(e, 'description', todo.description || '')}
                 title="Click to edit description"
-                className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap cursor-pointer hover:text-indigo-600 transition-colors min-h-[1.25rem]"
+                className="cursor-pointer hover:text-indigo-600 transition-colors min-h-[1.25rem]"
               >
-                {todo.description || <em className="text-slate-300 dark:text-slate-600 not-italic">+ Add a description...</em>}
-              </p>
+                {todo.description ? (
+                  <div className="prose prose-sm dark:prose-invert max-w-none text-slate-700 dark:text-slate-300">
+                    <ReactMarkdown>{todo.description}</ReactMarkdown>
+                  </div>
+                ) : (
+                  <em className="text-sm text-slate-300 dark:text-slate-600 not-italic">+ Add a description...</em>
+                )}
+              </div>
             )}
           </div>
 
