@@ -1,15 +1,25 @@
-import { useQuery } from '@tanstack/react-query'
-import { fetchReminders, fetchRecentlyDone, fetchTodos } from '../api'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { fetchReminders, fetchRecentlyDone, fetchTodos, updateTodo } from '../api'
 import type { ScheduleStatus, Todo } from '../types'
 import { ListTodo, Loader2, CheckCircle2, ShieldAlert, type LucideIcon } from 'lucide-react'
 import { BlockerTreeNode } from '../components/BlockerTree'
 
 function ScheduleCard({ item, allTodos, onOpenTodo }: { item: ScheduleStatus; allTodos: Todo[]; onOpenTodo: (id: number) => void }) {
+  const queryClient = useQueryClient()
+  const mainTodoObj = allTodos.find((t) => t.id === item.todo_id)
+  const isFocused = mainTodoObj?.is_focused ?? false
+
+  const toggleFocus = useMutation({
+    mutationFn: () => updateTodo(item.todo_id, { is_focused: !isFocused }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['todos'] })
+    },
+  })
+
   const isBehind = item.status === 'behind'
   const deficit = item.chain_hours - item.available_hours
-  const mainTodo = allTodos.find((t) => t.id === item.todo_id)
-  const directBlockers = mainTodo
-    ? allTodos.filter((t) => mainTodo.blocked_by_ids.includes(t.id))
+  const directBlockers = mainTodoObj
+    ? allTodos.filter((t) => mainTodoObj.blocked_by_ids.includes(t.id))
     : []
 
   return (
@@ -32,9 +42,26 @@ function ScheduleCard({ item, allTodos, onOpenTodo }: { item: ScheduleStatus; al
               Assigned to <span className="font-medium text-slate-700 dark:text-slate-300">{item.assignee_name}</span>
             </p>
           </div>
-          <span className={`text-xs font-bold px-2 py-1 rounded-full flex-shrink-0 ${isBehind ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>
-            {isBehind ? 'BEHIND' : 'WARNING'}
-          </span>
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                toggleFocus.mutate()
+              }}
+              disabled={toggleFocus.isPending}
+              title={isFocused ? 'Remove from Focus' : 'Add to Focus'}
+              className={`text-sm px-1.5 py-0.5 rounded transition-colors ${
+                isFocused
+                  ? 'text-yellow-500 hover:text-yellow-600'
+                  : 'text-slate-300 hover:text-yellow-500'
+              }`}
+            >
+              {isFocused ? '★' : '☆'}
+            </button>
+            <span className={`text-xs font-bold px-2 py-1 rounded-full ${isBehind ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>
+              {isBehind ? 'BEHIND' : 'WARNING'}
+            </span>
+          </div>
         </div>
         <div className="mt-2 flex flex-wrap gap-3 text-xs text-slate-600 dark:text-slate-400">
           <span>Deadline: <strong>{item.deadline}</strong></span>
