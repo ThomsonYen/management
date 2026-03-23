@@ -633,9 +633,8 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
                           className="accent-indigo-600 w-4 h-4 cursor-pointer"
                         />
                         {editingSubId === s.id ? (
-                          <input
+                          <textarea
                             autoFocus
-                            type="text"
                             value={editingSubTitle}
                             onChange={(e) => setEditingSubTitle(e.target.value)}
                             onBlur={() => {
@@ -643,18 +642,20 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
                               setEditingSubId(null)
                             }}
                             onKeyDown={(e) => {
-                              if (e.key === 'Enter' && editingSubTitle.trim()) {
+                              if (e.key === 'Enter' && !e.shiftKey && editingSubTitle.trim()) {
+                                e.preventDefault()
                                 updateSubTodo(s.id, { title: editingSubTitle.trim() }).then(invalidate)
                                 setEditingSubId(null)
                               }
                               if (e.key === 'Escape') setEditingSubId(null)
                             }}
-                            className="flex-1 text-sm border-b-2 border-indigo-400 focus:outline-none bg-transparent"
+                            rows={2}
+                            className="flex-1 min-w-0 text-sm border-b-2 border-indigo-400 focus:outline-none bg-transparent dark:text-slate-100 resize-y"
                           />
                         ) : (
                           <span
                             onClick={() => { setEditingSubId(s.id); setEditingSubTitle(s.title) }}
-                            className={`flex-1 text-sm cursor-pointer hover:text-indigo-600 transition-colors ${s.done ? 'line-through text-slate-400 dark:text-slate-500' : 'text-slate-700 dark:text-slate-300'}`}
+                            className={`flex-1 min-w-0 text-sm cursor-pointer hover:text-indigo-600 transition-colors break-words ${s.done ? 'line-through text-slate-400 dark:text-slate-500' : 'text-slate-700 dark:text-slate-300'}`}
                           >
                             {s.title}
                           </span>

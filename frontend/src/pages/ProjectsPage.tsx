@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { useResizableSidebar } from '../hooks/useResizableSidebar'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import ReactMarkdown from 'react-markdown'
+import { ChevronsLeft, ChevronsRight } from 'lucide-react'
 import { fetchProjectTree, fetchProjects, fetchTodos, createProject, createTodo, deleteProject, updateProject } from '../api'
 import type { ProjectTree, Project, Todo } from '../types'
 import TodoCard from '../components/TodoCard'
@@ -330,6 +332,7 @@ function ProjectNotes({ project }: { project: Project }) {
 
 export default function ProjectsPage({ onOpenTodo }: { onOpenTodo: (id: number) => void }) {
   const queryClient = useQueryClient()
+  const { width: panelWidth, collapsed: panelCollapsed, startResize: startPanelResize, toggleCollapsed: togglePanel } = useResizableSidebar('projectsPanelWidth', 256)
   const [searchParams, setSearchParams] = useSearchParams()
   const selectedProjectId = searchParams.get('project') ? Number(searchParams.get('project')) : null
   const setSelectedProjectId = (id: number | null) =>
@@ -412,32 +415,63 @@ export default function ProjectsPage({ onOpenTodo }: { onOpenTodo: (id: number) 
   return (
     <div className="flex h-full">
       {/* Left panel */}
-      <div className="w-64 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col flex-shrink-0">
-        <div className="px-4 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
-          <h3 className="font-semibold text-slate-800 dark:text-slate-100 text-sm">Projects</h3>
-          <button
-            onClick={() => setShowAddProject(true)}
-            className="text-indigo-600 hover:text-indigo-800 text-xs font-semibold"
-          >
-            + New
-          </button>
-        </div>
-        <div className="flex-1 overflow-y-auto py-2">
-          {tree.length === 0 ? (
-            <p className="px-4 py-3 text-xs text-slate-400 dark:text-slate-500">No projects yet</p>
-          ) : (
-            tree.map((node) => (
-              <ProjectNode
-                key={node.id}
-                node={node}
-                depth={0}
-                selectedId={selectedProjectId}
-                onSelect={setSelectedProjectId}
-                onAddSub={handleAddSub}
-              />
-            ))
-          )}
-        </div>
+      <div
+        style={{ width: panelCollapsed ? 40 : panelWidth }}
+        className="relative bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col flex-shrink-0 transition-[width] duration-200"
+      >
+        {panelCollapsed ? (
+          <div className="flex flex-col items-center flex-1 justify-end py-3">
+            <button
+              onClick={togglePanel}
+              className="p-2 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+              title="Expand projects panel"
+            >
+              <ChevronsRight size={16} />
+            </button>
+          </div>
+        ) : (
+          <>
+            <div className="px-4 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+              <h3 className="font-semibold text-slate-800 dark:text-slate-100 text-sm">Projects</h3>
+              <button
+                onClick={() => setShowAddProject(true)}
+                className="text-indigo-600 hover:text-indigo-800 text-xs font-semibold"
+              >
+                + New
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto py-2">
+              {tree.length === 0 ? (
+                <p className="px-4 py-3 text-xs text-slate-400 dark:text-slate-500">No projects yet</p>
+              ) : (
+                tree.map((node) => (
+                  <ProjectNode
+                    key={node.id}
+                    node={node}
+                    depth={0}
+                    selectedId={selectedProjectId}
+                    onSelect={setSelectedProjectId}
+                    onAddSub={handleAddSub}
+                  />
+                ))
+              )}
+            </div>
+            <div className="px-2 py-2 border-t border-slate-200 dark:border-slate-800">
+              <button
+                onClick={togglePanel}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+                title="Collapse projects panel"
+              >
+                <ChevronsLeft size={16} />
+                <span className="text-xs">Collapse</span>
+              </button>
+            </div>
+            <div
+              onMouseDown={startPanelResize}
+              className="absolute top-0 right-0 w-1.5 h-full cursor-col-resize hover:bg-indigo-500/50 active:bg-indigo-500/50 transition-colors"
+            />
+          </>
+        )}
       </div>
 
       {/* Right panel */}

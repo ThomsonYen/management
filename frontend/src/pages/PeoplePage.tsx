@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { useResizableSidebar } from '../hooks/useResizableSidebar'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { ChevronsLeft, ChevronsRight } from 'lucide-react'
 import { fetchPersons, fetchTodos, fetchReminders, createPerson, createTodo, deletePerson } from '../api'
 import type { Person, Todo, ScheduleStatus } from '../types'
 import TodoCard from '../components/TodoCard'
@@ -76,6 +78,7 @@ function AddPersonModal({ onClose }: { onClose: () => void }) {
 
 export default function PeoplePage({ onOpenTodo }: { onOpenTodo: (id: number) => void }) {
   const queryClient = useQueryClient()
+  const { width: panelWidth, collapsed: panelCollapsed, startResize: startPanelResize, toggleCollapsed: togglePanel } = useResizableSidebar('peoplePanelWidth', 256)
   const [searchParams, setSearchParams] = useSearchParams()
   const selectedPersonId = searchParams.get('person') ? Number(searchParams.get('person')) : null
   const setSelectedPersonId = (id: number | null) =>
@@ -165,53 +168,84 @@ export default function PeoplePage({ onOpenTodo }: { onOpenTodo: (id: number) =>
   return (
     <div className="flex h-full">
       {/* Left panel */}
-      <div className="w-64 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col flex-shrink-0">
-        <div className="px-4 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
-          <h3 className="font-semibold text-slate-800 dark:text-slate-100 text-sm">People</h3>
-          <button
-            onClick={() => setShowAddPerson(true)}
-            className="text-indigo-600 hover:text-indigo-800 text-xs font-semibold"
-          >
-            + Add
-          </button>
-        </div>
-        <div className="flex-1 overflow-y-auto py-2">
-          {persons.length === 0 ? (
-            <p className="px-4 py-3 text-xs text-slate-400 dark:text-slate-500">No people yet</p>
-          ) : (
-            persons.map((person) => {
-              const count = todoCountByPerson[person.id] || 0
-              const hasAlerts = reminders.some((r) => {
-                const t = allTodos.find((t) => t.id === r.todo_id)
-                return t?.assignee_id === person.id
-              })
-              return (
-                <button
-                  key={person.id}
-                  onClick={() => setSelectedPersonId(person.id)}
-                  className={`w-full flex items-center justify-between px-4 py-2.5 text-sm transition-colors ${
-                    selectedPersonId === person.id
-                      ? 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/50 dark:text-indigo-300 font-semibold'
-                      : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-full bg-indigo-200 text-indigo-700 flex items-center justify-center text-xs font-bold">
-                      {person.name.charAt(0).toUpperCase()}
-                    </div>
-                    <span className="truncate">{person.name}</span>
-                  </div>
-                  <div className="flex items-center gap-1.5 flex-shrink-0">
-                    {hasAlerts && (
-                      <span className="w-2 h-2 rounded-full bg-red-500"></span>
-                    )}
-                    <span className="text-xs text-slate-400 dark:text-slate-500 font-normal">{count}</span>
-                  </div>
-                </button>
-              )
-            })
-          )}
-        </div>
+      <div
+        style={{ width: panelCollapsed ? 40 : panelWidth }}
+        className="relative bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col flex-shrink-0 transition-[width] duration-200"
+      >
+        {panelCollapsed ? (
+          <div className="flex flex-col items-center flex-1 justify-end py-3">
+            <button
+              onClick={togglePanel}
+              className="p-2 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+              title="Expand people panel"
+            >
+              <ChevronsRight size={16} />
+            </button>
+          </div>
+        ) : (
+          <>
+            <div className="px-4 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+              <h3 className="font-semibold text-slate-800 dark:text-slate-100 text-sm">People</h3>
+              <button
+                onClick={() => setShowAddPerson(true)}
+                className="text-indigo-600 hover:text-indigo-800 text-xs font-semibold"
+              >
+                + Add
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto py-2">
+              {persons.length === 0 ? (
+                <p className="px-4 py-3 text-xs text-slate-400 dark:text-slate-500">No people yet</p>
+              ) : (
+                persons.map((person) => {
+                  const count = todoCountByPerson[person.id] || 0
+                  const hasAlerts = reminders.some((r) => {
+                    const t = allTodos.find((t) => t.id === r.todo_id)
+                    return t?.assignee_id === person.id
+                  })
+                  return (
+                    <button
+                      key={person.id}
+                      onClick={() => setSelectedPersonId(person.id)}
+                      className={`w-full flex items-center justify-between px-4 py-2.5 text-sm transition-colors ${
+                        selectedPersonId === person.id
+                          ? 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/50 dark:text-indigo-300 font-semibold'
+                          : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 rounded-full bg-indigo-200 text-indigo-700 flex items-center justify-center text-xs font-bold">
+                          {person.name.charAt(0).toUpperCase()}
+                        </div>
+                        <span className="truncate">{person.name}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        {hasAlerts && (
+                          <span className="w-2 h-2 rounded-full bg-red-500"></span>
+                        )}
+                        <span className="text-xs text-slate-400 dark:text-slate-500 font-normal">{count}</span>
+                      </div>
+                    </button>
+                  )
+                })
+              )}
+            </div>
+            <div className="px-2 py-2 border-t border-slate-200 dark:border-slate-800">
+              <button
+                onClick={togglePanel}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+                title="Collapse people panel"
+              >
+                <ChevronsLeft size={16} />
+                <span className="text-xs">Collapse</span>
+              </button>
+            </div>
+            <div
+              onMouseDown={startPanelResize}
+              className="absolute top-0 right-0 w-1.5 h-full cursor-col-resize hover:bg-indigo-500/50 active:bg-indigo-500/50 transition-colors"
+            />
+          </>
+        )}
       </div>
 
       {/* Right panel */}
