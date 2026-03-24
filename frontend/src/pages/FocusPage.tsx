@@ -6,8 +6,33 @@ import TodoCard from '../components/TodoCard'
 import TodoModal from '../components/TodoModal'
 import BulkActionBar from '../components/BulkActionBar'
 
+type GroupBy = 'none' | 'project' | 'user' | 'both'
+
+function groupTodos(todos: Todo[], groupBy: GroupBy): { key: string; label: string; todos: Todo[] }[] {
+  if (groupBy === 'none') return [{ key: '_all', label: '', todos }]
+
+  const getGroupKey = (t: Todo): string => {
+    if (groupBy === 'project') return t.project_name || 'No Project'
+    if (groupBy === 'user') return t.assignee_name || 'Unassigned'
+    return `${t.project_name || 'No Project'} / ${t.assignee_name || 'Unassigned'}`
+  }
+
+  const map = new Map<string, Todo[]>()
+  for (const t of todos) {
+    const key = getGroupKey(t)
+    if (!map.has(key)) map.set(key, [])
+    map.get(key)!.push(t)
+  }
+
+  // Sort groups by the minimum focus_order in each group
+  return [...map.entries()]
+    .sort((a, b) => a[1][0].focus_order - b[1][0].focus_order)
+    .map(([key, items]) => ({ key, label: key, todos: items }))
+}
+
 export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => void }) {
   const [selectedProject, setSelectedProject] = useState<string>('')
+  const [groupBy, setGroupBy] = useState<GroupBy>('none')
   const [showModal, setShowModal] = useState(false)
   const [editingTodo, setEditingTodo] = useState<Todo | null>(null)
   const [newTitle, setNewTitle] = useState('')
@@ -192,10 +217,27 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
         </div>
       )}
 
-      {/* Count */}
-      <p className="text-sm text-slate-500 dark:text-slate-400 mb-3">
-        {filtered.length} focused todo{filtered.length !== 1 ? 's' : ''}
-      </p>
+      {/* Group by + Count */}
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-sm text-slate-500 dark:text-slate-400">
+          {filtered.length} focused todo{filtered.length !== 1 ? 's' : ''}
+        </p>
+        <div className="flex items-center gap-2">
+          <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+            Group by
+          </label>
+          <select
+            value={groupBy}
+            onChange={(e) => setGroupBy(e.target.value as GroupBy)}
+            className="border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          >
+            <option value="none">None</option>
+            <option value="project">Project</option>
+            <option value="user">User</option>
+            <option value="both">Project &amp; User</option>
+          </select>
+        </div>
+      </div>
 
       {isLoading ? (
         <div className="text-slate-500 dark:text-slate-400 text-sm">Loading...</div>
@@ -207,36 +249,54 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
         </div>
       ) : (
         <div className="space-y-1">
-          {filtered.map((t, index) => (
-            <div
-              key={t.id}
-              onDragOver={(e) => handleDragOver(e, index)}
-              onDrop={(e) => handleDrop(e, index)}
-              onDragEnd={handleDragEnd}
-              onDragStartCapture={() => handleDragStart(t.id)}
-            >
-              {dragOverIndex === index && dragItemId.current !== null && dragItemId.current !== t.id && (
-                <div className="h-1 bg-indigo-400 rounded-full mx-2 mb-1 transition-all" />
+          {groupTodos(filtered, groupBy).map((group) => (
+            <div key={group.key}>
+              {groupBy !== 'none' && (
+                <div className="flex items-center gap-3 mt-6 mb-3 px-1">
+                  <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+                    {group.label}
+                  </h3>
+                  <span className="text-xs text-slate-400 dark:text-slate-500 font-medium">
+                    {group.todos.length}
+                  </span>
+                  <div className="flex-1 h-px bg-slate-200 dark:bg-slate-700" />
+                </div>
               )}
-              <div className="mb-2">
-                <TodoCard
-                  todo={t}
-                  onEdit={handleEdit}
-                  onOpenDetail={() => onOpenTodo(t.id)}
-                  queryKeys={[['todos'], ['todos', { is_focused: true }]]}
-                  isSelected={selectedIds.has(t.id)}
-                  onToggleSelect={toggleSelect}
-                  extraActions={
-                    <button
-                      onClick={() => removeFocus.mutate(t.id)}
-                      title="Remove from Focus"
-                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium text-red-500 bg-red-50 hover:bg-red-100 border border-red-200 transition-colors"
-                    >
-                      ✕ Deprio
-                    </button>
-                  }
-                />
-              </div>
+              {group.todos.map((t) => {
+                const globalIndex = filtered.indexOf(t)
+                return (
+                  <div
+                    key={t.id}
+                    onDragOver={(e) => handleDragOver(e, globalIndex)}
+                    onDrop={(e) => handleDrop(e, globalIndex)}
+                    onDragEnd={handleDragEnd}
+                    onDragStartCapture={() => handleDragStart(t.id)}
+                  >
+                    {dragOverIndex === globalIndex && dragItemId.current !== null && dragItemId.current !== t.id && (
+                      <div className="h-1 bg-indigo-400 rounded-full mx-2 mb-1 transition-all" />
+                    )}
+                    <div className="mb-2">
+                      <TodoCard
+                        todo={t}
+                        onEdit={handleEdit}
+                        onOpenDetail={() => onOpenTodo(t.id)}
+                        queryKeys={[['todos'], ['todos', { is_focused: true }]]}
+                        isSelected={selectedIds.has(t.id)}
+                        onToggleSelect={toggleSelect}
+                        extraActions={
+                          <button
+                            onClick={() => removeFocus.mutate(t.id)}
+                            title="Remove from Focus"
+                            className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium text-red-500 bg-red-50 hover:bg-red-100 border border-red-200 transition-colors"
+                          >
+                            ✕ Deprio
+                          </button>
+                        }
+                      />
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           ))}
           {/* Drop zone at the end */}
