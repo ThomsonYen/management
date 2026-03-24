@@ -32,7 +32,10 @@ function groupTodos(todos: Todo[], groupBy: GroupBy): { key: string; label: stri
 
 export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => void }) {
   const [selectedProject, setSelectedProject] = useState<string>('')
-  const [groupBy, setGroupBy] = useState<GroupBy>('none')
+  const [groupBy, setGroupBy] = useState<GroupBy>(() => {
+    const saved = localStorage.getItem('focusGroupBy')
+    return (saved === 'project' || saved === 'user' || saved === 'both') ? saved : 'none'
+  })
   const [showModal, setShowModal] = useState(false)
   const [editingTodo, setEditingTodo] = useState<Todo | null>(null)
   const [newTitle, setNewTitle] = useState('')
@@ -228,7 +231,11 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
           </label>
           <select
             value={groupBy}
-            onChange={(e) => setGroupBy(e.target.value as GroupBy)}
+            onChange={(e) => {
+              const v = e.target.value as GroupBy
+              setGroupBy(v)
+              localStorage.setItem('focusGroupBy', v)
+            }}
             className="border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
           >
             <option value="none">None</option>
