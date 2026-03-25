@@ -52,6 +52,10 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
   const dragItemId = useRef<number | null>(null)
+  const [dragOverGroupIndex, setDragOverGroupIndex] = useState<number | null>(null)
+  const dragGroupKey = useRef<string | null>(null)
+  const [dragOverSubgroupIndex, setDragOverSubgroupIndex] = useState<{ parent: string; index: number } | null>(null)
+  const dragSubgroupKey = useRef<{ parent: string; key: string } | null>(null)
   const queryClient = useQueryClient()
 
   const { data: todos = [], isLoading } = useQuery<Todo[]>({
@@ -148,6 +152,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
   }, [])
 
   const handleDragOver = useCallback((e: React.DragEvent, index: number) => {
+    if (dragGroupKey.current || dragSubgroupKey.current) return
     e.preventDefault()
     // Don't set dropEffect — TodoCard uses effectAllowed='link', and mismatching causes drop rejection
     setDragOverIndex(index)
@@ -155,6 +160,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
 
   const handleDrop = useCallback(
     (e: React.DragEvent, dropIndex: number) => {
+      if (dragGroupKey.current || dragSubgroupKey.current) return
       e.preventDefault()
       e.stopPropagation()
       setDragOverIndex(null)
@@ -183,7 +189,99 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
   const handleDragEnd = useCallback(() => {
     setDragOverIndex(null)
     dragItemId.current = null
+    setDragOverGroupIndex(null)
+    dragGroupKey.current = null
+    setDragOverSubgroupIndex(null)
+    dragSubgroupKey.current = null
   }, [])
+
+  const handleGroupDragStart = useCallback((key: string) => {
+    dragGroupKey.current = key
+  }, [])
+
+  const handleGroupDrop = useCallback(
+    (e: React.DragEvent, dropIndex: number, groups: FlatGroup[]) => {
+      e.preventDefault()
+      e.stopPropagation()
+      setDragOverGroupIndex(null)
+      const key = dragGroupKey.current
+      dragGroupKey.current = null
+      if (!key) return
+
+      const dragIndex = groups.findIndex((g) => g.key === key)
+      if (dragIndex === -1 || dragIndex === dropIndex) return
+
+      const adjusted = dropIndex > dragIndex ? dropIndex - 1 : dropIndex
+      if (dragIndex === adjusted) return
+
+      const reordered = [...groups]
+      const [moved] = reordered.splice(dragIndex, 1)
+      reordered.splice(adjusted, 0, moved)
+
+      const items = reordered.flatMap((g) => g.todos).map((t, i) => ({ id: t.id, focus_order: i }))
+      reorderMutation.mutate(items)
+    },
+    [reorderMutation],
+  )
+
+  const handleNestedGroupDrop = useCallback(
+    (e: React.DragEvent, dropIndex: number, groups: NestedGroup[]) => {
+      e.preventDefault()
+      e.stopPropagation()
+      setDragOverGroupIndex(null)
+      const key = dragGroupKey.current
+      dragGroupKey.current = null
+      if (!key) return
+
+      const dragIndex = groups.findIndex((g) => g.key === key)
+      if (dragIndex === -1 || dragIndex === dropIndex) return
+
+      const adjusted = dropIndex > dragIndex ? dropIndex - 1 : dropIndex
+      if (dragIndex === adjusted) return
+
+      const reordered = [...groups]
+      const [moved] = reordered.splice(dragIndex, 1)
+      reordered.splice(adjusted, 0, moved)
+
+      const items = reordered
+        .flatMap((g) => g.subgroups.flatMap((sg) => sg.todos))
+        .map((t, i) => ({ id: t.id, focus_order: i }))
+      reorderMutation.mutate(items)
+    },
+    [reorderMutation],
+  )
+
+  const handleSubgroupDrop = useCallback(
+    (e: React.DragEvent, dropIndex: number, parentKey: string, allGroups: NestedGroup[]) => {
+      e.preventDefault()
+      e.stopPropagation()
+      setDragOverSubgroupIndex(null)
+      const sub = dragSubgroupKey.current
+      dragSubgroupKey.current = null
+      if (!sub || sub.parent !== parentKey) return
+
+      const parent = allGroups.find((g) => g.key === parentKey)
+      if (!parent) return
+
+      const dragIndex = parent.subgroups.findIndex((sg) => sg.key === sub.key)
+      if (dragIndex === -1 || dragIndex === dropIndex) return
+
+      const adjusted = dropIndex > dragIndex ? dropIndex - 1 : dropIndex
+      if (dragIndex === adjusted) return
+
+      const reorderedSubs = [...parent.subgroups]
+      const [moved] = reorderedSubs.splice(dragIndex, 1)
+      reorderedSubs.splice(adjusted, 0, moved)
+
+      // Rebuild full todo list: keep other groups intact, replace this group's subgroup order
+      const items = allGroups.flatMap((g) => {
+        const subs = g.key === parentKey ? reorderedSubs : g.subgroups
+        return subs.flatMap((sg) => sg.todos)
+      }).map((t, i) => ({ id: t.id, focus_order: i }))
+      reorderMutation.mutate(items)
+    },
+    [reorderMutation],
+  )
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
@@ -306,17 +404,53 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
             if (groupBy === 'none') return filtered.map(renderTodo)
 
             if (groupBy === 'both') {
-              return groupTodosNested(filtered).map((userGroup) => (
-                <div key={userGroup.key}>
-                  <div className="flex items-center gap-3 mt-8 mb-2 px-1">
+              const nestedGroups = groupTodosNested(filtered)
+              return nestedGroups.map((userGroup, gi) => (
+                <div
+                  key={userGroup.key}
+                  onDragOver={(e) => { if (dragGroupKey.current) { e.preventDefault(); setDragOverGroupIndex(gi) } }}
+                  onDrop={(e) => handleNestedGroupDrop(e, gi, nestedGroups)}
+                >
+                  {dragOverGroupIndex === gi && dragGroupKey.current && dragGroupKey.current !== userGroup.key && (
+                    <div className="h-1 bg-indigo-400 rounded-full mx-2 mb-1 transition-all" />
+                  )}
+                  <div
+                    className="flex items-center gap-3 mt-8 mb-2 px-1 cursor-grab active:cursor-grabbing select-none"
+                    draggable
+                    onDragStart={() => handleGroupDragStart(userGroup.key)}
+                    onDragEnd={handleDragEnd}
+                  >
+                    <span className="text-slate-400 dark:text-slate-500 text-xs">⠿</span>
                     <h2 className="text-base font-bold text-slate-800 dark:text-slate-100">
                       {userGroup.label}
                     </h2>
                     <div className="flex-1 h-px bg-slate-300 dark:bg-slate-600" />
                   </div>
-                  {userGroup.subgroups.map((projGroup) => (
-                    <div key={projGroup.key}>
-                      <div className="flex items-center gap-2 mt-3 mb-2 pl-2 px-1">
+                  {userGroup.subgroups.map((projGroup, si) => (
+                    <div
+                      key={projGroup.key}
+                      onDragOver={(e) => {
+                        if (dragSubgroupKey.current?.parent === userGroup.key) {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          setDragOverSubgroupIndex({ parent: userGroup.key, index: si })
+                        }
+                      }}
+                      onDrop={(e) => handleSubgroupDrop(e, si, userGroup.key, nestedGroups)}
+                    >
+                      {dragOverSubgroupIndex?.parent === userGroup.key && dragOverSubgroupIndex.index === si && dragSubgroupKey.current?.key !== projGroup.key && (
+                        <div className="h-1 bg-indigo-400 rounded-full mx-4 mb-1 transition-all" />
+                      )}
+                      <div
+                        className="flex items-center gap-2 mt-3 mb-2 pl-2 px-1 cursor-grab active:cursor-grabbing select-none"
+                        draggable
+                        onDragStart={(e) => {
+                          e.stopPropagation()
+                          dragSubgroupKey.current = { parent: userGroup.key, key: projGroup.key }
+                        }}
+                        onDragEnd={handleDragEnd}
+                      >
+                        <span className="text-slate-400 dark:text-slate-500 text-xs">⠿</span>
                         <h3 className="text-sm font-semibold text-slate-500 dark:text-slate-400">
                           {projGroup.label}
                         </h3>
@@ -332,9 +466,23 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
               ))
             }
 
-            return groupTodosFlat(filtered, groupBy).map((group) => (
-              <div key={group.key}>
-                <div className="flex items-center gap-3 mt-6 mb-3 px-1">
+            const flatGroups = groupTodosFlat(filtered, groupBy)
+            return flatGroups.map((group, gi) => (
+              <div
+                key={group.key}
+                onDragOver={(e) => { if (dragGroupKey.current) { e.preventDefault(); setDragOverGroupIndex(gi) } }}
+                onDrop={(e) => handleGroupDrop(e, gi, flatGroups)}
+              >
+                {dragOverGroupIndex === gi && dragGroupKey.current && dragGroupKey.current !== group.key && (
+                  <div className="h-1 bg-indigo-400 rounded-full mx-2 mb-1 transition-all" />
+                )}
+                <div
+                  className="flex items-center gap-3 mt-6 mb-3 px-1 cursor-grab active:cursor-grabbing select-none"
+                  draggable
+                  onDragStart={() => handleGroupDragStart(group.key)}
+                  onDragEnd={handleDragEnd}
+                >
+                  <span className="text-slate-400 dark:text-slate-500 text-xs">⠿</span>
                   <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200">
                     {group.label}
                   </h3>
