@@ -504,6 +504,16 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
                   }}
                 >
                   {item.text}
+                  {item.todoId && (() => {
+                    const linkedTodo = todos.find((t) => t.id === item.todoId)
+                    if (!linkedTodo) return null
+                    const parts = [linkedTodo.assignee_name, linkedTodo.project_name].filter(Boolean)
+                    return parts.length > 0 ? (
+                      <span className="ml-1.5 text-xs text-slate-400 dark:text-slate-500 font-medium">
+                        — {parts.join(' · ')}
+                      </span>
+                    ) : null
+                  })()}
                   {item.todoId && (
                     <button
                       onClick={(e) => { e.stopPropagation(); onOpenTodo(item.todoId!) }}
