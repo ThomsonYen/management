@@ -76,6 +76,9 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
   const [editingTodo, setEditingTodo] = useState<Todo | null>(null)
   const [newTitle, setNewTitle] = useState('')
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+  const [highlightedTodoId, setHighlightedTodoId] = useState<number | null>(null)
+  const [collapseSignal, setCollapseSignal] = useState(0)
+  const highlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
   const dragItemId = useRef<number | null>(null)
   const [dragOverGroupIndex, setDragOverGroupIndex] = useState<number | null>(null)
@@ -488,12 +491,22 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
                     item.done
                       ? 'line-through text-amber-400 dark:text-amber-600'
                       : 'text-slate-700 dark:text-slate-200'
-                  }`}
+                  } ${item.todoId ? 'cursor-pointer hover:text-amber-600 dark:hover:text-amber-300' : ''}`}
+                  onClick={() => {
+                    if (item.todoId) {
+                      const el = document.getElementById(`focus-todo-${item.todoId}`)
+                      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                      if (highlightTimer.current) clearTimeout(highlightTimer.current)
+                      setHighlightedTodoId(item.todoId)
+                      setCollapseSignal((c) => c + 1)
+                      highlightTimer.current = setTimeout(() => setHighlightedTodoId(null), 2000)
+                    }
+                  }}
                 >
                   {item.text}
                   {item.todoId && (
                     <button
-                      onClick={() => onOpenTodo(item.todoId!)}
+                      onClick={(e) => { e.stopPropagation(); onOpenTodo(item.todoId!) }}
                       className="ml-1.5 text-xs text-amber-500 hover:text-amber-700 dark:hover:text-amber-300"
                       title="Open todo detail"
                     >
@@ -593,6 +606,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
               return (
                 <div
                   key={t.id}
+                  id={`focus-todo-${t.id}`}
                   onDragOver={(e) => handleDragOver(e, globalIndex)}
                   onDrop={(e) => handleDrop(e, globalIndex)}
                   onDragEnd={handleDragEnd}
@@ -601,7 +615,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
                   {dragOverIndex === globalIndex && dragItemId.current !== null && dragItemId.current !== t.id && (
                     <div className="h-1 bg-indigo-400 rounded-full mx-2 mb-1 transition-all" />
                   )}
-                  <div className="mb-2">
+                  <div className={`mb-2 rounded-xl transition-all duration-500 ${highlightedTodoId === t.id ? 'ring-2 ring-amber-400 bg-amber-50/50 dark:bg-amber-900/20' : ''}`}>
                     <TodoCard
                       todo={t}
                       onEdit={handleEdit}
@@ -609,6 +623,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
                       queryKeys={[['todos'], ['todos', { is_focused: true }]]}
                       isSelected={selectedIds.has(t.id)}
                       onToggleSelect={toggleSelect}
+                      forceCollapseSignal={highlightedTodoId === t.id ? collapseSignal : 0}
                       extraActions={
                         <button
                           onClick={() => removeFocus.mutate(t.id)}

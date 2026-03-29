@@ -111,8 +111,12 @@ const autoOpenSelect = (el: HTMLSelectElement | null) => {
   }
 }
 
-export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraActions, isSelected, onToggleSelect }: TodoCardProps) {
+export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraActions, isSelected, onToggleSelect, forceCollapseSignal = 0 }: TodoCardProps & { forceCollapseSignal?: number }) {
   const [expanded, setExpanded] = useState(false)
+
+  useEffect(() => {
+    if (forceCollapseSignal > 0) setExpanded(true)
+  }, [forceCollapseSignal])
   const [editingField, setEditingField] = useState<string | null>(null)
   const [editValue, setEditValue] = useState('')
   const [newSubTitle, setNewSubTitle] = useState('')
