@@ -110,6 +110,33 @@ export const deleteSubTodo = (id: number): Promise<void> =>
 export const fetchRecentlyDone = (limit = 50): Promise<Todo[]> =>
   api.get('/todos/recently-done', { params: { limit } }).then((r) => r.data)
 
+// ─── Must Do Items ──────────────────────────────────────────────────────────
+
+export interface MustDoItem {
+  id: number
+  date: string
+  todo_id?: number
+  text: string
+  done: boolean
+  order: number
+}
+
+export const fetchMustDoItems = (date: string): Promise<MustDoItem[]> =>
+  api.get(`/must-do/${date}`).then((r) => r.data)
+
+export const createMustDoItem = (
+  date: string,
+  data: { todo_id?: number; text: string; done?: boolean; order?: number },
+): Promise<MustDoItem> => api.post(`/must-do/${date}`, data).then((r) => r.data)
+
+export const updateMustDoItem = (
+  id: number,
+  data: { text?: string; done?: boolean; order?: number },
+): Promise<MustDoItem> => api.put(`/must-do/items/${id}`, data).then((r) => r.data)
+
+export const deleteMustDoItem = (id: number): Promise<void> =>
+  api.delete(`/must-do/items/${id}`).then((r) => r.data)
+
 // ─── Schedule ────────────────────────────────────────────────────────────────
 
 export const fetchReminders = (): Promise<ScheduleStatus[]> =>

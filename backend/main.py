@@ -105,6 +105,17 @@ class SubTodo(Base):
     todo = relationship("Todo", back_populates="subtodos")
 
 
+class MustDoItem(Base):
+    __tablename__ = "must_do_items"
+    id = Column(Integer, primary_key=True, index=True)
+    date = Column(String, nullable=False)  # YYYY-MM-DD
+    todo_id = Column(Integer, ForeignKey("todos.id"), nullable=True)
+    text = Column(String, nullable=False)
+    done = Column(Boolean, default=False)
+    order = Column(Integer, default=0)
+    todo = relationship("Todo")
+
+
 Base.metadata.create_all(bind=engine)
 
 # Migrate: add is_focused column if missing
@@ -263,6 +274,29 @@ class ScheduleStatus(BaseModel):
     available_hours: float
     chain_hours: float  # estimated_hours + longest pending-blocker chain
     status: str  # 'behind' | 'warning'
+
+
+class MustDoItemCreate(BaseModel):
+    todo_id: Optional[int] = None
+    text: str
+    done: bool = False
+    order: int = 0
+
+
+class MustDoItemUpdate(BaseModel):
+    text: Optional[str] = None
+    done: Optional[bool] = None
+    order: Optional[int] = None
+
+
+class MustDoItemOut(BaseModel):
+    id: int
+    date: str
+    todo_id: Optional[int] = None
+    text: str
+    done: bool
+    order: int
+    model_config = {"from_attributes": True}
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -534,6 +568,50 @@ def delete_subtodo(subtodo_id: int, db: Session = Depends(get_db)):
     if not s:
         raise HTTPException(404, "SubTodo not found")
     db.delete(s)
+    db.commit()
+    return {"ok": True}
+
+
+# ─── Must Do Items ───────────────────────────────────────────────────────────
+
+
+@app.get("/must-do/{date}", response_model=List[MustDoItemOut])
+def list_must_do(date: str, db: Session = Depends(get_db)):
+    return (
+        db.query(MustDoItem)
+        .filter(MustDoItem.date == date)
+        .order_by(MustDoItem.order)
+        .all()
+    )
+
+
+@app.post("/must-do/{date}", response_model=MustDoItemOut)
+def create_must_do(date: str, data: MustDoItemCreate, db: Session = Depends(get_db)):
+    item = MustDoItem(date=date, **data.model_dump())
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    return item
+
+
+@app.put("/must-do/items/{item_id}", response_model=MustDoItemOut)
+def update_must_do(item_id: int, data: MustDoItemUpdate, db: Session = Depends(get_db)):
+    item = db.query(MustDoItem).get(item_id)
+    if not item:
+        raise HTTPException(404, "Must-do item not found")
+    for k, v in data.model_dump(exclude_unset=True).items():
+        setattr(item, k, v)
+    db.commit()
+    db.refresh(item)
+    return item
+
+
+@app.delete("/must-do/items/{item_id}")
+def delete_must_do(item_id: int, db: Session = Depends(get_db)):
+    item = db.query(MustDoItem).get(item_id)
+    if not item:
+        raise HTTPException(404, "Must-do item not found")
+    db.delete(item)
     db.commit()
     return {"ok": True}
 

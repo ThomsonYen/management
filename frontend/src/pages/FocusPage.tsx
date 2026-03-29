@@ -1,37 +1,16 @@
-import { useState, useRef, useCallback, useEffect } from 'react'
+import { useState, useRef, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { fetchTodos, fetchProjects, updateTodo, createTodo, reorderFocus } from '../api'
+import { fetchTodos, fetchProjects, updateTodo, createTodo, reorderFocus, fetchMustDoItems, createMustDoItem, updateMustDoItem, deleteMustDoItem } from '../api'
 import type { Todo, Project } from '../types'
+import type { MustDoItem } from '../api'
 import TodoCard from '../components/TodoCard'
 import TodoModal from '../components/TodoModal'
 import BulkActionBar from '../components/BulkActionBar'
 
 type GroupBy = 'none' | 'project' | 'user' | 'both'
 
-interface TodayItem {
-  id: string
-  todoId?: number  // linked to an existing todo
-  text: string
-  done: boolean
-}
-
 function getTodayKey(): string {
   return new Date().toISOString().slice(0, 10)
-}
-
-function loadTodayItems(): TodayItem[] {
-  const key = `focus_today_${getTodayKey()}`
-  try {
-    const raw = localStorage.getItem(key)
-    return raw ? JSON.parse(raw) : []
-  } catch {
-    return []
-  }
-}
-
-function saveTodayItems(items: TodayItem[]) {
-  const key = `focus_today_${getTodayKey()}`
-  localStorage.setItem(key, JSON.stringify(items))
 }
 
 interface FlatGroup { key: string; label: string; todos: Todo[] }
@@ -88,61 +67,57 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
   const queryClient = useQueryClient()
 
   // --- Must Do Today ---
-  const [todayItems, setTodayItems] = useState<TodayItem[]>(loadTodayItems)
+  const todayKey = getTodayKey()
   const [todayInput, setTodayInput] = useState('')
   const [todaySearchOpen, setTodaySearchOpen] = useState(false)
   const [todayDragOver, setTodayDragOver] = useState(false)
   const todayInputRef = useRef<HTMLInputElement>(null)
 
-  // Refresh when day changes (check every 60s)
-  useEffect(() => {
-    const check = () => {
-      const current = loadTodayItems()
-      setTodayItems(current)
-    }
-    const interval = setInterval(() => {
-      const stored = localStorage.getItem(`focus_today_${getTodayKey()}`)
-      if (!stored) {
-        // New day — reset
-        setTodayItems([])
-        setTodayInput('')
-      }
-    }, 60_000)
-    return () => clearInterval(interval)
-  }, [])
+  const { data: todayItems = [] } = useQuery<MustDoItem[]>({
+    queryKey: ['must-do', todayKey],
+    queryFn: () => fetchMustDoItems(todayKey),
+  })
 
-  const persistTodayItems = useCallback((items: TodayItem[]) => {
-    setTodayItems(items)
-    saveTodayItems(items)
-  }, [])
+  const addMustDo = useMutation({
+    mutationFn: (data: { todo_id?: number; text: string; order?: number }) =>
+      createMustDoItem(todayKey, data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['must-do', todayKey] }),
+  })
+
+  const updateMustDo = useMutation({
+    mutationFn: ({ id, ...data }: { id: number; text?: string; done?: boolean; order?: number }) =>
+      updateMustDoItem(id, data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['must-do', todayKey] }),
+  })
+
+  const deleteMustDo = useMutation({
+    mutationFn: (id: number) => deleteMustDoItem(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['must-do', todayKey] }),
+  })
 
   const addTodayText = useCallback((text: string) => {
     if (!text.trim()) return
-    const item: TodayItem = { id: crypto.randomUUID(), text: text.trim(), done: false }
-    persistTodayItems([...todayItems, item])
-  }, [todayItems, persistTodayItems])
+    addMustDo.mutate({ text: text.trim(), order: todayItems.length })
+  }, [addMustDo, todayItems.length])
 
   const addTodayTodo = useCallback((todo: Todo) => {
-    if (todayItems.some((i) => i.todoId === todo.id)) return
-    const item: TodayItem = { id: crypto.randomUUID(), todoId: todo.id, text: todo.title, done: false }
-    persistTodayItems([...todayItems, item])
-  }, [todayItems, persistTodayItems])
+    if (todayItems.some((i) => i.todo_id === todo.id)) return
+    addMustDo.mutate({ todo_id: todo.id, text: todo.title, order: todayItems.length })
+  }, [todayItems, addMustDo])
 
-  const toggleTodayDone = useCallback((itemId: string) => {
-    const item = todayItems.find((i) => i.id === itemId)
-    if (!item) return
+  const toggleTodayDone = useCallback((item: MustDoItem) => {
     const newDone = !item.done
-    persistTodayItems(todayItems.map((i) => i.id === itemId ? { ...i, done: newDone } : i))
-    if (item.todoId) {
-      updateTodo(item.todoId, { status: newDone ? 'done' : 'todo' }).then(() => {
+    updateMustDo.mutate({ id: item.id, done: newDone })
+    if (item.todo_id) {
+      updateTodo(item.todo_id, { status: newDone ? 'done' : 'todo' }).then(() => {
         queryClient.invalidateQueries({ queryKey: ['todos'] })
       })
     }
-  }, [todayItems, persistTodayItems, queryClient])
+  }, [updateMustDo, queryClient])
 
-  const removeTodayItem = useCallback((itemId: string) => {
-    persistTodayItems(todayItems.filter((i) => i.id !== itemId))
-  }, [todayItems, persistTodayItems])
+  const removeTodayItem = useCallback((itemId: number) => {
+    deleteMustDo.mutate(itemId)
+  }, [deleteMustDo])
 
   const { data: todos = [], isLoading } = useQuery<Todo[]>({
     queryKey: ['todos', { is_focused: true }],
@@ -477,7 +452,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
             {todayItems.map((item) => (
               <li key={item.id} className="flex items-center gap-2 group">
                 <button
-                  onClick={() => toggleTodayDone(item.id)}
+                  onClick={() => toggleTodayDone(item)}
                   className={`flex-shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
                     item.done
                       ? 'bg-amber-500 border-amber-500 text-white'
@@ -491,21 +466,21 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
                     item.done
                       ? 'line-through text-amber-400 dark:text-amber-600'
                       : 'text-slate-700 dark:text-slate-200'
-                  } ${item.todoId ? 'cursor-pointer hover:text-amber-600 dark:hover:text-amber-300' : ''}`}
+                  } ${item.todo_id ? 'cursor-pointer hover:text-amber-600 dark:hover:text-amber-300' : ''}`}
                   onClick={() => {
-                    if (item.todoId) {
-                      const el = document.getElementById(`focus-todo-${item.todoId}`)
+                    if (item.todo_id) {
+                      const el = document.getElementById(`focus-todo-${item.todo_id}`)
                       if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
                       if (highlightTimer.current) clearTimeout(highlightTimer.current)
-                      setHighlightedTodoId(item.todoId)
+                      setHighlightedTodoId(item.todo_id)
                       setCollapseSignal((c) => c + 1)
                       highlightTimer.current = setTimeout(() => setHighlightedTodoId(null), 2000)
                     }
                   }}
                 >
                   {item.text}
-                  {item.todoId && (() => {
-                    const linkedTodo = todos.find((t) => t.id === item.todoId)
+                  {item.todo_id && (() => {
+                    const linkedTodo = todos.find((t) => t.id === item.todo_id)
                     if (!linkedTodo) return null
                     const parts = [linkedTodo.assignee_name, linkedTodo.project_name].filter(Boolean)
                     return parts.length > 0 ? (
@@ -514,9 +489,9 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
                       </span>
                     ) : null
                   })()}
-                  {item.todoId && (
+                  {item.todo_id && (
                     <button
-                      onClick={(e) => { e.stopPropagation(); onOpenTodo(item.todoId!) }}
+                      onClick={(e) => { e.stopPropagation(); onOpenTodo(item.todo_id!) }}
                       className="ml-1.5 text-xs text-amber-500 hover:text-amber-700 dark:hover:text-amber-300"
                       title="Open todo detail"
                     >
@@ -571,7 +546,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
             const matches = todos.filter(
               (t) =>
                 t.title.toLowerCase().includes(q) &&
-                !todayItems.some((i) => i.todoId === t.id)
+                !todayItems.some((i) => i.todo_id === t.id)
             ).slice(0, 6)
             if (matches.length === 0) return null
             return (
