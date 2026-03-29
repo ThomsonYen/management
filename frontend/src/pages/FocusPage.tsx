@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { fetchTodos, fetchProjects, updateTodo, createTodo, reorderFocus } from '../api'
 import type { Todo, Project } from '../types'
@@ -7,6 +7,32 @@ import TodoModal from '../components/TodoModal'
 import BulkActionBar from '../components/BulkActionBar'
 
 type GroupBy = 'none' | 'project' | 'user' | 'both'
+
+interface TodayItem {
+  id: string
+  todoId?: number  // linked to an existing todo
+  text: string
+  done: boolean
+}
+
+function getTodayKey(): string {
+  return new Date().toISOString().slice(0, 10)
+}
+
+function loadTodayItems(): TodayItem[] {
+  const key = `focus_today_${getTodayKey()}`
+  try {
+    const raw = localStorage.getItem(key)
+    return raw ? JSON.parse(raw) : []
+  } catch {
+    return []
+  }
+}
+
+function saveTodayItems(items: TodayItem[]) {
+  const key = `focus_today_${getTodayKey()}`
+  localStorage.setItem(key, JSON.stringify(items))
+}
 
 interface FlatGroup { key: string; label: string; todos: Todo[] }
 interface NestedGroup { key: string; label: string; subgroups: FlatGroup[] }
@@ -57,6 +83,63 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
   const [dragOverSubgroupIndex, setDragOverSubgroupIndex] = useState<{ parent: string; index: number } | null>(null)
   const dragSubgroupKey = useRef<{ parent: string; key: string } | null>(null)
   const queryClient = useQueryClient()
+
+  // --- Must Do Today ---
+  const [todayItems, setTodayItems] = useState<TodayItem[]>(loadTodayItems)
+  const [todayInput, setTodayInput] = useState('')
+  const [todaySearchOpen, setTodaySearchOpen] = useState(false)
+  const [todayDragOver, setTodayDragOver] = useState(false)
+  const todayInputRef = useRef<HTMLInputElement>(null)
+
+  // Refresh when day changes (check every 60s)
+  useEffect(() => {
+    const check = () => {
+      const current = loadTodayItems()
+      setTodayItems(current)
+    }
+    const interval = setInterval(() => {
+      const stored = localStorage.getItem(`focus_today_${getTodayKey()}`)
+      if (!stored) {
+        // New day — reset
+        setTodayItems([])
+        setTodayInput('')
+      }
+    }, 60_000)
+    return () => clearInterval(interval)
+  }, [])
+
+  const persistTodayItems = useCallback((items: TodayItem[]) => {
+    setTodayItems(items)
+    saveTodayItems(items)
+  }, [])
+
+  const addTodayText = useCallback((text: string) => {
+    if (!text.trim()) return
+    const item: TodayItem = { id: crypto.randomUUID(), text: text.trim(), done: false }
+    persistTodayItems([...todayItems, item])
+  }, [todayItems, persistTodayItems])
+
+  const addTodayTodo = useCallback((todo: Todo) => {
+    if (todayItems.some((i) => i.todoId === todo.id)) return
+    const item: TodayItem = { id: crypto.randomUUID(), todoId: todo.id, text: todo.title, done: false }
+    persistTodayItems([...todayItems, item])
+  }, [todayItems, persistTodayItems])
+
+  const toggleTodayDone = useCallback((itemId: string) => {
+    const item = todayItems.find((i) => i.id === itemId)
+    if (!item) return
+    const newDone = !item.done
+    persistTodayItems(todayItems.map((i) => i.id === itemId ? { ...i, done: newDone } : i))
+    if (item.todoId) {
+      updateTodo(item.todoId, { status: newDone ? 'done' : 'todo' }).then(() => {
+        queryClient.invalidateQueries({ queryKey: ['todos'] })
+      })
+    }
+  }, [todayItems, persistTodayItems, queryClient])
+
+  const removeTodayItem = useCallback((itemId: string) => {
+    persistTodayItems(todayItems.filter((i) => i.id !== itemId))
+  }, [todayItems, persistTodayItems])
 
   const { data: todos = [], isLoading } = useQuery<Todo[]>({
     queryKey: ['todos', { is_focused: true }],
@@ -291,6 +374,146 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
             Drag cards to reorder. Drag any todo onto "Focus" in the sidebar to add it here.
           </p>
+        </div>
+      </div>
+
+      {/* Must Do Today */}
+      <div
+        className={`rounded-xl border-2 ${todayDragOver ? 'border-amber-400 bg-amber-50 dark:bg-amber-900/20' : 'border-amber-200 dark:border-amber-700 bg-amber-50/50 dark:bg-amber-950/30'} shadow-sm mb-6 transition-colors`}
+        onDragOver={(e) => {
+          if (e.dataTransfer.types.includes('application/x-todo-id')) {
+            e.preventDefault()
+            setTodayDragOver(true)
+          }
+        }}
+        onDragLeave={() => setTodayDragOver(false)}
+        onDrop={(e) => {
+          e.preventDefault()
+          setTodayDragOver(false)
+          const todoId = parseInt(e.dataTransfer.getData('application/x-todo-id'))
+          if (!todoId) return
+          const todo = todos.find((t) => t.id === todoId)
+          if (todo) addTodayTodo(todo)
+        }}
+      >
+        <div className="px-5 pt-4 pb-2 flex items-center gap-2">
+          <span className="text-amber-500 text-lg">&#9733;</span>
+          <h3 className="text-sm font-bold text-amber-700 dark:text-amber-400 uppercase tracking-wide">
+            Must Do Today
+          </h3>
+          <span className="text-xs text-amber-500 dark:text-amber-500 font-medium">
+            {getTodayKey()}
+          </span>
+          <span className="text-xs text-amber-400 dark:text-amber-600 ml-auto">
+            {todayItems.filter((i) => i.done).length}/{todayItems.length} done
+          </span>
+        </div>
+
+        {todayItems.length > 0 && (
+          <ul className="px-5 pb-1 space-y-1">
+            {todayItems.map((item) => (
+              <li key={item.id} className="flex items-center gap-2 group">
+                <button
+                  onClick={() => toggleTodayDone(item.id)}
+                  className={`flex-shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
+                    item.done
+                      ? 'bg-amber-500 border-amber-500 text-white'
+                      : 'border-amber-300 dark:border-amber-600 hover:border-amber-500'
+                  }`}
+                >
+                  {item.done && <span className="text-xs">&#10003;</span>}
+                </button>
+                <span
+                  className={`flex-1 text-sm ${
+                    item.done
+                      ? 'line-through text-amber-400 dark:text-amber-600'
+                      : 'text-slate-700 dark:text-slate-200'
+                  }`}
+                >
+                  {item.text}
+                  {item.todoId && (
+                    <button
+                      onClick={() => onOpenTodo(item.todoId!)}
+                      className="ml-1.5 text-xs text-amber-500 hover:text-amber-700 dark:hover:text-amber-300"
+                      title="Open todo detail"
+                    >
+                      &#8599;
+                    </button>
+                  )}
+                </span>
+                <button
+                  onClick={() => removeTodayItem(item.id)}
+                  className="opacity-0 group-hover:opacity-100 text-xs text-amber-400 hover:text-red-500 transition-opacity"
+                  title="Remove"
+                >
+                  &#10005;
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <div className="px-5 pb-4 pt-1 relative">
+          <input
+            ref={todayInputRef}
+            type="text"
+            value={todayInput}
+            onChange={(e) => {
+              setTodayInput(e.target.value)
+              setTodaySearchOpen(e.target.value.length > 0)
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && todayInput.trim()) {
+                // Check if input matches a focused todo
+                const match = todos.find((t) =>
+                  t.title.toLowerCase() === todayInput.trim().toLowerCase()
+                )
+                if (match) addTodayTodo(match)
+                else addTodayText(todayInput)
+                setTodayInput('')
+                setTodaySearchOpen(false)
+              }
+              if (e.key === 'Escape') {
+                setTodaySearchOpen(false)
+                setTodayInput('')
+              }
+            }}
+            onFocus={() => { if (todayInput.length > 0) setTodaySearchOpen(true) }}
+            onBlur={() => setTimeout(() => setTodaySearchOpen(false), 150)}
+            placeholder="Type to add or search todos... or drag a todo here"
+            className="w-full text-sm text-slate-600 dark:text-slate-300 placeholder-amber-300 dark:placeholder-amber-700 bg-transparent outline-none"
+          />
+          {todaySearchOpen && todayInput.trim() && (() => {
+            const q = todayInput.trim().toLowerCase()
+            const matches = todos.filter(
+              (t) =>
+                t.title.toLowerCase().includes(q) &&
+                !todayItems.some((i) => i.todoId === t.id)
+            ).slice(0, 6)
+            if (matches.length === 0) return null
+            return (
+              <div className="absolute left-5 right-5 top-full z-20 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                {matches.map((t) => (
+                  <button
+                    key={t.id}
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-amber-50 dark:hover:bg-amber-900/30 text-slate-700 dark:text-slate-200 flex items-center gap-2"
+                    onMouseDown={(e) => {
+                      e.preventDefault()
+                      addTodayTodo(t)
+                      setTodayInput('')
+                      setTodaySearchOpen(false)
+                    }}
+                  >
+                    <span className="text-amber-400 text-xs">&#9733;</span>
+                    {t.title}
+                    {t.project_name && (
+                      <span className="ml-auto text-xs text-slate-400">{t.project_name}</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )
+          })()}
         </div>
       </div>
 
