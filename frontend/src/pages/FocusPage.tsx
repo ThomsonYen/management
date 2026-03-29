@@ -367,15 +367,75 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
   )
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
+    <div className="p-6 flex gap-6">
+      {/* Left sidebar: header, controls, metadata */}
+      <div className="w-52 flex-shrink-0 sticky top-6 self-start space-y-5">
         <div>
           <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Focus</h2>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
             Drag cards to reorder. Drag any todo onto "Focus" in the sidebar to add it here.
           </p>
         </div>
+
+        <p className="text-sm text-slate-500 dark:text-slate-400">
+          {filtered.length} focused todo{filtered.length !== 1 ? 's' : ''}
+        </p>
+
+        {focusedProjects.length > 1 && (
+          <div>
+            <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide block mb-1.5">
+              Filter by project
+            </label>
+            <select
+              value={selectedProject}
+              onChange={(e) => setSelectedProject(e.target.value)}
+              className="w-full border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+              <option value="">All projects</option>
+              {focusedProjects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+              {todos.some((t) => !t.project_id) && (
+                <option value="none">No Project</option>
+              )}
+            </select>
+            {selectedProject && (
+              <button
+                onClick={() => setSelectedProject('')}
+                className="text-xs text-indigo-600 hover:text-indigo-800 font-medium mt-1"
+              >
+                Clear filter
+              </button>
+            )}
+          </div>
+        )}
+
+        <div>
+          <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide block mb-1.5">
+            Group by
+          </label>
+          <select
+            value={groupBy}
+            onChange={(e) => {
+              const v = e.target.value as GroupBy
+              setGroupBy(v)
+              localStorage.setItem('focusGroupBy', v)
+            }}
+            className="w-full border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          >
+            <option value="none">None</option>
+            <option value="project">Project</option>
+            <option value="user">User</option>
+            <option value="both">Project &amp; User</option>
+          </select>
+        </div>
       </div>
+
+      {/* Right content area */}
+      <div className="flex-1 min-w-0">
+      <div className="max-w-4xl mx-auto">
 
       {/* Must Do Today */}
       <div
@@ -514,66 +574,6 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
               </div>
             )
           })()}
-        </div>
-      </div>
-
-      {/* Filter bar */}
-      {focusedProjects.length > 1 && (
-        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-4 mb-6">
-          <div className="flex items-center gap-3">
-            <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
-              Filter by project
-            </label>
-            <select
-              value={selectedProject}
-              onChange={(e) => setSelectedProject(e.target.value)}
-              className="border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            >
-              <option value="">All projects</option>
-              {focusedProjects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-              {todos.some((t) => !t.project_id) && (
-                <option value="none">No Project</option>
-              )}
-            </select>
-            {selectedProject && (
-              <button
-                onClick={() => setSelectedProject('')}
-                className="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
-              >
-                Clear
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Group by + Count */}
-      <div className="flex items-center justify-between mb-3">
-        <p className="text-sm text-slate-500 dark:text-slate-400">
-          {filtered.length} focused todo{filtered.length !== 1 ? 's' : ''}
-        </p>
-        <div className="flex items-center gap-2">
-          <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
-            Group by
-          </label>
-          <select
-            value={groupBy}
-            onChange={(e) => {
-              const v = e.target.value as GroupBy
-              setGroupBy(v)
-              localStorage.setItem('focusGroupBy', v)
-            }}
-            className="border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          >
-            <option value="none">None</option>
-            <option value="project">Project</option>
-            <option value="user">User</option>
-            <option value="both">Project &amp; User</option>
-          </select>
         </div>
       </div>
 
@@ -761,6 +761,8 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
           invalidateKeys={[['todos'], ['todos', { is_focused: true }]]}
         />
       )}
+      </div>
+      </div>
     </div>
   )
 }
