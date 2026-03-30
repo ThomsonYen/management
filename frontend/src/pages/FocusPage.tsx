@@ -443,27 +443,30 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
             {getTodayKey()}
           </span>
           <span className="text-xs text-amber-400 dark:text-amber-600 ml-auto">
-            {todayItems.filter((i) => i.done).length}/{todayItems.length} done
+            {todayItems.filter((i) => i.done || (i.todo_id && todos.find((t) => t.id === i.todo_id)?.status === 'done')).length}/{todayItems.length} done
           </span>
         </div>
 
         {todayItems.length > 0 && (
           <ul className="px-5 pb-1 space-y-1">
-            {todayItems.map((item) => (
+            {todayItems.map((item) => {
+              const linkedTodo = item.todo_id ? todos.find((t) => t.id === item.todo_id) : undefined
+              const effectiveDone = item.done || (linkedTodo?.status === 'done')
+              return (
               <li key={item.id} className="flex items-center gap-2 group">
                 <button
                   onClick={() => toggleTodayDone(item)}
                   className={`flex-shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
-                    item.done
+                    effectiveDone
                       ? 'bg-amber-500 border-amber-500 text-white'
                       : 'border-amber-300 dark:border-amber-600 hover:border-amber-500'
                   }`}
                 >
-                  {item.done && <span className="text-xs">&#10003;</span>}
+                  {effectiveDone && <span className="text-xs">&#10003;</span>}
                 </button>
                 <span
                   className={`flex-1 text-sm ${
-                    item.done
+                    effectiveDone
                       ? 'line-through text-amber-400 dark:text-amber-600'
                       : 'text-slate-700 dark:text-slate-200'
                   } ${item.todo_id ? 'cursor-pointer hover:text-amber-600 dark:hover:text-amber-300' : ''}`}
@@ -507,7 +510,8 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
                   &#10005;
                 </button>
               </li>
-            ))}
+              )
+            })}
           </ul>
         )}
 
