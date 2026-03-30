@@ -64,6 +64,8 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
   const dragGroupKey = useRef<string | null>(null)
   const [dragOverSubgroupIndex, setDragOverSubgroupIndex] = useState<{ parent: string; index: number } | null>(null)
   const dragSubgroupKey = useRef<{ parent: string; key: string } | null>(null)
+  const [focusSearch, setFocusSearch] = useState('')
+  const [focusSearchOpen, setFocusSearchOpen] = useState(false)
   const queryClient = useQueryClient()
 
   // --- Must Do Today ---
@@ -124,6 +126,12 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
     queryFn: () => fetchTodos({ is_focused: true }),
   })
 
+  const { data: allTodos = [] } = useQuery<Todo[]>({
+    queryKey: ['todos', { exclude_done: true }],
+    queryFn: () => fetchTodos({ exclude_done: true }),
+    enabled: focusSearchOpen,
+  })
+
   const { data: projects = [] } = useQuery<Project[]>({
     queryKey: ['projects'],
     queryFn: fetchProjects,
@@ -146,6 +154,18 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['todos'] })
       setNewTitle('')
+    },
+  })
+
+  const addExistingToFocus = useMutation({
+    mutationFn: async (todoId: number) => {
+      const maxOrder = todos.reduce((max, t) => Math.max(max, t.focus_order), 0)
+      await updateTodo(todoId, { is_focused: true, focus_order: maxOrder + 1 })
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['todos'] })
+      setFocusSearch('')
+      setFocusSearchOpen(false)
     },
   })
 
@@ -408,6 +428,65 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
             <option value="user">User</option>
             <option value="both">Project &amp; User</option>
           </select>
+        </div>
+
+        <div className="relative">
+          <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide block mb-1.5">
+            Add existing todo
+          </label>
+          <input
+            type="text"
+            value={focusSearch}
+            onChange={(e) => {
+              setFocusSearch(e.target.value)
+              setFocusSearchOpen(e.target.value.length > 0)
+            }}
+            onFocus={() => { if (focusSearch.length > 0) setFocusSearchOpen(true) }}
+            onBlur={() => setTimeout(() => setFocusSearchOpen(false), 150)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                setFocusSearch('')
+                setFocusSearchOpen(false)
+              }
+            }}
+            placeholder="Search todos..."
+            className="w-full border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 placeholder-slate-400 dark:placeholder-slate-500"
+          />
+          {focusSearchOpen && focusSearch.trim() && (() => {
+            const q = focusSearch.trim().toLowerCase()
+            const matches = allTodos.filter(
+              (t) => !t.is_focused && t.title.toLowerCase().includes(q)
+            ).slice(0, 8)
+            if (matches.length === 0) return (
+              <div className="absolute left-0 right-0 top-full mt-1 z-20 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg px-3 py-2 text-xs text-slate-400">
+                No matching todos
+              </div>
+            )
+            return (
+              <div className="absolute left-0 right-0 top-full mt-1 z-20 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                {matches.map((t) => (
+                  <button
+                    key={t.id}
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-indigo-50 dark:hover:bg-indigo-900/30 text-slate-700 dark:text-slate-200 border-b border-slate-100 dark:border-slate-700 last:border-b-0"
+                    onMouseDown={(e) => {
+                      e.preventDefault()
+                      addExistingToFocus.mutate(t.id)
+                    }}
+                  >
+                    <div className="font-medium truncate flex items-center gap-1.5">
+                      <span className="text-indigo-400 text-xs flex-shrink-0">&#9733;</span>
+                      {t.title}
+                    </div>
+                    <div className="text-xs text-slate-400 dark:text-slate-500 flex gap-2 mt-0.5">
+                      {t.project_name && <span>{t.project_name}</span>}
+                      {t.assignee_name && <span>{t.assignee_name}</span>}
+                      <span className="capitalize">{t.status}</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )
+          })()}
         </div>
       </div>
 
