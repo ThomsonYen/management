@@ -577,6 +577,38 @@ def delete_subtodo(subtodo_id: int, db: Session = Depends(get_db)):
 
 @app.get("/must-do/{date}", response_model=List[MustDoItemOut])
 def list_must_do(date: str, db: Session = Depends(get_db)):
+    items = (
+        db.query(MustDoItem)
+        .filter(MustDoItem.date == date)
+        .order_by(MustDoItem.order)
+        .all()
+    )
+    if items:
+        return items
+
+    # Carry over undone items from the most recent previous day
+    prev = (
+        db.query(MustDoItem)
+        .filter(MustDoItem.date < date, MustDoItem.done == False)
+        .order_by(MustDoItem.date.desc(), MustDoItem.order)
+        .all()
+    )
+    if not prev:
+        return []
+
+    latest_date = prev[0].date
+    carried = [p for p in prev if p.date == latest_date]
+    for i, old in enumerate(carried):
+        item = MustDoItem(
+            date=date,
+            todo_id=old.todo_id,
+            text=old.text,
+            done=False,
+            order=i,
+        )
+        db.add(item)
+    db.commit()
+
     return (
         db.query(MustDoItem)
         .filter(MustDoItem.date == date)

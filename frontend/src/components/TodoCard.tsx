@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
 import { createTodo, createSubTodo, deleteTodo, updateSubTodo, updateTodo, fetchPersons, fetchProjects, fetchTodos } from '../api'
 import type { Todo, Person, Project } from '../types'
@@ -128,7 +129,10 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
   const dyingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [isUnfocusing, setIsUnfocusing] = useState(false)
   const unfocusingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [duplicatedId, setDuplicatedId] = useState<number | null>(null)
+  const duplicateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
 
   useEffect(() => {
     return () => {
@@ -140,6 +144,7 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
         clearTimeout(unfocusingTimeoutRef.current)
         updateTodo(todo.id, { is_focused: false })
       }
+      if (duplicateTimerRef.current) clearTimeout(duplicateTimerRef.current)
     }
   }, [todo.id])
 
@@ -727,12 +732,54 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
             />
           </div>
 
+          {duplicatedId !== null && (
+            <div
+              className="flex items-center gap-2 px-3 py-2 rounded-lg bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 animate-fade-in"
+              style={{ animation: 'fadeInOut 3s ease forwards' }}
+            >
+              <span className="text-green-700 dark:text-green-300 text-xs font-medium">Duplicated!</span>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  navigate(`/todos/${duplicatedId}`)
+                }}
+                className="text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 underline transition-colors"
+              >
+                Jump to #{duplicatedId} →
+              </button>
+            </div>
+          )}
+
           <div className="flex gap-2 pt-1">
             <button
               onClick={() => onEdit(todo)}
               className="px-3 py-1.5 bg-indigo-600 text-white text-xs font-medium rounded-lg hover:bg-indigo-700 transition-colors"
             >
               Edit (sub-tasks & more)
+            </button>
+            <button
+              onClick={async (e) => {
+                e.stopPropagation()
+                const today = new Date().toISOString().slice(0, 10)
+                const newTodo = await createTodo({
+                  title: todo.title,
+                  description: todo.description || undefined,
+                  importance: todo.importance,
+                  status: 'todo',
+                  estimated_hours: todo.estimated_hours,
+                  assignee_id: todo.assignee_id,
+                  project_id: todo.project_id ?? undefined,
+                  deadline: today,
+                  blocked_by_ids: todo.blocked_by_ids,
+                })
+                invalidate()
+                setDuplicatedId(newTodo.id)
+                if (duplicateTimerRef.current) clearTimeout(duplicateTimerRef.current)
+                duplicateTimerRef.current = setTimeout(() => setDuplicatedId(null), 3000)
+              }}
+              className="px-3 py-1.5 bg-slate-50 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-medium rounded-lg hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors border border-slate-200 dark:border-slate-600"
+            >
+              Duplicate
             </button>
             <button
               onClick={() => {
