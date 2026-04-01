@@ -2,13 +2,35 @@ import { Moon, Sun } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { useTheme } from '../ThemeContext'
 import { useTodoDefaults } from '../TodoDefaultsContext'
+import { useTimezone } from '../TimezoneContext'
 import { fetchPersons } from '../api'
+
+function getAvailableTimezones(): string[] {
+  try {
+    return (Intl as any).supportedValuesOf('timeZone') as string[]
+  } catch {
+    return [
+      'UTC',
+      'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles',
+      'America/Toronto', 'America/Vancouver', 'America/Sao_Paulo', 'America/Mexico_City',
+      'Europe/London', 'Europe/Berlin', 'Europe/Paris', 'Europe/Amsterdam', 'Europe/Rome',
+      'Europe/Madrid', 'Europe/Zurich', 'Europe/Stockholm', 'Europe/Moscow',
+      'Asia/Tokyo', 'Asia/Shanghai', 'Asia/Hong_Kong', 'Asia/Singapore', 'Asia/Seoul',
+      'Asia/Kolkata', 'Asia/Dubai', 'Asia/Bangkok', 'Asia/Taipei',
+      'Australia/Sydney', 'Australia/Melbourne', 'Pacific/Auckland', 'Pacific/Honolulu',
+      'Africa/Cairo', 'Africa/Lagos', 'Africa/Johannesburg',
+    ]
+  }
+}
+
+const TIMEZONES = getAvailableTimezones()
 
 const IMPORTANCE_OPTIONS = ['low', 'medium', 'high', 'critical']
 
 export default function SettingsPage() {
   const { theme, setTheme } = useTheme()
   const { defaults, setDefaults } = useTodoDefaults()
+  const { timezone, setTimezone } = useTimezone()
   const { data: persons = [] } = useQuery({ queryKey: ['persons'], queryFn: fetchPersons })
 
   const updateField = <K extends keyof typeof defaults>(key: K, value: (typeof defaults)[K]) => {
@@ -53,6 +75,29 @@ export default function SettingsPage() {
                 Dark
               </button>
             </div>
+          </div>
+        </div>
+
+        {/* Timezone */}
+        <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+          <div className="px-6 py-5 flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Timezone</h2>
+              <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+                Used for dates, deadlines, and daily tasks
+              </p>
+            </div>
+            <select
+              value={timezone}
+              onChange={(e) => setTimezone(e.target.value)}
+              className="w-64 border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+              {TIMEZONES.map((tz) => (
+                <option key={tz} value={tz}>
+                  {tz.replace(/_/g, ' ')}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
 

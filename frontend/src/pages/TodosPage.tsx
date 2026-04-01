@@ -7,6 +7,8 @@ import TodoCard from '../components/TodoCard'
 import TodoModal from '../components/TodoModal'
 import BulkActionBar from '../components/BulkActionBar'
 import { useTodoDefaults } from '../TodoDefaultsContext'
+import { useTimezone } from '../TimezoneContext'
+import { getTodayString } from '../dateUtils'
 
 const STATUS_OPTIONS = ['', 'todo', 'in-progress', 'blocked']
 const IMPORTANCE_OPTIONS = ['', 'low', 'medium', 'high', 'critical']
@@ -25,6 +27,7 @@ function AddTodoCard({
   const [title, setTitle] = useState('')
   const queryClient = useQueryClient()
   const { defaults } = useTodoDefaults()
+  const { timezone } = useTimezone()
 
   const createMutation = useMutation({
     mutationFn: createTodo,
@@ -44,7 +47,7 @@ function AddTodoCard({
       status: defaultStatus || 'todo',
       importance: defaultImportance || defaults.importance,
       estimated_hours: parseFloat(defaults.estimatedHours) || 1,
-      deadline: defaults.deadlineToToday ? new Date().toISOString().slice(0, 10) : undefined,
+      deadline: defaults.deadlineToToday ? getTodayString(timezone) : undefined,
       blocked_by_ids: [],
     })
   }

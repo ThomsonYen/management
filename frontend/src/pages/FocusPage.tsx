@@ -6,12 +6,10 @@ import type { MustDoItem } from '../api'
 import TodoCard from '../components/TodoCard'
 import TodoModal from '../components/TodoModal'
 import BulkActionBar from '../components/BulkActionBar'
+import { useTimezone } from '../TimezoneContext'
+import { getTodayString } from '../dateUtils'
 
 type GroupBy = 'none' | 'project' | 'user' | 'both'
-
-function getTodayKey(): string {
-  return new Date().toISOString().slice(0, 10)
-}
 
 interface FlatGroup { key: string; label: string; todos: Todo[] }
 interface NestedGroup { key: string; label: string; subgroups: FlatGroup[] }
@@ -46,6 +44,7 @@ function groupTodosNested(todos: Todo[]): NestedGroup[] {
 }
 
 export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => void }) {
+  const { timezone } = useTimezone()
   const [selectedProject, setSelectedProject] = useState<string>('')
   const [groupBy, setGroupBy] = useState<GroupBy>(() => {
     const saved = localStorage.getItem('focusGroupBy')
@@ -66,10 +65,12 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
   const dragSubgroupKey = useRef<{ parent: string; key: string } | null>(null)
   const [focusSearch, setFocusSearch] = useState('')
   const [focusSearchOpen, setFocusSearchOpen] = useState(false)
+  const [editingMustDoId, setEditingMustDoId] = useState<number | null>(null)
+  const [editingMustDoText, setEditingMustDoText] = useState('')
   const queryClient = useQueryClient()
 
   // --- Must Do Today ---
-  const todayKey = getTodayKey()
+  const todayKey = getTodayString(timezone)
   const [todayInput, setTodayInput] = useState('')
   const [todaySearchOpen, setTodaySearchOpen] = useState(false)
   const [todayDragOver, setTodayDragOver] = useState(false)
@@ -519,7 +520,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
             Must Do Today
           </h3>
           <span className="text-xs text-amber-500 dark:text-amber-500 font-medium">
-            {getTodayKey()}
+            {todayKey}
           </span>
           <span className="text-xs text-amber-400 dark:text-amber-600 ml-auto">
             {todayItems.filter((i) => i.done || (i.todo_id && todos.find((t) => t.id === i.todo_id)?.status === 'done')).length}/{todayItems.length} done
@@ -543,12 +544,39 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
                 >
                   {effectiveDone && <span className="text-xs">&#10003;</span>}
                 </button>
+                {editingMustDoId === item.id && !item.todo_id ? (
+                  <input
+                    autoFocus
+                    className="flex-1 text-sm text-slate-700 dark:text-slate-200 bg-transparent outline-none border-b border-amber-400 dark:border-amber-500 py-0"
+                    value={editingMustDoText}
+                    onChange={(e) => setEditingMustDoText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        const trimmed = editingMustDoText.trim()
+                        if (trimmed && trimmed !== item.text) {
+                          updateMustDo.mutate({ id: item.id, text: trimmed })
+                        }
+                        setEditingMustDoId(null)
+                      }
+                      if (e.key === 'Escape') {
+                        setEditingMustDoId(null)
+                      }
+                    }}
+                    onBlur={() => {
+                      const trimmed = editingMustDoText.trim()
+                      if (trimmed && trimmed !== item.text) {
+                        updateMustDo.mutate({ id: item.id, text: trimmed })
+                      }
+                      setEditingMustDoId(null)
+                    }}
+                  />
+                ) : (
                 <span
                   className={`flex-1 text-sm ${
                     effectiveDone
                       ? 'line-through text-amber-400 dark:text-amber-600'
                       : 'text-slate-700 dark:text-slate-200'
-                  } ${item.todo_id ? 'cursor-pointer hover:text-amber-600 dark:hover:text-amber-300' : ''}`}
+                  } ${item.todo_id ? 'cursor-pointer hover:text-amber-600 dark:hover:text-amber-300' : 'cursor-text'}`}
                   onClick={() => {
                     if (item.todo_id) {
                       const el = document.getElementById(`focus-todo-${item.todo_id}`)
@@ -557,6 +585,12 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
                       setHighlightedTodoId(item.todo_id)
                       setCollapseSignal((c) => c + 1)
                       highlightTimer.current = setTimeout(() => setHighlightedTodoId(null), 2000)
+                    }
+                  }}
+                  onDoubleClick={() => {
+                    if (!item.todo_id) {
+                      setEditingMustDoId(item.id)
+                      setEditingMustDoText(item.text)
                     }
                   }}
                 >
@@ -581,6 +615,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
                     </button>
                   )}
                 </span>
+                )}
                 <button
                   onClick={() => removeTodayItem(item.id)}
                   className="opacity-0 group-hover:opacity-100 text-xs text-amber-400 hover:text-red-500 transition-opacity"

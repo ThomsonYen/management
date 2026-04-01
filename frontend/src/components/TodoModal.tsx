@@ -12,6 +12,8 @@ import {
 } from '../api'
 import type { Todo, SubTodo } from '../types'
 import { useTodoDefaults } from '../TodoDefaultsContext'
+import { useTimezone } from '../TimezoneContext'
+import { getTodayString } from '../dateUtils'
 
 interface Props {
   todo?: Todo | null
@@ -26,9 +28,10 @@ const STATUS_OPTIONS = ['todo', 'in-progress', 'done']
 export default function TodoModal({ todo, onClose, invalidateKeys, defaultAssigneeId }: Props) {
   const queryClient = useQueryClient()
   const { defaults } = useTodoDefaults()
+  const { timezone } = useTimezone()
   const isEdit = !!todo
 
-  const todayStr = new Date().toISOString().slice(0, 10)
+  const todayStr = getTodayString(timezone)
 
   const [title, setTitle] = useState(todo?.title || '')
   const [description, setDescription] = useState(todo?.description || '')

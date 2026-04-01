@@ -5,6 +5,8 @@ import ReactMarkdown from 'react-markdown'
 import { createTodo, createSubTodo, deleteTodo, updateSubTodo, updateTodo, fetchPersons, fetchProjects, fetchTodos } from '../api'
 import type { Todo, Person, Project } from '../types'
 import { config } from '../config'
+import { useTimezone } from '../TimezoneContext'
+import { isOverdue as checkOverdue, getTodayString } from '../dateUtils'
 
 const IMPORTANCE_OPTIONS = ['low', 'medium', 'high', 'critical']
 const STATUS_OPTIONS = ['todo', 'in-progress', 'done', 'blocked']
@@ -113,6 +115,7 @@ const autoOpenSelect = (el: HTMLSelectElement | null) => {
 }
 
 export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraActions, isSelected, onToggleSelect, forceCollapseSignal = 0 }: TodoCardProps & { forceCollapseSignal?: number }) {
+  const { timezone } = useTimezone()
   const [expanded, setExpanded] = useState(false)
 
   useEffect(() => {
@@ -206,8 +209,7 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
   const doneSubs = todo.subtodos.filter((s) => s.done).length
   const totalSubs = todo.subtodos.length
 
-  const isOverdue =
-    todo.deadline && todo.status !== 'done' && new Date(todo.deadline) < new Date()
+  const isOverdue = checkOverdue(todo.deadline, todo.status, timezone)
 
   const dragStartPos = useRef<{ x: number; y: number } | null>(null)
 
@@ -760,7 +762,7 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
             <button
               onClick={async (e) => {
                 e.stopPropagation()
-                const today = new Date().toISOString().slice(0, 10)
+                const today = getTodayString(timezone)
                 const newTodo = await createTodo({
                   title: todo.title,
                   description: todo.description || undefined,

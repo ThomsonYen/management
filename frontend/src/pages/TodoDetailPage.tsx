@@ -16,6 +16,8 @@ import type { SubTodo, Todo, Person, Project } from '../types'
 import TodoModal from '../components/TodoModal'
 import { BlockerTreeNode, BlockingTreeNode } from '../components/BlockerTree'
 import { config } from '../config'
+import { useTimezone } from '../TimezoneContext'
+import { isOverdue as checkOverdue } from '../dateUtils'
 
 const importanceBadge = (imp: string) => {
   const map: Record<string, string> = {
@@ -105,6 +107,7 @@ function BlockerPicker({
 }
 
 export default function TodoDetailPage() {
+  const { timezone } = useTimezone()
   const { id } = useParams<{ id: string }>()
   const todoId = Number(id)
   const navigate = useNavigate()
@@ -248,8 +251,7 @@ export default function TodoDetailPage() {
   const blockers = allTodos.filter((t) => todo.blocked_by_ids.includes(t.id))
   const blocking = allTodos.filter((t) => t.blocked_by_ids.includes(todoId))
 
-  const isOverdue =
-    todo.deadline && todo.status !== 'done' && new Date(todo.deadline) < new Date()
+  const isOverdue = checkOverdue(todo.deadline, todo.status, timezone)
 
   // Drag handlers
   const handleDragStart = (idx: number) => setDragIdx(idx)

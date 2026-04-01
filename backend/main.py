@@ -1,5 +1,5 @@
 import math
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import List, Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Query
@@ -76,7 +76,7 @@ class Todo(Base):
     status = Column(String, default="todo")
     is_focused = Column(Boolean, default=False)
     focus_order = Column(Integer, default=0)
-    created_at = Column(String, default=lambda: datetime.utcnow().isoformat())
+    created_at = Column(String, default=lambda: datetime.now(timezone.utc).isoformat())
     done_at = Column(String, nullable=True)
     subtodos = relationship(
         "SubTodo",
@@ -514,7 +514,7 @@ def update_todo(todo_id: int, data: TodoUpdate, db: Session = Depends(get_db)):
     if "status" in update_data:
         new_status = update_data["status"]
         if new_status == "done" and old_status != "done":
-            t.done_at = datetime.now().isoformat()
+            t.done_at = datetime.now(timezone.utc).isoformat()
         elif new_status != "done" and old_status == "done":
             t.done_at = None
     if blocked_by_ids is not None:

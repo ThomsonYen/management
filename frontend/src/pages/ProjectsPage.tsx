@@ -10,6 +10,8 @@ import TodoCard from '../components/TodoCard'
 import TodoModal from '../components/TodoModal'
 import BulkActionBar from '../components/BulkActionBar'
 import { useTodoDefaults } from '../TodoDefaultsContext'
+import { useTimezone } from '../TimezoneContext'
+import { getTodayString } from '../dateUtils'
 
 function ProjectNode({
   node,
@@ -203,6 +205,7 @@ function AddTodoCard({ projectId, queryKeys }: { projectId: number; queryKeys: u
   const [title, setTitle] = useState('')
   const queryClient = useQueryClient()
   const { defaults } = useTodoDefaults()
+  const { timezone } = useTimezone()
 
   const createMutation = useMutation({
     mutationFn: createTodo,
@@ -221,7 +224,7 @@ function AddTodoCard({ projectId, queryKeys }: { projectId: number; queryKeys: u
       status: 'todo',
       importance: defaults.importance,
       estimated_hours: parseFloat(defaults.estimatedHours) || 1,
-      deadline: defaults.deadlineToToday ? new Date().toISOString().slice(0, 10) : undefined,
+      deadline: defaults.deadlineToToday ? getTodayString(timezone) : undefined,
       blocked_by_ids: [],
     })
   }

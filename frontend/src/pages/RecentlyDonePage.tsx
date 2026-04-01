@@ -2,6 +2,8 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { fetchRecentlyDone } from '../api'
 import type { Todo } from '../types'
+import { useTimezone } from '../TimezoneContext'
+import { getTodayString, getDateString } from '../dateUtils'
 
 const importanceBadge = (imp: string) => {
   const map: Record<string, string> = {
@@ -25,11 +27,12 @@ function timeAgo(iso: string): string {
   return new Date(iso).toLocaleDateString()
 }
 
-function groupByDate(todos: Todo[]): { label: string; items: Todo[] }[] {
-  const now = new Date()
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const yesterday = new Date(today.getTime() - 86400000)
-  const weekAgo = new Date(today.getTime() - 7 * 86400000)
+function groupByDate(todos: Todo[], timezone: string): { label: string; items: Todo[] }[] {
+  const todayStr = getTodayString(timezone)
+  const [y, m, d] = todayStr.split('-').map(Number)
+  const todayMs = new Date(y, m - 1, d).getTime()
+  const yesterdayMs = todayMs - 86400000
+  const weekAgoMs = todayMs - 7 * 86400000
 
   const groups: Record<string, Todo[]> = { Today: [], Yesterday: [], 'This Week': [], Earlier: [], 'No date': [] }
 
@@ -38,11 +41,12 @@ function groupByDate(todos: Todo[]): { label: string; items: Todo[] }[] {
       groups['No date'].push(todo)
       continue
     }
-    const d = new Date(todo.done_at)
-    const day = new Date(d.getFullYear(), d.getMonth(), d.getDate())
-    if (day >= today) groups['Today'].push(todo)
-    else if (day >= yesterday) groups['Yesterday'].push(todo)
-    else if (day >= weekAgo) groups['This Week'].push(todo)
+    const dayStr = getDateString(todo.done_at, timezone)
+    const [dy, dm, dd] = dayStr.split('-').map(Number)
+    const dayMs = new Date(dy, dm - 1, dd).getTime()
+    if (dayMs >= todayMs) groups['Today'].push(todo)
+    else if (dayMs >= yesterdayMs) groups['Yesterday'].push(todo)
+    else if (dayMs >= weekAgoMs) groups['This Week'].push(todo)
     else groups['Earlier'].push(todo)
   }
 
@@ -52,6 +56,7 @@ function groupByDate(todos: Todo[]): { label: string; items: Todo[] }[] {
 }
 
 export default function RecentlyDonePage() {
+  const { timezone } = useTimezone()
   const navigate = useNavigate()
 
   const { data: todos = [], isLoading } = useQuery<Todo[]>({
@@ -59,7 +64,7 @@ export default function RecentlyDonePage() {
     queryFn: () => fetchRecentlyDone(),
   })
 
-  const groups = groupByDate(todos)
+  const groups = groupByDate(todos, timezone)
 
   return (
     <div className="p-6 max-w-3xl mx-auto">
