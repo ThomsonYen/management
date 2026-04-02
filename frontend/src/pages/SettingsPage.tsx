@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useTheme } from '../ThemeContext'
 import { useTodoDefaults } from '../TodoDefaultsContext'
 import { useTimezone } from '../TimezoneContext'
+import { useMeetingNoteSort, type MeetingNoteSortField } from '../MeetingNoteSortContext'
 import { fetchPersons } from '../api'
 
 function getAvailableTimezones(): string[] {
@@ -31,6 +32,7 @@ export default function SettingsPage() {
   const { theme, setTheme } = useTheme()
   const { defaults, setDefaults } = useTodoDefaults()
   const { timezone, setTimezone } = useTimezone()
+  const { sortBy, setSortBy } = useMeetingNoteSort()
   const { data: persons = [] } = useQuery({ queryKey: ['persons'], queryFn: fetchPersons })
 
   const updateField = <K extends keyof typeof defaults>(key: K, value: (typeof defaults)[K]) => {
@@ -97,6 +99,26 @@ export default function SettingsPage() {
                   {tz.replace(/_/g, ' ')}
                 </option>
               ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Meeting Notes */}
+        <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+          <div className="px-6 py-5 flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Meeting Notes Sort Order</h2>
+              <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+                Sort meeting notes by created or last edited time
+              </p>
+            </div>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as MeetingNoteSortField)}
+              className="w-64 border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+              <option value="updated_at">Last edited</option>
+              <option value="created_at">Created</option>
             </select>
           </div>
         </div>

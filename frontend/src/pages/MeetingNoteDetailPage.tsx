@@ -47,9 +47,12 @@ export default function MeetingNoteDetailPage() {
   const { theme } = useTheme()
   const noteId = parseInt(id!)
 
-  const { data: note, isLoading } = useQuery({
+  const { data: note, isLoading, dataUpdatedAt } = useQuery({
     queryKey: ['meeting-note', noteId],
     queryFn: () => fetchMeetingNote(noteId),
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnMount: 'always',
   })
   const { data: persons = [] } = useQuery({ queryKey: ['persons'], queryFn: fetchPersons })
   const { data: projects = [] } = useQuery({ queryKey: ['projects'], queryFn: fetchProjects })
@@ -61,28 +64,29 @@ export default function MeetingNoteDetailPage() {
   const [attendeeIds, setAttendeeIds] = useState<number[]>([])
   const [projectIds, setProjectIds] = useState<number[]>([])
   const [todoIds, setTodoIds] = useState<number[]>([])
-  const [initialized, setInitialized] = useState(false)
+  const appliedAtRef = useRef(0)
 
-  // Populate state once note loads
+  // Populate state whenever a fresh fetch completes (not from cache)
   useEffect(() => {
-    if (note && !initialized) {
+    if (note && dataUpdatedAt > appliedAtRef.current) {
+      appliedAtRef.current = dataUpdatedAt
       setTitle(note.title)
       setDate(note.date)
       setContent(note.content)
       setAttendeeIds(note.attendee_ids)
       setProjectIds(note.project_ids)
       setTodoIds(note.todo_ids)
-      setInitialized(true)
     }
-  }, [note, initialized])
+  }, [note, dataUpdatedAt])
 
-  const updateMutation = useMutation({
-    mutationFn: (data: Parameters<typeof updateMeetingNote>[1]) => updateMeetingNote(noteId, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['meeting-note', noteId] })
-      queryClient.invalidateQueries({ queryKey: ['meeting-notes'] })
+  const saveNote = useCallback(
+    (data: Parameters<typeof updateMeetingNote>[1]) => {
+      updateMeetingNote(noteId, data).then(() => {
+        queryClient.invalidateQueries({ queryKey: ['meeting-notes'] })
+      })
     },
-  })
+    [noteId, queryClient],
+  )
 
   const deleteMutation = useMutation({
     mutationFn: () => deleteMeetingNote(noteId),
@@ -94,20 +98,38 @@ export default function MeetingNoteDetailPage() {
 
   // Debounced content save
   const contentTimerRef = useRef<ReturnType<typeof setTimeout>>()
+  const pendingContentRef = useRef<string | null>(null)
   const handleContentChange = useCallback(
     (val: string | undefined) => {
       const newContent = val ?? ''
       setContent(newContent)
+      pendingContentRef.current = newContent
       if (contentTimerRef.current) clearTimeout(contentTimerRef.current)
       contentTimerRef.current = setTimeout(() => {
-        updateMutation.mutate({ content: newContent })
+        pendingContentRef.current = null
+        updateMeetingNote(noteId, { content: newContent })
       }, 1000)
     },
-    [updateMutation],
+    [noteId],
   )
 
+  // Flush pending content save on unmount
+  useEffect(() => {
+    return () => {
+      if (contentTimerRef.current) {
+        clearTimeout(contentTimerRef.current)
+        contentTimerRef.current = undefined
+      }
+      if (pendingContentRef.current !== null) {
+        const pending = pendingContentRef.current
+        pendingContentRef.current = null
+        updateMeetingNote(noteId, { content: pending })
+      }
+    }
+  }, [noteId])
+
   const saveField = (field: string, value: unknown) => {
-    updateMutation.mutate({ [field]: value })
+    saveNote({ [field]: value })
   }
 
   const handleTitleBlur = () => {
@@ -139,7 +161,7 @@ export default function MeetingNoteDetailPage() {
     saveField('todo_ids', next)
   }
 
-  if (isLoading || !initialized) {
+  if (isLoading || !appliedAtRef.current) {
     return <div className="p-6 text-slate-400">Loading...</div>
   }
 

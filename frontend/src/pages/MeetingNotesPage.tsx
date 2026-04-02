@@ -11,12 +11,26 @@ import {
 } from '../api'
 import type { MeetingNoteSummary, MeetingNoteSearchResult } from '../types'
 import { useTimezone } from '../TimezoneContext'
+import { useMeetingNoteSort } from '../MeetingNoteSortContext'
 import { getTodayString } from '../dateUtils'
+
+function formatInTimezone(isoString: string, tz: string): string {
+  const date = new Date(isoString)
+  return date.toLocaleString(undefined, {
+    timeZone: tz,
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+}
 
 export default function MeetingNotesPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { timezone } = useTimezone()
+  const { sortBy } = useMeetingNoteSort()
   const todayStr = getTodayString(timezone)
 
   const [searchQuery, setSearchQuery] = useState('')
@@ -67,6 +81,12 @@ export default function MeetingNotesPage() {
 
   const { data: persons = [] } = useQuery({ queryKey: ['persons'], queryFn: fetchPersons })
   const { data: projects = [] } = useQuery({ queryKey: ['projects'], queryFn: fetchProjects })
+
+  const sortedNotes = [...notes].sort((a, b) => {
+    const aVal = sortBy === 'created_at' ? a.created_at : a.updated_at
+    const bVal = sortBy === 'created_at' ? b.created_at : b.updated_at
+    return bVal.localeCompare(aVal)
+  })
 
   const showingSearch = !!debouncedSearch
 
@@ -136,8 +156,8 @@ export default function MeetingNotesPage() {
         </div>
       ) : (
         <div className="space-y-2">
-          {notes.map((note) => (
-            <NoteCard key={note.id} note={note} onClick={() => navigate(`/meeting-notes/${note.id}`)} />
+          {sortedNotes.map((note) => (
+            <NoteCard key={note.id} note={note} timezone={timezone} onClick={() => navigate(`/meeting-notes/${note.id}`)} />
           ))}
         </div>
       )}
@@ -146,7 +166,7 @@ export default function MeetingNotesPage() {
   )
 }
 
-function NoteCard({ note, onClick }: { note: MeetingNoteSummary; onClick: () => void }) {
+function NoteCard({ note, timezone, onClick }: { note: MeetingNoteSummary; timezone: string; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
@@ -155,7 +175,10 @@ function NoteCard({ note, onClick }: { note: MeetingNoteSummary; onClick: () => 
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
           <h3 className="font-semibold text-slate-800 dark:text-slate-100 truncate">{note.title}</h3>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{note.date}</p>
+          <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-1">
+            <p className="text-xs text-slate-500 dark:text-slate-400">Created: {formatInTimezone(note.created_at, timezone)}</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">Edited: {formatInTimezone(note.updated_at, timezone)}</p>
+          </div>
         </div>
         <div className="flex flex-wrap gap-1.5 flex-shrink-0">
           {note.attendee_names.length > 0 && (

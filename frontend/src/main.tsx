@@ -6,6 +6,7 @@ import App from './App'
 import { ThemeProvider } from './ThemeContext'
 import { TodoDefaultsProvider } from './TodoDefaultsContext'
 import { TimezoneProvider } from './TimezoneContext'
+import { MeetingNoteSortProvider } from './MeetingNoteSortContext'
 import './index.css'
 
 const queryClient = new QueryClient({
@@ -24,7 +25,9 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         <ThemeProvider>
           <TimezoneProvider>
             <TodoDefaultsProvider>
-              <App />
+              <MeetingNoteSortProvider>
+                <App />
+              </MeetingNoteSortProvider>
             </TodoDefaultsProvider>
           </TimezoneProvider>
         </ThemeProvider>

@@ -1,6 +1,5 @@
 import math
-import re
-import unicodedata
+import uuid
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import List, Optional
@@ -439,11 +438,6 @@ def project_to_tree(p: Project) -> ProjectTreeOut:
         subprojects=[project_to_tree(sp) for sp in p.subprojects],
     )
 
-
-def _slugify(text: str) -> str:
-    text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii")
-    text = re.sub(r"[^\w\s-]", "", text.lower())
-    return re.sub(r"[-\s]+", "_", text).strip("_")[:60]
 
 
 def _read_note_content(filename: str) -> str:
@@ -936,9 +930,11 @@ def create_meeting_note(data: MeetingNoteCreate, db: Session = Depends(get_db)):
     db.add(n)
     db.flush()  # get the id
 
-    # Generate unique filename with id
-    slug = _slugify(data.title) or "untitled"
-    n.filename = f"{data.date}_{slug}_{n.id}.md"
+    # Generate unique filename: {id:08d}_{date}-{H:M:S}-{tz}_{uuid12}.md
+    now = datetime.now(timezone.utc)
+    time_part = now.strftime("%H:%M:%S")
+    uid = uuid.uuid4().hex[:12]
+    n.filename = f"{n.id:08d}_{data.date}-{time_part}-UTC_{uid}.md"
     _write_note_content(n.filename, content or "")
     db.commit()
     db.refresh(n)
