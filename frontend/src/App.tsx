@@ -21,8 +21,8 @@ const navItems = [
   { to: '/todos', label: 'Todos', icon: CheckSquare, end: false },
   { to: '/projects', label: 'Projects', icon: FolderKanban, end: false },
   { to: '/people', label: 'People', icon: Users, end: false },
-  { to: '/done', label: 'Recently Done', icon: CheckCircle2, end: false },
   { to: '/meeting-notes', label: 'Meetings', icon: FileText, end: false },
+  { to: '/done', label: 'Recently Done', icon: CheckCircle2, end: false },
 ]
 
 export default function App() {

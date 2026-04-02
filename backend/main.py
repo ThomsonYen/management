@@ -154,6 +154,7 @@ class MeetingNote(Base):
     filename = Column(String, nullable=False, unique=True)
     created_at = Column(String, default=lambda: datetime.now(timezone.utc).isoformat())
     updated_at = Column(String, default=lambda: datetime.now(timezone.utc).isoformat())
+    hidden = Column(Boolean, default=False)
     attendees = relationship("Person", secondary=meeting_note_attendees)
     projects = relationship("Project", secondary=meeting_note_projects)
     todos = relationship("Todo", secondary=meeting_note_todos)
@@ -166,10 +167,23 @@ with engine.connect() as conn:
     columns = [c["name"] for c in inspect(engine).get_columns("todos")]
     if "is_focused" not in columns:
         conn.execute(text("ALTER TABLE todos ADD COLUMN is_focused BOOLEAN DEFAULT 0"))
+
+# Migrate: add hidden column to meeting_notes if missing
+with engine.connect() as conn:
+    mn_columns = [c["name"] for c in inspect(engine).get_columns("meeting_notes")]
+    if "hidden" not in mn_columns:
+        conn.execute(text("ALTER TABLE meeting_notes ADD COLUMN hidden BOOLEAN DEFAULT 0"))
         conn.commit()
-    if "focus_order" not in columns:
+
+# Migrate: add focus_order column to todos if missing
+with engine.connect() as conn:
+    todo_columns = [c["name"] for c in inspect(engine).get_columns("todos")]
+    if "focus_order" not in todo_columns:
         conn.execute(text("ALTER TABLE todos ADD COLUMN focus_order INTEGER DEFAULT 0"))
         conn.commit()
+
+# Migrate: add notes column to projects if missing
+with engine.connect() as conn:
     proj_columns = [c["name"] for c in inspect(engine).get_columns("projects")]
     if "notes" not in proj_columns:
         conn.execute(text("ALTER TABLE projects ADD COLUMN notes TEXT"))
@@ -849,7 +863,7 @@ def schedule_reminders(db: Session = Depends(get_db)):
 def search_meeting_notes(q: str = Query(..., min_length=1), db: Session = Depends(get_db)):
     q_lower = q.lower()
     results = []
-    notes = db.query(MeetingNote).order_by(MeetingNote.date.desc()).all()
+    notes = db.query(MeetingNote).filter(MeetingNote.hidden == False).order_by(MeetingNote.date.desc()).all()
     for n in notes:
         content = _read_note_content(n.filename)
         lines = content.splitlines()
@@ -883,7 +897,7 @@ def list_meeting_notes(
     date_to: Optional[str] = Query(None),
     db: Session = Depends(get_db),
 ):
-    q = db.query(MeetingNote)
+    q = db.query(MeetingNote).filter(MeetingNote.hidden == False)
     if person_id is not None:
         q = q.filter(MeetingNote.attendees.any(Person.id == person_id))
     if project_id is not None:
@@ -976,13 +990,55 @@ def delete_meeting_note(note_id: int, db: Session = Depends(get_db)):
     n = db.query(MeetingNote).get(note_id)
     if not n:
         raise HTTPException(404, "Meeting note not found")
-    # Remove the file
-    path = MEETING_NOTES_DIR / n.filename
-    if path.exists():
-        path.unlink()
-    db.delete(n)
+    n.hidden = True
+    n.updated_at = datetime.now(timezone.utc).isoformat()
     db.commit()
     return {"ok": True}
+
+
+@app.post("/meeting-notes/{note_id}/restore")
+def restore_meeting_note(note_id: int, db: Session = Depends(get_db)):
+    n = db.query(MeetingNote).get(note_id)
+    if not n:
+        raise HTTPException(404, "Meeting note not found")
+    n.hidden = False
+    n.updated_at = datetime.now(timezone.utc).isoformat()
+    db.commit()
+    return {"ok": True}
+
+
+@app.get("/meeting-notes-hidden", response_model=List[MeetingNoteSummary])
+def list_hidden_meeting_notes(db: Session = Depends(get_db)):
+    notes = db.query(MeetingNote).filter(MeetingNote.hidden == True).order_by(MeetingNote.date.desc()).all()
+    return [meeting_note_to_summary(n) for n in notes]
+
+
+@app.get("/meeting-notes-hidden/search", response_model=List[MeetingNoteSearchResult])
+def search_hidden_meeting_notes(q: str = Query(..., min_length=1), db: Session = Depends(get_db)):
+    q_lower = q.lower()
+    results = []
+    notes = db.query(MeetingNote).filter(MeetingNote.hidden == True).order_by(MeetingNote.date.desc()).all()
+    for n in notes:
+        content = _read_note_content(n.filename)
+        lines = content.splitlines()
+        for i, line in enumerate(lines):
+            if q_lower in line.lower():
+                start = max(0, i - 1)
+                end = min(len(lines), i + 2)
+                snippet = "\n".join(lines[start:end])
+                results.append(
+                    MeetingNoteSearchResult(
+                        id=n.id, title=n.title, date=n.date, snippet=snippet
+                    )
+                )
+                break
+        if q_lower in n.title.lower() and not any(r.id == n.id for r in results):
+            results.append(
+                MeetingNoteSearchResult(
+                    id=n.id, title=n.title, date=n.date, snippet=""
+                )
+            )
+    return results
 
 
 # ─── Meeting Templates ─────────────────────────────────────────────────────

@@ -183,6 +183,15 @@ export const updateMeetingNote = (
 export const deleteMeetingNote = (id: number): Promise<void> =>
   api.delete(`/meeting-notes/${id}`).then((r) => r.data)
 
+export const restoreMeetingNote = (id: number): Promise<void> =>
+  api.post(`/meeting-notes/${id}/restore`).then((r) => r.data)
+
+export const fetchHiddenMeetingNotes = (): Promise<MeetingNoteSummary[]> =>
+  api.get('/meeting-notes-hidden').then((r) => r.data)
+
+export const searchHiddenMeetingNotes = (q: string): Promise<MeetingNoteSearchResult[]> =>
+  api.get('/meeting-notes-hidden/search', { params: { q } }).then((r) => r.data)
+
 export const searchMeetingNotes = (q: string): Promise<MeetingNoteSearchResult[]> =>
   api.get('/meeting-notes/search', { params: { q } }).then((r) => r.data)
 
