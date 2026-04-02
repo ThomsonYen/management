@@ -51,21 +51,27 @@ todo_blockers = Table(
 meeting_note_attendees = Table(
     "meeting_note_attendees",
     Base.metadata,
-    Column("meeting_note_id", Integer, ForeignKey("meeting_notes.id"), primary_key=True),
+    Column(
+        "meeting_note_id", Integer, ForeignKey("meeting_notes.id"), primary_key=True
+    ),
     Column("person_id", Integer, ForeignKey("persons.id"), primary_key=True),
 )
 
 meeting_note_projects = Table(
     "meeting_note_projects",
     Base.metadata,
-    Column("meeting_note_id", Integer, ForeignKey("meeting_notes.id"), primary_key=True),
+    Column(
+        "meeting_note_id", Integer, ForeignKey("meeting_notes.id"), primary_key=True
+    ),
     Column("project_id", Integer, ForeignKey("projects.id"), primary_key=True),
 )
 
 meeting_note_todos = Table(
     "meeting_note_todos",
     Base.metadata,
-    Column("meeting_note_id", Integer, ForeignKey("meeting_notes.id"), primary_key=True),
+    Column(
+        "meeting_note_id", Integer, ForeignKey("meeting_notes.id"), primary_key=True
+    ),
     Column("todo_id", Integer, ForeignKey("todos.id"), primary_key=True),
 )
 
@@ -161,33 +167,6 @@ class MeetingNote(Base):
 
 
 Base.metadata.create_all(bind=engine)
-
-# Migrate: add is_focused column if missing
-with engine.connect() as conn:
-    columns = [c["name"] for c in inspect(engine).get_columns("todos")]
-    if "is_focused" not in columns:
-        conn.execute(text("ALTER TABLE todos ADD COLUMN is_focused BOOLEAN DEFAULT 0"))
-
-# Migrate: add hidden column to meeting_notes if missing
-with engine.connect() as conn:
-    mn_columns = [c["name"] for c in inspect(engine).get_columns("meeting_notes")]
-    if "hidden" not in mn_columns:
-        conn.execute(text("ALTER TABLE meeting_notes ADD COLUMN hidden BOOLEAN DEFAULT 0"))
-        conn.commit()
-
-# Migrate: add focus_order column to todos if missing
-with engine.connect() as conn:
-    todo_columns = [c["name"] for c in inspect(engine).get_columns("todos")]
-    if "focus_order" not in todo_columns:
-        conn.execute(text("ALTER TABLE todos ADD COLUMN focus_order INTEGER DEFAULT 0"))
-        conn.commit()
-
-# Migrate: add notes column to projects if missing
-with engine.connect() as conn:
-    proj_columns = [c["name"] for c in inspect(engine).get_columns("projects")]
-    if "notes" not in proj_columns:
-        conn.execute(text("ALTER TABLE projects ADD COLUMN notes TEXT"))
-        conn.commit()
 
 
 def get_db():
@@ -451,7 +430,6 @@ def project_to_tree(p: Project) -> ProjectTreeOut:
         deadline=p.deadline,
         subprojects=[project_to_tree(sp) for sp in p.subprojects],
     )
-
 
 
 def _read_note_content(filename: str) -> str:
@@ -860,10 +838,17 @@ def schedule_reminders(db: Session = Depends(get_db)):
 
 
 @app.get("/meeting-notes/search", response_model=List[MeetingNoteSearchResult])
-def search_meeting_notes(q: str = Query(..., min_length=1), db: Session = Depends(get_db)):
+def search_meeting_notes(
+    q: str = Query(..., min_length=1), db: Session = Depends(get_db)
+):
     q_lower = q.lower()
     results = []
-    notes = db.query(MeetingNote).filter(MeetingNote.hidden == False).order_by(MeetingNote.date.desc()).all()
+    notes = (
+        db.query(MeetingNote)
+        .filter(MeetingNote.hidden == False)
+        .order_by(MeetingNote.date.desc())
+        .all()
+    )
     for n in notes:
         content = _read_note_content(n.filename)
         lines = content.splitlines()
@@ -881,9 +866,7 @@ def search_meeting_notes(q: str = Query(..., min_length=1), db: Session = Depend
         # also match title
         if q_lower in n.title.lower() and not any(r.id == n.id for r in results):
             results.append(
-                MeetingNoteSearchResult(
-                    id=n.id, title=n.title, date=n.date, snippet=""
-                )
+                MeetingNoteSearchResult(id=n.id, title=n.title, date=n.date, snippet="")
             )
     return results
 
@@ -1009,15 +992,27 @@ def restore_meeting_note(note_id: int, db: Session = Depends(get_db)):
 
 @app.get("/meeting-notes-hidden", response_model=List[MeetingNoteSummary])
 def list_hidden_meeting_notes(db: Session = Depends(get_db)):
-    notes = db.query(MeetingNote).filter(MeetingNote.hidden == True).order_by(MeetingNote.date.desc()).all()
+    notes = (
+        db.query(MeetingNote)
+        .filter(MeetingNote.hidden == True)
+        .order_by(MeetingNote.date.desc())
+        .all()
+    )
     return [meeting_note_to_summary(n) for n in notes]
 
 
 @app.get("/meeting-notes-hidden/search", response_model=List[MeetingNoteSearchResult])
-def search_hidden_meeting_notes(q: str = Query(..., min_length=1), db: Session = Depends(get_db)):
+def search_hidden_meeting_notes(
+    q: str = Query(..., min_length=1), db: Session = Depends(get_db)
+):
     q_lower = q.lower()
     results = []
-    notes = db.query(MeetingNote).filter(MeetingNote.hidden == True).order_by(MeetingNote.date.desc()).all()
+    notes = (
+        db.query(MeetingNote)
+        .filter(MeetingNote.hidden == True)
+        .order_by(MeetingNote.date.desc())
+        .all()
+    )
     for n in notes:
         content = _read_note_content(n.filename)
         lines = content.splitlines()
@@ -1034,9 +1029,7 @@ def search_hidden_meeting_notes(q: str = Query(..., min_length=1), db: Session =
                 break
         if q_lower in n.title.lower() and not any(r.id == n.id for r in results):
             results.append(
-                MeetingNoteSearchResult(
-                    id=n.id, title=n.title, date=n.date, snippet=""
-                )
+                MeetingNoteSearchResult(id=n.id, title=n.title, date=n.date, snippet="")
             )
     return results
 
@@ -1049,9 +1042,7 @@ def list_meeting_templates():
     templates = []
     for f in sorted(MEETING_TEMPLATES_DIR.glob("*.md")):
         templates.append(
-            MeetingTemplateOut(
-                name=f.stem, content=f.read_text(encoding="utf-8")
-            )
+            MeetingTemplateOut(name=f.stem, content=f.read_text(encoding="utf-8"))
         )
     return templates
 
