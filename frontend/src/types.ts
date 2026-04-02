@@ -55,3 +55,41 @@ export interface ScheduleStatus {
   chain_hours: number
   status: 'behind' | 'warning'
 }
+
+export interface MeetingNote {
+  id: number
+  title: string
+  date: string
+  filename: string
+  content: string
+  created_at: string
+  updated_at: string
+  attendee_ids: number[]
+  attendee_names: string[]
+  project_ids: number[]
+  project_names: string[]
+  todo_ids: number[]
+  todo_titles: string[]
+}
+
+export interface MeetingNoteSummary {
+  id: number
+  title: string
+  date: string
+  created_at: string
+  updated_at: string
+  attendee_names: string[]
+  project_names: string[]
+}
+
+export interface MeetingTemplate {
+  name: string
+  content: string
+}
+
+export interface MeetingNoteSearchResult {
+  id: number
+  title: string
+  date: string
+  snippet: string
+}

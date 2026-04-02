@@ -21,6 +21,44 @@ html.dark body {
   background-color: #020617;
 }
 
+/* Restore list styles inside the markdown editor preview */
+.wmde-markdown ul,
+.wmde-markdown ol {
+  padding-left: 2em;
+}
+.wmde-markdown ul {
+  list-style-type: disc;
+}
+.wmde-markdown ul ul {
+  list-style-type: circle;
+}
+.wmde-markdown ul ul ul {
+  list-style-type: square;
+}
+.wmde-markdown ol {
+  list-style-type: decimal;
+}
+.wmde-markdown li {
+  margin-top: 0.25em;
+  margin-bottom: 0.25em;
+}
+.wmde-markdown .task-list-item {
+  list-style: none;
+}
+.wmde-markdown .task-list-item input[type="checkbox"] {
+  appearance: auto;
+  width: 14px;
+  height: 14px;
+  margin-right: 0.4em;
+  vertical-align: middle;
+  position: relative;
+  top: -1px;
+}
+.wmde-markdown ul.contains-task-list {
+  list-style: none;
+  padding-left: 1.2em;
+}
+
 @keyframes fadeInOut {
   0% { opacity: 0; transform: translateY(-4px); }
   10% { opacity: 1; transform: translateY(0); }

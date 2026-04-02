@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { NavLink, Route, Routes, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, CheckSquare, FolderKanban, Users, CheckCircle2, Crosshair, Settings, ChevronsLeft, ChevronsRight } from 'lucide-react'
+import { LayoutDashboard, CheckSquare, FolderKanban, Users, CheckCircle2, Crosshair, Settings, ChevronsLeft, ChevronsRight, FileText } from 'lucide-react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { updateTodo } from './api'
 import { useResizableSidebar } from './hooks/useResizableSidebar'
@@ -12,6 +12,8 @@ import TodoDetailPage from './pages/TodoDetailPage'
 import RecentlyDonePage from './pages/RecentlyDonePage'
 import FocusPage from './pages/FocusPage'
 import SettingsPage from './pages/SettingsPage'
+import MeetingNotesPage from './pages/MeetingNotesPage'
+import MeetingNoteDetailPage from './pages/MeetingNoteDetailPage'
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
@@ -20,6 +22,7 @@ const navItems = [
   { to: '/projects', label: 'Projects', icon: FolderKanban, end: false },
   { to: '/people', label: 'People', icon: Users, end: false },
   { to: '/done', label: 'Recently Done', icon: CheckCircle2, end: false },
+  { to: '/meeting-notes', label: 'Meetings', icon: FileText, end: false },
 ]
 
 export default function App() {
@@ -162,6 +165,8 @@ export default function App() {
           <Route path="/projects" element={<ProjectsPage onOpenTodo={(id) => navigate(`/todos/${id}`)} />} />
           <Route path="/people" element={<PeoplePage onOpenTodo={(id) => navigate(`/todos/${id}`)} />} />
           <Route path="/done" element={<RecentlyDonePage />} />
+          <Route path="/meeting-notes" element={<MeetingNotesPage />} />
+          <Route path="/meeting-notes/:id" element={<MeetingNoteDetailPage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Routes>
       </main>

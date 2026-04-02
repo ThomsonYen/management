@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { Person, Project, ProjectTree, Todo, SubTodo, ScheduleStatus } from './types'
+import type { Person, Project, ProjectTree, Todo, SubTodo, ScheduleStatus, MeetingNote, MeetingNoteSummary, MeetingTemplate, MeetingNoteSearchResult } from './types'
 
 const api = axios.create({
   baseURL: '/api',
@@ -141,3 +141,50 @@ export const deleteMustDoItem = (id: number): Promise<void> =>
 
 export const fetchReminders = (): Promise<ScheduleStatus[]> =>
   api.get('/schedule/reminders').then((r) => r.data)
+
+// ─── Meeting Notes ──────────────────────────────────────────────────────────
+
+export interface MeetingNoteFilters {
+  person_id?: number
+  project_id?: number
+  todo_id?: number
+  date_from?: string
+  date_to?: string
+}
+
+export const fetchMeetingNotes = (filters?: MeetingNoteFilters): Promise<MeetingNoteSummary[]> =>
+  api.get('/meeting-notes', { params: filters }).then((r) => r.data)
+
+export const fetchMeetingNote = (id: number): Promise<MeetingNote> =>
+  api.get(`/meeting-notes/${id}`).then((r) => r.data)
+
+export const createMeetingNote = (data: {
+  title: string
+  date: string
+  content?: string
+  attendee_ids?: number[]
+  project_ids?: number[]
+  todo_ids?: number[]
+  template?: string
+}): Promise<MeetingNote> => api.post('/meeting-notes', data).then((r) => r.data)
+
+export const updateMeetingNote = (
+  id: number,
+  data: {
+    title?: string
+    date?: string
+    content?: string
+    attendee_ids?: number[]
+    project_ids?: number[]
+    todo_ids?: number[]
+  },
+): Promise<MeetingNote> => api.put(`/meeting-notes/${id}`, data).then((r) => r.data)
+
+export const deleteMeetingNote = (id: number): Promise<void> =>
+  api.delete(`/meeting-notes/${id}`).then((r) => r.data)
+
+export const searchMeetingNotes = (q: string): Promise<MeetingNoteSearchResult[]> =>
+  api.get('/meeting-notes/search', { params: { q } }).then((r) => r.data)
+
+export const fetchMeetingTemplates = (): Promise<MeetingTemplate[]> =>
+  api.get('/meeting-templates').then((r) => r.data)

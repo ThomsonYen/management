@@ -1,5 +1,8 @@
 import math
+import re
+import unicodedata
 from datetime import date, datetime, timezone
+from pathlib import Path
 from typing import List, Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Query
@@ -22,6 +25,11 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import DeclarativeBase, Session, relationship, sessionmaker
 
+MEETING_NOTES_DIR = Path(__file__).parent / "meeting_notes"
+MEETING_TEMPLATES_DIR = Path(__file__).parent / "meeting_templates"
+MEETING_NOTES_DIR.mkdir(exist_ok=True)
+MEETING_TEMPLATES_DIR.mkdir(exist_ok=True)
+
 DATABASE_URL = "sqlite:///./management.db"
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -37,6 +45,29 @@ todo_blockers = Table(
     Base.metadata,
     Column("todo_id", Integer, ForeignKey("todos.id"), primary_key=True),
     Column("blocker_id", Integer, ForeignKey("todos.id"), primary_key=True),
+)
+
+
+# Many-to-many: meeting notes associations
+meeting_note_attendees = Table(
+    "meeting_note_attendees",
+    Base.metadata,
+    Column("meeting_note_id", Integer, ForeignKey("meeting_notes.id"), primary_key=True),
+    Column("person_id", Integer, ForeignKey("persons.id"), primary_key=True),
+)
+
+meeting_note_projects = Table(
+    "meeting_note_projects",
+    Base.metadata,
+    Column("meeting_note_id", Integer, ForeignKey("meeting_notes.id"), primary_key=True),
+    Column("project_id", Integer, ForeignKey("projects.id"), primary_key=True),
+)
+
+meeting_note_todos = Table(
+    "meeting_note_todos",
+    Base.metadata,
+    Column("meeting_note_id", Integer, ForeignKey("meeting_notes.id"), primary_key=True),
+    Column("todo_id", Integer, ForeignKey("todos.id"), primary_key=True),
 )
 
 
@@ -114,6 +145,19 @@ class MustDoItem(Base):
     done = Column(Boolean, default=False)
     order = Column(Integer, default=0)
     todo = relationship("Todo")
+
+
+class MeetingNote(Base):
+    __tablename__ = "meeting_notes"
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String, nullable=False)
+    date = Column(String, nullable=False)  # YYYY-MM-DD
+    filename = Column(String, nullable=False, unique=True)
+    created_at = Column(String, default=lambda: datetime.now(timezone.utc).isoformat())
+    updated_at = Column(String, default=lambda: datetime.now(timezone.utc).isoformat())
+    attendees = relationship("Person", secondary=meeting_note_attendees)
+    projects = relationship("Project", secondary=meeting_note_projects)
+    todos = relationship("Todo", secondary=meeting_note_todos)
 
 
 Base.metadata.create_all(bind=engine)
@@ -299,6 +343,65 @@ class MustDoItemOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class MeetingNoteCreate(BaseModel):
+    title: str
+    date: str
+    content: str = ""
+    attendee_ids: List[int] = []
+    project_ids: List[int] = []
+    todo_ids: List[int] = []
+    template: Optional[str] = None
+
+
+class MeetingNoteUpdate(BaseModel):
+    title: Optional[str] = None
+    date: Optional[str] = None
+    content: Optional[str] = None
+    attendee_ids: Optional[List[int]] = None
+    project_ids: Optional[List[int]] = None
+    todo_ids: Optional[List[int]] = None
+
+
+class MeetingNoteOut(BaseModel):
+    id: int
+    title: str
+    date: str
+    filename: str
+    content: str
+    created_at: str
+    updated_at: str
+    attendee_ids: List[int] = []
+    attendee_names: List[str] = []
+    project_ids: List[int] = []
+    project_names: List[str] = []
+    todo_ids: List[int] = []
+    todo_titles: List[str] = []
+    model_config = {"from_attributes": True}
+
+
+class MeetingNoteSummary(BaseModel):
+    id: int
+    title: str
+    date: str
+    created_at: str
+    updated_at: str
+    attendee_names: List[str] = []
+    project_names: List[str] = []
+    model_config = {"from_attributes": True}
+
+
+class MeetingTemplateOut(BaseModel):
+    name: str
+    content: str
+
+
+class MeetingNoteSearchResult(BaseModel):
+    id: int
+    title: str
+    date: str
+    snippet: str
+
+
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
 
@@ -334,6 +437,54 @@ def project_to_tree(p: Project) -> ProjectTreeOut:
         parent_id=p.parent_id,
         deadline=p.deadline,
         subprojects=[project_to_tree(sp) for sp in p.subprojects],
+    )
+
+
+def _slugify(text: str) -> str:
+    text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii")
+    text = re.sub(r"[^\w\s-]", "", text.lower())
+    return re.sub(r"[-\s]+", "_", text).strip("_")[:60]
+
+
+def _read_note_content(filename: str) -> str:
+    path = MEETING_NOTES_DIR / filename
+    if path.exists():
+        return path.read_text(encoding="utf-8")
+    return ""
+
+
+def _write_note_content(filename: str, content: str) -> None:
+    path = MEETING_NOTES_DIR / filename
+    path.write_text(content, encoding="utf-8")
+
+
+def meeting_note_to_out(n: MeetingNote) -> MeetingNoteOut:
+    return MeetingNoteOut(
+        id=n.id,
+        title=n.title,
+        date=n.date,
+        filename=n.filename,
+        content=_read_note_content(n.filename),
+        created_at=n.created_at,
+        updated_at=n.updated_at,
+        attendee_ids=[p.id for p in n.attendees],
+        attendee_names=[p.name for p in n.attendees],
+        project_ids=[p.id for p in n.projects],
+        project_names=[p.name for p in n.projects],
+        todo_ids=[t.id for t in n.todos],
+        todo_titles=[t.title for t in n.todos],
+    )
+
+
+def meeting_note_to_summary(n: MeetingNote) -> MeetingNoteSummary:
+    return MeetingNoteSummary(
+        id=n.id,
+        title=n.title,
+        date=n.date,
+        created_at=n.created_at,
+        updated_at=n.updated_at,
+        attendee_names=[p.name for p in n.attendees],
+        project_names=[p.name for p in n.projects],
     )
 
 
@@ -695,3 +846,167 @@ def schedule_reminders(db: Session = Depends(get_db)):
         )
     results.sort(key=lambda x: (x.status == "warning", x.available_hours))
     return results
+
+
+# ─── Meeting Notes ──────────────────────────────────────────────────────────
+
+
+@app.get("/meeting-notes/search", response_model=List[MeetingNoteSearchResult])
+def search_meeting_notes(q: str = Query(..., min_length=1), db: Session = Depends(get_db)):
+    q_lower = q.lower()
+    results = []
+    notes = db.query(MeetingNote).order_by(MeetingNote.date.desc()).all()
+    for n in notes:
+        content = _read_note_content(n.filename)
+        lines = content.splitlines()
+        for i, line in enumerate(lines):
+            if q_lower in line.lower():
+                start = max(0, i - 1)
+                end = min(len(lines), i + 2)
+                snippet = "\n".join(lines[start:end])
+                results.append(
+                    MeetingNoteSearchResult(
+                        id=n.id, title=n.title, date=n.date, snippet=snippet
+                    )
+                )
+                break  # one match per note
+        # also match title
+        if q_lower in n.title.lower() and not any(r.id == n.id for r in results):
+            results.append(
+                MeetingNoteSearchResult(
+                    id=n.id, title=n.title, date=n.date, snippet=""
+                )
+            )
+    return results
+
+
+@app.get("/meeting-notes", response_model=List[MeetingNoteSummary])
+def list_meeting_notes(
+    person_id: Optional[int] = Query(None),
+    project_id: Optional[int] = Query(None),
+    todo_id: Optional[int] = Query(None),
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    q = db.query(MeetingNote)
+    if person_id is not None:
+        q = q.filter(MeetingNote.attendees.any(Person.id == person_id))
+    if project_id is not None:
+        q = q.filter(MeetingNote.projects.any(Project.id == project_id))
+    if todo_id is not None:
+        q = q.filter(MeetingNote.todos.any(Todo.id == todo_id))
+    if date_from is not None:
+        q = q.filter(MeetingNote.date >= date_from)
+    if date_to is not None:
+        q = q.filter(MeetingNote.date <= date_to)
+    notes = q.order_by(MeetingNote.date.desc()).all()
+    return [meeting_note_to_summary(n) for n in notes]
+
+
+@app.get("/meeting-notes/{note_id}", response_model=MeetingNoteOut)
+def get_meeting_note(note_id: int, db: Session = Depends(get_db)):
+    n = db.query(MeetingNote).get(note_id)
+    if not n:
+        raise HTTPException(404, "Meeting note not found")
+    return meeting_note_to_out(n)
+
+
+@app.post("/meeting-notes", response_model=MeetingNoteOut)
+def create_meeting_note(data: MeetingNoteCreate, db: Session = Depends(get_db)):
+    # Determine initial content
+    content = data.content
+    if not content and data.template:
+        tmpl_path = MEETING_TEMPLATES_DIR / f"{data.template}.md"
+        if tmpl_path.exists():
+            content = tmpl_path.read_text(encoding="utf-8")
+
+    # Create DB record with placeholder filename
+    n = MeetingNote(
+        title=data.title,
+        date=data.date,
+        filename="__placeholder__",
+    )
+    if data.attendee_ids:
+        n.attendees = db.query(Person).filter(Person.id.in_(data.attendee_ids)).all()
+    if data.project_ids:
+        n.projects = db.query(Project).filter(Project.id.in_(data.project_ids)).all()
+    if data.todo_ids:
+        n.todos = db.query(Todo).filter(Todo.id.in_(data.todo_ids)).all()
+    db.add(n)
+    db.flush()  # get the id
+
+    # Generate unique filename with id
+    slug = _slugify(data.title) or "untitled"
+    n.filename = f"{data.date}_{slug}_{n.id}.md"
+    _write_note_content(n.filename, content or "")
+    db.commit()
+    db.refresh(n)
+    return meeting_note_to_out(n)
+
+
+@app.put("/meeting-notes/{note_id}", response_model=MeetingNoteOut)
+def update_meeting_note(
+    note_id: int, data: MeetingNoteUpdate, db: Session = Depends(get_db)
+):
+    n = db.query(MeetingNote).get(note_id)
+    if not n:
+        raise HTTPException(404, "Meeting note not found")
+    update_data = data.model_dump(exclude_unset=True)
+    content = update_data.pop("content", None)
+    attendee_ids = update_data.pop("attendee_ids", None)
+    project_ids = update_data.pop("project_ids", None)
+    todo_ids = update_data.pop("todo_ids", None)
+
+    for k, v in update_data.items():
+        setattr(n, k, v)
+    if attendee_ids is not None:
+        n.attendees = db.query(Person).filter(Person.id.in_(attendee_ids)).all()
+    if project_ids is not None:
+        n.projects = db.query(Project).filter(Project.id.in_(project_ids)).all()
+    if todo_ids is not None:
+        n.todos = db.query(Todo).filter(Todo.id.in_(todo_ids)).all()
+    if content is not None:
+        _write_note_content(n.filename, content)
+
+    n.updated_at = datetime.now(timezone.utc).isoformat()
+    db.commit()
+    db.refresh(n)
+    return meeting_note_to_out(n)
+
+
+@app.delete("/meeting-notes/{note_id}")
+def delete_meeting_note(note_id: int, db: Session = Depends(get_db)):
+    n = db.query(MeetingNote).get(note_id)
+    if not n:
+        raise HTTPException(404, "Meeting note not found")
+    # Remove the file
+    path = MEETING_NOTES_DIR / n.filename
+    if path.exists():
+        path.unlink()
+    db.delete(n)
+    db.commit()
+    return {"ok": True}
+
+
+# ─── Meeting Templates ─────────────────────────────────────────────────────
+
+
+@app.get("/meeting-templates", response_model=List[MeetingTemplateOut])
+def list_meeting_templates():
+    templates = []
+    for f in sorted(MEETING_TEMPLATES_DIR.glob("*.md")):
+        templates.append(
+            MeetingTemplateOut(
+                name=f.stem, content=f.read_text(encoding="utf-8")
+            )
+        )
+    return templates
+
+
+@app.get("/meeting-templates/{name}", response_model=MeetingTemplateOut)
+def get_meeting_template(name: str):
+    path = MEETING_TEMPLATES_DIR / f"{name}.md"
+    if not path.exists():
+        raise HTTPException(404, "Template not found")
+    return MeetingTemplateOut(name=name, content=path.read_text(encoding="utf-8"))
