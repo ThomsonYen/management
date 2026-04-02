@@ -56,6 +56,12 @@ export interface ScheduleStatus {
   status: 'behind' | 'warning'
 }
 
+export interface AudioFileInfo {
+  filename: string
+  size_bytes: number
+  created_at: string
+}
+
 export interface MeetingNote {
   id: number
   title: string
@@ -70,6 +76,8 @@ export interface MeetingNote {
   project_names: string[]
   todo_ids: number[]
   todo_titles: string[]
+  transcript: string | null
+  audio_files: AudioFileInfo[]
 }
 
 export interface MeetingNoteSummary {

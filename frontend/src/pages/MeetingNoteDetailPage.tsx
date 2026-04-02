@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import MDEditor from '@uiw/react-md-editor'
 import type { Root, ListItem, Paragraph, Text } from 'mdast'
 import { visit } from 'unist-util-visit'
-import { ArrowLeft, Trash2, Users, FolderKanban, CheckSquare, X } from 'lucide-react'
+import { ArrowLeft, Trash2, Users, FolderKanban, CheckSquare, X, Mic } from 'lucide-react'
 import {
   fetchMeetingNote,
   updateMeetingNote,
@@ -14,6 +14,9 @@ import {
   fetchTodos,
 } from '../api'
 import { useTheme } from '../ThemeContext'
+import AudioRecorder from '../components/AudioRecorder'
+import AudioFileList from '../components/AudioFileList'
+import TranscriptEditor from '../components/TranscriptEditor'
 
 /**
  * remark plugin: remark-gfm won't parse `- [ ]` (no text after) as a task list item.
@@ -199,7 +202,7 @@ export default function MeetingNoteDetailPage() {
           </button>
         </div>
 
-        <div className="flex-1 px-6 pb-6" data-color-mode={theme}>
+        <div className="flex-1 px-6 pb-3" data-color-mode={theme}>
           <MDEditor
             value={content}
             onChange={handleContentChange}
@@ -208,6 +211,15 @@ export default function MeetingNoteDetailPage() {
             preview="live"
             visibleDragbar={false}
             previewOptions={{ remarkPlugins: [remarkFixEmptyTasks] }}
+          />
+        </div>
+
+        <div className="px-6 pb-6">
+          <TranscriptEditor
+            noteId={noteId}
+            transcript={note?.transcript ?? null}
+            hasAudio={(note?.audio_files ?? []).length > 0}
+            onSave={(t) => saveNote({ transcript: t })}
           />
         </div>
       </div>
@@ -288,6 +300,15 @@ export default function MeetingNoteDetailPage() {
               saveField('todo_ids', next)
             }}
           />
+        </div>
+
+        {/* Audio Recording */}
+        <div>
+          <h3 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+            <Mic size={12} /> Audio
+          </h3>
+          <AudioRecorder noteId={noteId} />
+          <AudioFileList noteId={noteId} files={note?.audio_files ?? []} />
         </div>
       </div>
     </div>

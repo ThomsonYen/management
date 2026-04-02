@@ -1,11 +1,15 @@
 import math
+import shutil
 import uuid
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import List, Optional
 
-from fastapi import Depends, FastAPI, HTTPException, Query
+import yaml
+from fastapi import Depends, FastAPI, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from openai import OpenAI
 from pydantic import BaseModel
 from sqlalchemy import (
     Boolean,
@@ -24,10 +28,21 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import DeclarativeBase, Session, relationship, sessionmaker
 
+PROJECT_CONFIG_PATH = Path(__file__).parent.parent / "project_config.yaml"
+with open(PROJECT_CONFIG_PATH, encoding="utf-8") as _f:
+    PROJECT_CONFIG = yaml.safe_load(_f) or {}
+
+_openai_key = (PROJECT_CONFIG.get("keys") or {}).get("openai_key", "")
+openai_client: Optional[OpenAI] = OpenAI(api_key=_openai_key) if _openai_key else None
+
 MEETING_NOTES_DIR = Path(__file__).parent / "meeting_notes"
 MEETING_TEMPLATES_DIR = Path(__file__).parent / "meeting_templates"
+MEETING_AUDIO_DIR = Path(__file__).parent / "meeting_audio"
+MEETING_TRANSCRIPTS_DIR = Path(__file__).parent / "meeting_transcripts"
 MEETING_NOTES_DIR.mkdir(exist_ok=True)
 MEETING_TEMPLATES_DIR.mkdir(exist_ok=True)
+MEETING_AUDIO_DIR.mkdir(exist_ok=True)
+MEETING_TRANSCRIPTS_DIR.mkdir(exist_ok=True)
 
 DATABASE_URL = "sqlite:///./management.db"
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
@@ -352,6 +367,13 @@ class MeetingNoteUpdate(BaseModel):
     attendee_ids: Optional[List[int]] = None
     project_ids: Optional[List[int]] = None
     todo_ids: Optional[List[int]] = None
+    transcript: Optional[str] = None
+
+
+class AudioFileInfo(BaseModel):
+    filename: str
+    size_bytes: int
+    created_at: str
 
 
 class MeetingNoteOut(BaseModel):
@@ -368,6 +390,8 @@ class MeetingNoteOut(BaseModel):
     project_names: List[str] = []
     todo_ids: List[int] = []
     todo_titles: List[str] = []
+    transcript: Optional[str] = None
+    audio_files: List[AudioFileInfo] = []
     model_config = {"from_attributes": True}
 
 
@@ -444,6 +468,38 @@ def _write_note_content(filename: str, content: str) -> None:
     path.write_text(content, encoding="utf-8")
 
 
+def _read_transcript(note_id: int) -> Optional[str]:
+    path = MEETING_TRANSCRIPTS_DIR / f"{note_id}.txt"
+    if path.exists():
+        return path.read_text(encoding="utf-8")
+    return None
+
+
+def _write_transcript(note_id: int, content: str) -> None:
+    path = MEETING_TRANSCRIPTS_DIR / f"{note_id}.txt"
+    path.write_text(content, encoding="utf-8")
+
+
+def _list_audio_files(note_id: int) -> List[AudioFileInfo]:
+    audio_dir = MEETING_AUDIO_DIR / str(note_id)
+    if not audio_dir.exists():
+        return []
+    files = []
+    for f in sorted(audio_dir.iterdir()):
+        if f.is_file():
+            stat = f.stat()
+            files.append(
+                AudioFileInfo(
+                    filename=f.name,
+                    size_bytes=stat.st_size,
+                    created_at=datetime.fromtimestamp(
+                        stat.st_ctime, tz=timezone.utc
+                    ).isoformat(),
+                )
+            )
+    return files
+
+
 def meeting_note_to_out(n: MeetingNote) -> MeetingNoteOut:
     return MeetingNoteOut(
         id=n.id,
@@ -459,6 +515,8 @@ def meeting_note_to_out(n: MeetingNote) -> MeetingNoteOut:
         project_names=[p.name for p in n.projects],
         todo_ids=[t.id for t in n.todos],
         todo_titles=[t.title for t in n.todos],
+        transcript=_read_transcript(n.id),
+        audio_files=_list_audio_files(n.id),
     )
 
 
@@ -950,6 +1008,7 @@ def update_meeting_note(
     attendee_ids = update_data.pop("attendee_ids", None)
     project_ids = update_data.pop("project_ids", None)
     todo_ids = update_data.pop("todo_ids", None)
+    transcript = update_data.pop("transcript", None)
 
     for k, v in update_data.items():
         setattr(n, k, v)
@@ -961,6 +1020,8 @@ def update_meeting_note(
         n.todos = db.query(Todo).filter(Todo.id.in_(todo_ids)).all()
     if content is not None:
         _write_note_content(n.filename, content)
+    if transcript is not None:
+        _write_transcript(n.id, transcript)
 
     n.updated_at = datetime.now(timezone.utc).isoformat()
     db.commit()
@@ -988,6 +1049,134 @@ def restore_meeting_note(note_id: int, db: Session = Depends(get_db)):
     n.updated_at = datetime.now(timezone.utc).isoformat()
     db.commit()
     return {"ok": True}
+
+
+# ─── Meeting Note Audio ────────────────────────────────────────────────────
+
+
+@app.post("/meeting-notes/{note_id}/audio")
+async def upload_audio(
+    note_id: int, file: UploadFile, db: Session = Depends(get_db)
+):
+    n = db.query(MeetingNote).get(note_id)
+    if not n:
+        raise HTTPException(404, "Meeting note not found")
+    audio_dir = MEETING_AUDIO_DIR / str(note_id)
+    audio_dir.mkdir(exist_ok=True)
+    ext = Path(file.filename or "recording.webm").suffix or ".webm"
+    dest = audio_dir / f"{uuid.uuid4().hex}{ext}"
+    with open(dest, "wb") as f:
+        while chunk := await file.read(1024 * 1024):
+            f.write(chunk)
+    stat = dest.stat()
+    return AudioFileInfo(
+        filename=dest.name,
+        size_bytes=stat.st_size,
+        created_at=datetime.fromtimestamp(stat.st_ctime, tz=timezone.utc).isoformat(),
+    )
+
+
+@app.get(
+    "/meeting-notes/{note_id}/audio", response_model=List[AudioFileInfo]
+)
+def list_audio(note_id: int, db: Session = Depends(get_db)):
+    n = db.query(MeetingNote).get(note_id)
+    if not n:
+        raise HTTPException(404, "Meeting note not found")
+    return _list_audio_files(note_id)
+
+
+@app.delete("/meeting-notes/{note_id}/audio/{filename}")
+def delete_audio(note_id: int, filename: str, db: Session = Depends(get_db)):
+    n = db.query(MeetingNote).get(note_id)
+    if not n:
+        raise HTTPException(404, "Meeting note not found")
+    path = MEETING_AUDIO_DIR / str(note_id) / filename
+    if (
+        not path.exists()
+        or not path.resolve().is_relative_to(MEETING_AUDIO_DIR.resolve())
+    ):
+        raise HTTPException(404, "Audio file not found")
+    path.unlink()
+    # Clean up empty directory
+    parent = path.parent
+    if parent.exists() and not any(parent.iterdir()):
+        parent.rmdir()
+    return {"ok": True}
+
+
+@app.get("/meeting-notes/{note_id}/audio/{filename}/download")
+def download_audio(
+    note_id: int, filename: str, db: Session = Depends(get_db)
+):
+    n = db.query(MeetingNote).get(note_id)
+    if not n:
+        raise HTTPException(404, "Meeting note not found")
+    path = MEETING_AUDIO_DIR / str(note_id) / filename
+    if (
+        not path.exists()
+        or not path.resolve().is_relative_to(MEETING_AUDIO_DIR.resolve())
+    ):
+        raise HTTPException(404, "Audio file not found")
+    return FileResponse(path, media_type="audio/webm")
+
+
+@app.post("/meeting-notes/{note_id}/transcribe")
+async def transcribe_meeting_note(
+    note_id: int,
+    filename: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    if not openai_client:
+        raise HTTPException(
+            503,
+            "OpenAI API key not configured. Set keys.openai_key in project_config.yaml.",
+        )
+    n = db.query(MeetingNote).get(note_id)
+    if not n:
+        raise HTTPException(404, "Meeting note not found")
+
+    # Collect audio files to transcribe
+    audio_dir = MEETING_AUDIO_DIR / str(note_id)
+    if filename:
+        target = audio_dir / filename
+        if (
+            not target.exists()
+            or not target.resolve().is_relative_to(MEETING_AUDIO_DIR.resolve())
+        ):
+            raise HTTPException(404, "Audio file not found")
+        audio_paths = [target]
+    else:
+        if not audio_dir.exists():
+            raise HTTPException(404, "No audio files for this meeting note")
+        audio_paths = sorted(
+            f for f in audio_dir.iterdir() if f.is_file()
+        )
+        if not audio_paths:
+            raise HTTPException(404, "No audio files for this meeting note")
+
+    # Transcribe each file and concatenate
+    segments = []
+    try:
+        for audio_path in audio_paths:
+            with open(audio_path, "rb") as af:
+                result = openai_client.audio.transcriptions.create(
+                    model="whisper-1",
+                    file=af,
+                )
+            segments.append(result.text)
+    except Exception:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(500, f"Transcription failed: {traceback.format_exc()}")
+
+    transcript = "\n\n".join(segments)
+    _write_transcript(note_id, transcript)
+
+    n.updated_at = datetime.now(timezone.utc).isoformat()
+    db.commit()
+
+    return {"transcript": transcript}
 
 
 @app.get("/meeting-notes-hidden", response_model=List[MeetingNoteSummary])

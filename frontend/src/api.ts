@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { Person, Project, ProjectTree, Todo, SubTodo, ScheduleStatus, MeetingNote, MeetingNoteSummary, MeetingTemplate, MeetingNoteSearchResult } from './types'
+import type { Person, Project, ProjectTree, Todo, SubTodo, ScheduleStatus, MeetingNote, MeetingNoteSummary, MeetingTemplate, MeetingNoteSearchResult, AudioFileInfo } from './types'
 
 const api = axios.create({
   baseURL: '/api',
@@ -177,6 +177,7 @@ export const updateMeetingNote = (
     attendee_ids?: number[]
     project_ids?: number[]
     todo_ids?: number[]
+    transcript?: string
   },
 ): Promise<MeetingNote> => api.put(`/meeting-notes/${id}`, data).then((r) => r.data)
 
@@ -197,3 +198,20 @@ export const searchMeetingNotes = (q: string): Promise<MeetingNoteSearchResult[]
 
 export const fetchMeetingTemplates = (): Promise<MeetingTemplate[]> =>
   api.get('/meeting-templates').then((r) => r.data)
+
+// ─── Meeting Note Audio ────────────────────────────────────────────────────
+
+export const uploadAudio = (noteId: number, file: Blob, filename?: string): Promise<AudioFileInfo> => {
+  const formData = new FormData()
+  formData.append('file', file, filename || 'recording.webm')
+  return api.post(`/meeting-notes/${noteId}/audio`, formData).then((r) => r.data)
+}
+
+export const deleteAudio = (noteId: number, filename: string): Promise<void> =>
+  api.delete(`/meeting-notes/${noteId}/audio/${filename}`).then((r) => r.data)
+
+export const getAudioDownloadUrl = (noteId: number, filename: string): string =>
+  `/api/meeting-notes/${noteId}/audio/${filename}/download`
+
+export const transcribeMeetingNote = (noteId: number): Promise<{ transcript: string }> =>
+  api.post(`/meeting-notes/${noteId}/transcribe`).then((r) => r.data)

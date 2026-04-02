@@ -20,12 +20,20 @@ function getFrontendConfig() {
   return yaml.load(content) as { todo_done_fade_seconds: number; unfocus_fade_seconds: number }
 }
 
+const keyPath = path.resolve(__dirname, 'localhost-key.pem')
+const certPath = path.resolve(__dirname, 'localhost.pem')
+const httpsConfig = fs.existsSync(keyPath) && fs.existsSync(certPath)
+  ? { key: fs.readFileSync(keyPath), cert: fs.readFileSync(certPath) }
+  : undefined
+
 export default defineConfig({
   plugins: [react()],
   define: {
     __FRONTEND_CONFIG__: JSON.stringify(getFrontendConfig()),
   },
   server: {
+    host: 'localhost',
+    ...(httpsConfig ? { https: httpsConfig } : {}),
     proxy: {
       '/api': {
         target: `http://localhost:${getBackendPort()}`,

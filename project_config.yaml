@@ -1,2 +1,5 @@
 backend:
   port: 8001
+
+whisper:
+  api_key: ""  # OpenAI API key for Whisper transcription
