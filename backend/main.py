@@ -1,5 +1,7 @@
+import io
 import math
 import shutil
+import tempfile
 import uuid
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -1121,6 +1123,25 @@ def download_audio(
     return FileResponse(path, media_type="audio/webm")
 
 
+def _transcribe_chunked(audio_path: Path, chunk_duration_ms: int = 10 * 60 * 1000) -> list[str]:
+    """Split an audio file into chunks and transcribe each one."""
+    from pydub import AudioSegment
+
+    audio = AudioSegment.from_file(audio_path)
+    chunks = [audio[i:i + chunk_duration_ms] for i in range(0, len(audio), chunk_duration_ms)]
+    results = []
+    for chunk in chunks:
+        with tempfile.NamedTemporaryFile(suffix=".mp3", delete=True) as tmp:
+            chunk.export(tmp.name, format="mp3")
+            with open(tmp.name, "rb") as f:
+                result = openai_client.audio.transcriptions.create(
+                    model="whisper-1",
+                    file=f,
+                )
+            results.append(result.text)
+    return results
+
+
 @app.post("/meeting-notes/{note_id}/transcribe")
 async def transcribe_meeting_note(
     note_id: int,
@@ -1159,12 +1180,16 @@ async def transcribe_meeting_note(
     segments = []
     try:
         for audio_path in audio_paths:
-            with open(audio_path, "rb") as af:
-                result = openai_client.audio.transcriptions.create(
-                    model="whisper-1",
-                    file=af,
-                )
-            segments.append(result.text)
+            file_size = audio_path.stat().st_size
+            if file_size > 25 * 1024 * 1024:  # 25MB Whisper limit
+                segments.extend(_transcribe_chunked(audio_path))
+            else:
+                with open(audio_path, "rb") as af:
+                    result = openai_client.audio.transcriptions.create(
+                        model="whisper-1",
+                        file=af,
+                    )
+                segments.append(result.text)
     except Exception:
         import traceback
         traceback.print_exc()

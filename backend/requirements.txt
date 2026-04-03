@@ -1,5 +1,6 @@
 annotated-doc==0.0.4
 annotated-types==0.7.0
+audioop-lts==0.2.1
 anyio==4.12.1
 click==8.3.1
 fastapi==0.135.1
@@ -9,6 +10,7 @@ idna==3.11
 openai==1.82.0
 pydantic==2.12.5
 pydantic-core==2.41.5
+pydub==0.25.1
 python-dotenv==1.2.2
 python-multipart==0.0.20
 pyyaml==6.0.3
