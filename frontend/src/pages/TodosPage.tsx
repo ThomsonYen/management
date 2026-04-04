@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { createTodo, fetchTodos, fetchPersons, fetchProjects } from '../api'
+import { createTodo, fetchTodos, fetchPersons, fetchProjects, updateTodo } from '../api'
 import type { Todo, Person, Project } from '../types'
 import TodoCard from '../components/TodoCard'
 import TodoModal from '../components/TodoModal'
@@ -9,6 +9,8 @@ import BulkActionBar from '../components/BulkActionBar'
 import { useTodoDefaults } from '../TodoDefaultsContext'
 import { useTimezone } from '../TimezoneContext'
 import { getTodayString } from '../dateUtils'
+import { useHotkeys } from '../HotkeysContext'
+import { useHotkey } from '../hooks/useHotkey'
 
 const STATUS_OPTIONS = ['', 'todo', 'in-progress', 'blocked']
 const IMPORTANCE_OPTIONS = ['', 'low', 'medium', 'high', 'critical']
@@ -86,6 +88,8 @@ export default function TodosPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
   const [showModal, setShowModal] = useState(false)
   const [editingTodo, setEditingTodo] = useState<Todo | null>(null)
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+  const queryClient = useQueryClient()
+  const { bindings } = useHotkeys()
 
   const toggleSelect = (id: number) => {
     setSelectedIds((prev) => {
@@ -118,6 +122,51 @@ export default function TodosPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
   const filtered = selectedImportance
     ? todos.filter((t) => t.importance === selectedImportance)
     : todos
+
+  // --- Hotkeys ---
+  const markDoneMutation = useMutation({
+    mutationFn: (id: number) => updateTodo(id, { status: 'done' }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['todos'] }),
+  })
+  const toggleFocusMutation = useMutation({
+    mutationFn: ({ id, focused }: { id: number; focused: boolean }) => updateTodo(id, { is_focused: !focused }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['todos'] }),
+  })
+
+  // ⌘D — mark selected todos done
+  useHotkey(bindings.markDone, useCallback(() => {
+    if (selectedIds.size === 0) return
+    selectedIds.forEach((id) => markDoneMutation.mutate(id))
+    setSelectedIds(new Set())
+  }, [selectedIds, markDoneMutation]))
+
+  // ⌘F — toggle focus on selected todos
+  useHotkey(bindings.toggleFocus, useCallback(() => {
+    if (selectedIds.size === 0) return
+    selectedIds.forEach((id) => {
+      const todo = filtered.find((t) => t.id === id)
+      if (todo) toggleFocusMutation.mutate({ id, focused: todo.is_focused })
+    })
+  }, [selectedIds, filtered, toggleFocusMutation]))
+
+  // ⌘E — edit first selected todo
+  useHotkey(bindings.editTodo, useCallback(() => {
+    if (selectedIds.size !== 1) return
+    const id = [...selectedIds][0]
+    const todo = filtered.find((t) => t.id === id)
+    if (todo) { setEditingTodo(todo); setShowModal(true) }
+  }, [selectedIds, filtered]))
+
+  // ⌘A — select all visible todos
+  useHotkey(bindings.selectAll, useCallback(() => {
+    setSelectedIds(new Set(filtered.map((t) => t.id)))
+  }, [filtered]))
+
+  // Escape — clear selection or close modal
+  useHotkey(bindings.escape, useCallback(() => {
+    if (showModal) { setShowModal(false); setEditingTodo(null) }
+    else if (selectedIds.size > 0) setSelectedIds(new Set())
+  }, [showModal, selectedIds]), { skipInputCheck: true })
 
   const handleEdit = (todo: Todo) => {
     setEditingTodo(todo)

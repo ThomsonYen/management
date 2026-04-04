@@ -1,9 +1,14 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { NavLink, Route, Routes, useNavigate } from 'react-router-dom'
 import { LayoutDashboard, CheckSquare, FolderKanban, Users, CheckCircle2, Crosshair, Settings, ChevronsLeft, ChevronsRight, FileText } from 'lucide-react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { updateTodo } from './api'
+import { updateTodo, createMeetingNote } from './api'
 import { useResizableSidebar } from './hooks/useResizableSidebar'
+import { useHotkeys } from './HotkeysContext'
+import { useHotkey } from './hooks/useHotkey'
+import { useTheme } from './ThemeContext'
+import { useTimezone } from './TimezoneContext'
+import { getTodayString } from './dateUtils'
 import Dashboard from './pages/Dashboard'
 import TodosPage from './pages/TodosPage'
 import ProjectsPage from './pages/ProjectsPage'
@@ -14,6 +19,7 @@ import FocusPage from './pages/FocusPage'
 import SettingsPage from './pages/SettingsPage'
 import MeetingNotesPage from './pages/MeetingNotesPage'
 import MeetingNoteDetailPage from './pages/MeetingNoteDetailPage'
+import TodoModal from './components/TodoModal'
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
@@ -29,7 +35,46 @@ export default function App() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [dragOverFocus, setDragOverFocus] = useState(false)
+  const [showNewTodoModal, setShowNewTodoModal] = useState(false)
   const { width: sidebarWidth, collapsed: sidebarCollapsed, startResize, toggleCollapsed: toggleSidebar } = useResizableSidebar('sidebarWidth', 224)
+  const { bindings } = useHotkeys()
+  const { theme, setTheme } = useTheme()
+  const { timezone } = useTimezone()
+
+  // Sidebar toggle
+  const stableToggleSidebar = useCallback(() => toggleSidebar(), [toggleSidebar])
+  useHotkey(bindings.toggleMainSidebar, stableToggleSidebar)
+
+  // Navigation hotkeys
+  useHotkey(bindings.goToDashboard, useCallback(() => navigate('/'), [navigate]))
+  useHotkey(bindings.goToFocus, useCallback(() => navigate('/focus'), [navigate]))
+  useHotkey(bindings.goToTodos, useCallback(() => navigate('/todos'), [navigate]))
+  useHotkey(bindings.goToProjects, useCallback(() => navigate('/projects'), [navigate]))
+  useHotkey(bindings.goToPeople, useCallback(() => navigate('/people'), [navigate]))
+  useHotkey(bindings.goToMeetings, useCallback(() => navigate('/meeting-notes'), [navigate]))
+  useHotkey(bindings.goToDone, useCallback(() => navigate('/done'), [navigate]))
+
+  // Theme toggle
+  useHotkey(bindings.toggleTheme, useCallback(() => {
+    setTheme(theme === 'dark' ? 'light' : 'dark')
+  }, [theme, setTheme]))
+
+  // New todo (global)
+  useHotkey(bindings.newTodo, useCallback(() => setShowNewTodoModal(true), []))
+
+  // New meeting note (global)
+  const newMeetingNoteMutation = useMutation({
+    mutationFn: createMeetingNote,
+    onSuccess: (note) => {
+      queryClient.invalidateQueries({ queryKey: ['meeting-notes'] })
+      navigate(`/meeting-notes/${note.id}`)
+    },
+  })
+  useHotkey(bindings.newMeetingNote, useCallback(() => {
+    if (newMeetingNoteMutation.isPending) return
+    const todayStr = getTodayString(timezone)
+    newMeetingNoteMutation.mutate({ title: `Untitled-Meeting`, date: todayStr, template: 'default_meeting' })
+  }, [newMeetingNoteMutation, timezone]))
 
   const focusMutation = useMutation({
     mutationFn: (todoId: number) => updateTodo(todoId, { is_focused: true }),
@@ -170,6 +215,15 @@ export default function App() {
           <Route path="/settings" element={<SettingsPage />} />
         </Routes>
       </main>
+
+      {/* Global new todo modal */}
+      {showNewTodoModal && (
+        <TodoModal
+          todo={null}
+          onClose={() => setShowNewTodoModal(false)}
+          invalidateKeys={[['todos']]}
+        />
+      )}
     </div>
   )
 }

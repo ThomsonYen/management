@@ -1,10 +1,62 @@
+import { useState, useEffect, useRef } from 'react'
 import { Moon, Sun } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { useTheme } from '../ThemeContext'
 import { useTodoDefaults } from '../TodoDefaultsContext'
 import { useTimezone } from '../TimezoneContext'
 import { useMeetingNoteSort, type MeetingNoteSortField } from '../MeetingNoteSortContext'
+import { useHotkeys, formatHotkey, eventToBinding, type HotkeyBindings } from '../HotkeysContext'
 import { fetchPersons } from '../api'
+
+function HotkeyInput({ label, description, bindingKey }: { label: string; description: string; bindingKey: keyof HotkeyBindings }) {
+  const { bindings, setBinding } = useHotkeys()
+  const [recording, setRecording] = useState(false)
+  const buttonRef = useRef<HTMLButtonElement>(null)
+
+  useEffect(() => {
+    if (!recording) return
+    const handler = (e: KeyboardEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+      // Ignore bare modifier keys
+      if (['Meta', 'Control', 'Alt', 'Shift'].includes(e.key)) return
+      const binding = eventToBinding(e)
+      setBinding(bindingKey, binding)
+      setRecording(false)
+    }
+    const cancelOnClick = (e: MouseEvent) => {
+      if (buttonRef.current && !buttonRef.current.contains(e.target as Node)) {
+        setRecording(false)
+      }
+    }
+    document.addEventListener('keydown', handler, true)
+    document.addEventListener('mousedown', cancelOnClick)
+    return () => {
+      document.removeEventListener('keydown', handler, true)
+      document.removeEventListener('mousedown', cancelOnClick)
+    }
+  }, [recording, bindingKey, setBinding])
+
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <div>
+        <p className="text-sm text-slate-700 dark:text-slate-300">{label}</p>
+        <p className="text-xs text-slate-400 dark:text-slate-500">{description}</p>
+      </div>
+      <button
+        ref={buttonRef}
+        onClick={() => setRecording(true)}
+        className={`min-w-[120px] px-4 py-2 rounded-lg text-sm font-mono font-medium border transition-colors ${
+          recording
+            ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 ring-2 ring-indigo-300 dark:ring-indigo-700'
+            : 'border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:border-indigo-400 dark:hover:border-indigo-500'
+        }`}
+      >
+        {recording ? 'Press keys...' : formatHotkey(bindings[bindingKey])}
+      </button>
+    </div>
+  )
+}
 
 function getAvailableTimezones(): string[] {
   try {
@@ -33,6 +85,7 @@ export default function SettingsPage() {
   const { defaults, setDefaults } = useTodoDefaults()
   const { timezone, setTimezone } = useTimezone()
   const { sortBy, setSortBy } = useMeetingNoteSort()
+  const { resetToDefaults } = useHotkeys()
   const { data: persons = [] } = useQuery({ queryKey: ['persons'], queryFn: fetchPersons })
 
   const updateField = <K extends keyof typeof defaults>(key: K, value: (typeof defaults)[K]) => {
@@ -120,6 +173,87 @@ export default function SettingsPage() {
               <option value="updated_at">Last edited</option>
               <option value="created_at">Created</option>
             </select>
+          </div>
+        </div>
+
+        {/* Hotkeys */}
+        <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+          <div className="px-6 py-5">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Keyboard Shortcuts</h2>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+                  Click a shortcut to reassign it
+                </p>
+              </div>
+              <button
+                onClick={resetToDefaults}
+                className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+              >
+                Reset defaults
+              </button>
+            </div>
+            <div className="space-y-6">
+              {/* Navigation */}
+              <div>
+                <h3 className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-3">Navigation</h3>
+                <div className="space-y-3">
+                  <HotkeyInput label="Go to Dashboard" description="" bindingKey="goToDashboard" />
+                  <HotkeyInput label="Go to Focus" description="" bindingKey="goToFocus" />
+                  <HotkeyInput label="Go to Todos" description="" bindingKey="goToTodos" />
+                  <HotkeyInput label="Go to Projects" description="" bindingKey="goToProjects" />
+                  <HotkeyInput label="Go to People" description="" bindingKey="goToPeople" />
+                  <HotkeyInput label="Go to Meetings" description="" bindingKey="goToMeetings" />
+                  <HotkeyInput label="Go to Recently Done" description="" bindingKey="goToDone" />
+                </div>
+              </div>
+
+              {/* Sidebars */}
+              <div>
+                <h3 className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-3">Sidebars</h3>
+                <div className="space-y-3">
+                  <HotkeyInput label="Toggle main sidebar" description="Navigation sidebar" bindingKey="toggleMainSidebar" />
+                  <HotkeyInput label="Toggle secondary sidebar" description="Projects / People panel" bindingKey="toggleSecondarySidebar" />
+                </div>
+              </div>
+
+              {/* Creation */}
+              <div>
+                <h3 className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-3">Creation</h3>
+                <div className="space-y-3">
+                  <HotkeyInput label="New todo" description="Open new todo modal" bindingKey="newTodo" />
+                  <HotkeyInput label="New meeting note" description="Create and open a new note" bindingKey="newMeetingNote" />
+                </div>
+              </div>
+
+              {/* Todo Actions */}
+              <div>
+                <h3 className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-3">Todo Actions</h3>
+                <div className="space-y-3">
+                  <HotkeyInput label="Mark done" description="Mark selected todo(s) as done" bindingKey="markDone" />
+                  <HotkeyInput label="Toggle focus" description="Add/remove selected todo(s) from focus" bindingKey="toggleFocus" />
+                  <HotkeyInput label="Edit todo" description="Open edit modal for selected todo" bindingKey="editTodo" />
+                </div>
+              </div>
+
+              {/* View */}
+              <div>
+                <h3 className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-3">View</h3>
+                <div className="space-y-3">
+                  <HotkeyInput label="Toggle theme" description="Switch between light and dark mode" bindingKey="toggleTheme" />
+                  <HotkeyInput label="Focus search" description="Jump to search/filter input" bindingKey="focusSearch" />
+                </div>
+              </div>
+
+              {/* Selection */}
+              <div>
+                <h3 className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-3">Selection &amp; General</h3>
+                <div className="space-y-3">
+                  <HotkeyInput label="Select all" description="Select all visible todos" bindingKey="selectAll" />
+                  <HotkeyInput label="Escape" description="Close modal / clear selection / go back" bindingKey="escape" />
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 

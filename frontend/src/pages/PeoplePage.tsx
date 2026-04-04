@@ -1,6 +1,8 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useResizableSidebar } from '../hooks/useResizableSidebar'
+import { useHotkeys } from '../HotkeysContext'
+import { useHotkey } from '../hooks/useHotkey'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ChevronsLeft, ChevronsRight } from 'lucide-react'
 import { fetchPersons, fetchTodos, fetchReminders, createPerson, createTodo, deletePerson } from '../api'
@@ -79,6 +81,9 @@ function AddPersonModal({ onClose }: { onClose: () => void }) {
 export default function PeoplePage({ onOpenTodo }: { onOpenTodo: (id: number) => void }) {
   const queryClient = useQueryClient()
   const { width: panelWidth, collapsed: panelCollapsed, startResize: startPanelResize, toggleCollapsed: togglePanel } = useResizableSidebar('peoplePanelWidth', 256)
+  const { bindings } = useHotkeys()
+  const stableTogglePanel = useCallback(() => togglePanel(), [togglePanel])
+  useHotkey(bindings.toggleSecondarySidebar, stableTogglePanel)
   const [searchParams, setSearchParams] = useSearchParams()
   const selectedPersonId = searchParams.get('person') ? Number(searchParams.get('person')) : null
   const setSelectedPersonId = (id: number | null) =>

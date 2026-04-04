@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { useHotkeys } from '../HotkeysContext'
+import { useHotkey } from '../hooks/useHotkey'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import MDEditor from '@uiw/react-md-editor'
 import type { Root, ListItem, Paragraph, Text } from 'mdast'
@@ -53,6 +55,11 @@ export default function MeetingNoteDetailPage() {
   const queryClient = useQueryClient()
   const { theme } = useTheme()
   const noteId = parseInt(id!)
+  const { bindings } = useHotkeys()
+
+  useHotkey(bindings.escape, useCallback(() => {
+    navigate('/meeting-notes')
+  }, [navigate]), { skipInputCheck: true })
 
   const { data: note, isLoading, dataUpdatedAt } = useQuery({
     queryKey: ['meeting-note', noteId],

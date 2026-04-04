@@ -8,6 +8,8 @@ import TodoModal from '../components/TodoModal'
 import BulkActionBar from '../components/BulkActionBar'
 import { useTimezone } from '../TimezoneContext'
 import { getTodayString } from '../dateUtils'
+import { useHotkeys } from '../HotkeysContext'
+import { useHotkey } from '../hooks/useHotkey'
 
 type GroupBy = 'none' | 'project' | 'user' | 'both'
 
@@ -209,6 +211,45 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
   // Projects that appear in focused todos (for filter dropdown)
   const focusedProjectIds = [...new Set(todos.map((t) => t.project_id).filter(Boolean))]
   const focusedProjects = projects.filter((p) => focusedProjectIds.includes(p.id))
+
+  // --- Hotkeys ---
+  const { bindings } = useHotkeys()
+  const markDoneMutation = useMutation({
+    mutationFn: (id: number) => updateTodo(id, { status: 'done' }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['todos'] }),
+  })
+  const toggleFocusMutation = useMutation({
+    mutationFn: (id: number) => updateTodo(id, { is_focused: false }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['todos'] }),
+  })
+
+  useHotkey(bindings.markDone, useCallback(() => {
+    if (selectedIds.size === 0) return
+    selectedIds.forEach((id) => markDoneMutation.mutate(id))
+    setSelectedIds(new Set())
+  }, [selectedIds, markDoneMutation]))
+
+  useHotkey(bindings.toggleFocus, useCallback(() => {
+    if (selectedIds.size === 0) return
+    selectedIds.forEach((id) => toggleFocusMutation.mutate(id))
+    setSelectedIds(new Set())
+  }, [selectedIds, toggleFocusMutation]))
+
+  useHotkey(bindings.editTodo, useCallback(() => {
+    if (selectedIds.size !== 1) return
+    const id = [...selectedIds][0]
+    const todo = filtered.find((t) => t.id === id)
+    if (todo) { setEditingTodo(todo); setShowModal(true) }
+  }, [selectedIds, filtered]))
+
+  useHotkey(bindings.selectAll, useCallback(() => {
+    setSelectedIds(new Set(filtered.map((t) => t.id)))
+  }, [filtered]))
+
+  useHotkey(bindings.escape, useCallback(() => {
+    if (showModal) { setShowModal(false); setEditingTodo(null) }
+    else if (selectedIds.size > 0) setSelectedIds(new Set())
+  }, [showModal, selectedIds]), { skipInputCheck: true })
 
   const handleEdit = (todo: Todo) => {
     setEditingTodo(todo)

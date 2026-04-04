@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Search, FileText, Users, FolderKanban, X, Trash2, Archive, RotateCcw, CheckSquare, Sparkles } from 'lucide-react'
@@ -18,6 +18,8 @@ import { useTimezone } from '../TimezoneContext'
 import { useMeetingNoteSort } from '../MeetingNoteSortContext'
 import { getTodayString } from '../dateUtils'
 import { useSuggestedNotes } from '../SuggestedNotesContext'
+import { useHotkeys } from '../HotkeysContext'
+import { useHotkey } from '../hooks/useHotkey'
 
 function formatInTimezone(isoString: string, tz: string): string {
   const date = new Date(isoString)
@@ -43,6 +45,18 @@ export default function MeetingNotesPage() {
   const [filterPersonId, setFilterPersonId] = useState<string>('')
   const [filterProjectId, setFilterProjectId] = useState<string>('')
   const [showTrash, setShowTrash] = useState(false)
+  const searchInputRef = useRef<HTMLInputElement>(null)
+  const { bindings } = useHotkeys()
+
+  // / — focus search input
+  useHotkey(bindings.focusSearch, useCallback(() => {
+    searchInputRef.current?.focus()
+  }, []))
+
+  // Escape — close trash panel or blur search
+  useHotkey(bindings.escape, useCallback(() => {
+    if (showTrash) setShowTrash(false)
+  }, [showTrash]), { skipInputCheck: true })
 
   const createMutation = useMutation({
     mutationFn: createMeetingNote,
@@ -133,6 +147,7 @@ export default function MeetingNotesPage() {
         <div className="relative flex-1 min-w-[200px]">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
+            ref={searchInputRef}
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}

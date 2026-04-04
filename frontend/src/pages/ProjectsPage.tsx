@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useResizableSidebar } from '../hooks/useResizableSidebar'
+import { useHotkeys } from '../HotkeysContext'
+import { useHotkey } from '../hooks/useHotkey'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import ReactMarkdown from 'react-markdown'
 import { ChevronsLeft, ChevronsRight } from 'lucide-react'
@@ -336,6 +338,9 @@ function ProjectNotes({ project }: { project: Project }) {
 export default function ProjectsPage({ onOpenTodo }: { onOpenTodo: (id: number) => void }) {
   const queryClient = useQueryClient()
   const { width: panelWidth, collapsed: panelCollapsed, startResize: startPanelResize, toggleCollapsed: togglePanel } = useResizableSidebar('projectsPanelWidth', 256)
+  const { bindings } = useHotkeys()
+  const stableTogglePanel = useCallback(() => togglePanel(), [togglePanel])
+  useHotkey(bindings.toggleSecondarySidebar, stableTogglePanel)
   const [searchParams, setSearchParams] = useSearchParams()
   const selectedProjectId = searchParams.get('project') ? Number(searchParams.get('project')) : null
   const setSelectedProjectId = (id: number | null) =>

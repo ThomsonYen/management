@@ -8,6 +8,7 @@ import { TodoDefaultsProvider } from './TodoDefaultsContext'
 import { TimezoneProvider } from './TimezoneContext'
 import { MeetingNoteSortProvider } from './MeetingNoteSortContext'
 import { SuggestedNotesProvider } from './SuggestedNotesContext'
+import { HotkeysProvider } from './HotkeysContext'
 import './index.css'
 
 const queryClient = new QueryClient({
@@ -28,7 +29,9 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
             <TodoDefaultsProvider>
               <MeetingNoteSortProvider>
                 <SuggestedNotesProvider>
+                <HotkeysProvider>
                   <App />
+                </HotkeysProvider>
                 </SuggestedNotesProvider>
               </MeetingNoteSortProvider>
             </TodoDefaultsProvider>

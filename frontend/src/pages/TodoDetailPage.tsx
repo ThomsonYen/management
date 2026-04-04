@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
@@ -18,6 +18,8 @@ import { BlockerTreeNode, BlockingTreeNode } from '../components/BlockerTree'
 import { config } from '../config'
 import { useTimezone } from '../TimezoneContext'
 import { isOverdue as checkOverdue } from '../dateUtils'
+import { useHotkeys } from '../HotkeysContext'
+import { useHotkey } from '../hooks/useHotkey'
 
 const importanceBadge = (imp: string) => {
   const map: Record<string, string> = {
@@ -184,6 +186,29 @@ export default function TodoDetailPage() {
       if (todo?.status === 'done') updateMutation.mutate({ status: 'todo' })
     }
   }
+
+  // --- Hotkeys ---
+  const { bindings } = useHotkeys()
+
+  useHotkey(bindings.markDone, useCallback(() => {
+    if (!todo || todo.status === 'done') return
+    handleDoneCheck(true)
+  }, [todo]))
+
+  useHotkey(bindings.toggleFocus, useCallback(() => {
+    if (!todo) return
+    updateMutation.mutate({ is_focused: !todo.is_focused })
+  }, [todo, updateMutation]))
+
+  useHotkey(bindings.editTodo, useCallback(() => {
+    if (!todo) return
+    setShowModal(true)
+  }, [todo]))
+
+  useHotkey(bindings.escape, useCallback(() => {
+    if (showModal) setShowModal(false)
+    else onBack()
+  }, [showModal, onBack]), { skipInputCheck: true })
 
   const saveField = (field: string, value: unknown) => {
     updateMutation.mutate({ [field]: value } as Parameters<typeof updateTodo>[1])
