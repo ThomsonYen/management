@@ -88,6 +88,7 @@ export interface MeetingNoteSummary {
   updated_at: string
   attendee_names: string[]
   project_names: string[]
+  todo_count: number
 }
 
 export interface MeetingTemplate {

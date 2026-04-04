@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Search, FileText, Users, FolderKanban, X, Trash2, Archive, RotateCcw } from 'lucide-react'
+import { Plus, Search, FileText, Users, FolderKanban, X, Trash2, Archive, RotateCcw, CheckSquare, Sparkles } from 'lucide-react'
 import {
   fetchMeetingNotes,
   searchMeetingNotes,
@@ -17,6 +17,7 @@ import type { MeetingNoteSummary, MeetingNoteSearchResult } from '../types'
 import { useTimezone } from '../TimezoneContext'
 import { useMeetingNoteSort } from '../MeetingNoteSortContext'
 import { getTodayString } from '../dateUtils'
+import { useSuggestedNotes } from '../SuggestedNotesContext'
 
 function formatInTimezone(isoString: string, tz: string): string {
   const date = new Date(isoString)
@@ -197,6 +198,9 @@ export default function MeetingNotesPage() {
 }
 
 function NoteCard({ note, timezone, onClick, onDelete }: { note: MeetingNoteSummary; timezone: string; onClick: () => void; onDelete?: () => void }) {
+  const { hasSuggested } = useSuggestedNotes()
+  const suggested = hasSuggested(note.id)
+
   return (
     <div className="relative group flex bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg hover:border-indigo-300 dark:hover:border-indigo-600 hover:shadow-sm transition-all">
       <button
@@ -212,6 +216,12 @@ function NoteCard({ note, timezone, onClick, onDelete }: { note: MeetingNoteSumm
             </div>
           </div>
           <div className="flex flex-wrap gap-1.5 flex-shrink-0">
+            {suggested && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 rounded-full" title="AI suggestions have been run">
+                <Sparkles size={10} />
+                Suggested
+              </span>
+            )}
             {note.attendee_names.length > 0 && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full">
                 <Users size={10} />
@@ -222,6 +232,12 @@ function NoteCard({ note, timezone, onClick, onDelete }: { note: MeetingNoteSumm
               <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded-full">
                 <FolderKanban size={10} />
                 {note.project_names.join(', ')}
+              </span>
+            )}
+            {note.todo_count > 0 && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 rounded-full">
+                <CheckSquare size={10} />
+                {note.todo_count} todo{note.todo_count !== 1 ? 's' : ''}
               </span>
             )}
           </div>

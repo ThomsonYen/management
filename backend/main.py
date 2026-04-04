@@ -405,6 +405,7 @@ class MeetingNoteSummary(BaseModel):
     updated_at: str
     attendee_names: List[str] = []
     project_names: List[str] = []
+    todo_count: int = 0
     model_config = {"from_attributes": True}
 
 
@@ -531,6 +532,7 @@ def meeting_note_to_summary(n: MeetingNote) -> MeetingNoteSummary:
         updated_at=n.updated_at,
         attendee_names=[p.name for p in n.attendees],
         project_names=[p.name for p in n.projects],
+        todo_count=len(n.todos),
     )
 
 
@@ -1202,6 +1204,75 @@ async def transcribe_meeting_note(
     db.commit()
 
     return {"transcript": transcript}
+
+
+class SuggestedTodo(BaseModel):
+    title: str
+    description: str = ""
+
+
+@app.post("/meeting-notes/{note_id}/suggest-todos")
+async def suggest_todos(note_id: int, db: Session = Depends(get_db)):
+    if not openai_client:
+        raise HTTPException(
+            503,
+            "OpenAI API key not configured. Set keys.openai_key in project_config.yaml.",
+        )
+    n = db.query(MeetingNote).get(note_id)
+    if not n:
+        raise HTTPException(404, "Meeting note not found")
+
+    content = _read_note_content(n.filename)
+    transcript = _read_transcript(n.id)
+
+    parts = []
+    if content.strip():
+        parts.append(f"## Meeting Notes\n{content}")
+    if transcript and transcript.strip():
+        parts.append(f"## Transcript\n{transcript}")
+    if not parts:
+        return {"suggestions": []}
+
+    combined = "\n\n".join(parts)
+
+    suggest_model = (PROJECT_CONFIG.get("models") or {}).get("suggest_todos", "gpt-4o-mini")
+    response = openai_client.chat.completions.create(
+        model=suggest_model,
+        messages=[
+            {
+                "role": "system",
+                "content": (
+                    "You are a helpful assistant that extracts actionable todo items from meeting notes and transcripts. "
+                    "Return a JSON array of objects with 'title' (short actionable task title) and 'description' (brief context). "
+                    "Only return concrete, actionable items. Return at most 10 items. "
+                    "Return ONLY the JSON array, no other text."
+                ),
+            },
+            {
+                "role": "user",
+                "content": f"Extract actionable todo items from the following meeting content:\n\n{combined}",
+            },
+        ],
+        temperature=0.3,
+    )
+
+    import json
+
+    raw = response.choices[0].message.content or "[]"
+    # Strip markdown code fences if present
+    raw = raw.strip()
+    if raw.startswith("```"):
+        raw = raw.split("\n", 1)[1] if "\n" in raw else raw[3:]
+        if raw.endswith("```"):
+            raw = raw[:-3]
+        raw = raw.strip()
+
+    try:
+        suggestions = json.loads(raw)
+    except json.JSONDecodeError:
+        suggestions = []
+
+    return {"suggestions": suggestions}
 
 
 @app.get("/meeting-notes-hidden", response_model=List[MeetingNoteSummary])

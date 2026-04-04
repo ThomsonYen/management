@@ -1,5 +1,8 @@
 backend:
   port: 8001
 
+models:
+  suggest_todos: "gpt-4o-mini"
+
 whisper:
   api_key: ""  # OpenAI API key for Whisper transcription

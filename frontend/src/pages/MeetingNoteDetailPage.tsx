@@ -4,7 +4,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import MDEditor from '@uiw/react-md-editor'
 import type { Root, ListItem, Paragraph, Text } from 'mdast'
 import { visit } from 'unist-util-visit'
-import { ArrowLeft, Trash2, Users, FolderKanban, CheckSquare, X, Mic } from 'lucide-react'
+import { ArrowLeft, Trash2, Users, FolderKanban, CheckSquare, X, Mic, Sparkles, Loader2, Check, Pencil } from 'lucide-react'
+import type { Person, Project } from '../types'
+import { useSuggestedNotes } from '../SuggestedNotesContext'
 import {
   fetchMeetingNote,
   updateMeetingNote,
@@ -12,6 +14,8 @@ import {
   fetchPersons,
   fetchProjects,
   fetchTodos,
+  suggestTodos,
+  createTodo,
 } from '../api'
 import { useTheme } from '../ThemeContext'
 import AudioRecorder from '../components/AudioRecorder'
@@ -300,6 +304,18 @@ export default function MeetingNoteDetailPage() {
               saveField('todo_ids', next)
             }}
           />
+          <SuggestTodosButton
+            noteId={noteId}
+            projectIds={projectIds}
+            persons={persons}
+            projects={projects}
+            onTodosCreated={(newIds) => {
+              const next = [...todoIds, ...newIds]
+              setTodoIds(next)
+              saveField('todo_ids', next)
+              queryClient.invalidateQueries({ queryKey: ['todos'] })
+            }}
+          />
         </div>
 
         {/* Audio Recording */}
@@ -357,6 +373,367 @@ function TodoPicker({
           ))}
         </ul>
       )}
+    </div>
+  )
+}
+
+interface TodoDraft {
+  title: string
+  description: string
+  project_id?: number
+  assignee_id?: number | null
+  deadline: string
+  importance: string
+  estimated_hours: number
+}
+
+interface SuggestionsCache {
+  suggestions: { title: string; description: string }[]
+  createdIndices: number[]
+}
+
+function SuggestTodosButton({
+  noteId,
+  projectIds,
+  persons,
+  projects,
+  onTodosCreated,
+}: {
+  noteId: number
+  projectIds: number[]
+  persons: Person[]
+  projects: Project[]
+  onTodosCreated: (newTodoIds: number[]) => void
+}) {
+  const queryClient = useQueryClient()
+  const { markSuggested } = useSuggestedNotes()
+
+  const { data: cached, isFetching, refetch } = useQuery<SuggestionsCache>({
+    queryKey: ['suggest-todos', noteId],
+    queryFn: async () => {
+      const res = await suggestTodos(noteId)
+      markSuggested(noteId)
+      return { suggestions: res.suggestions, createdIndices: [] }
+    },
+    enabled: false,
+    staleTime: Infinity,
+    gcTime: 30 * 60 * 1000, // keep 30 min
+  })
+
+  const suggestions = cached?.suggestions ?? []
+  const createdIndices = cached?.createdIndices ?? []
+
+  const handleSuggest = () => {
+    queryClient.setQueryData(['suggest-todos', noteId], undefined)
+    refetch()
+  }
+
+  const markCreated = (idx: number) => {
+    queryClient.setQueryData<SuggestionsCache>(['suggest-todos', noteId], (old) => {
+      if (!old) return old
+      return { ...old, createdIndices: [...old.createdIndices, idx] }
+    })
+  }
+
+  const handleDismiss = (idx: number) => {
+    queryClient.setQueryData<SuggestionsCache>(['suggest-todos', noteId], (old) => {
+      if (!old) return old
+      return {
+        suggestions: old.suggestions.filter((_, i) => i !== idx),
+        createdIndices: old.createdIndices.filter((i) => i !== idx).map((i) => (i > idx ? i - 1 : i)),
+      }
+    })
+  }
+
+  const [editingIdx, setEditingIdx] = useState<number | null>(null)
+  const [editDraft, setEditDraft] = useState<TodoDraft | null>(null)
+  const [saving, setSaving] = useState(false)
+
+  const openEdit = (idx: number) => {
+    const s = suggestions[idx]
+    setEditingIdx(idx)
+    setEditDraft({
+      title: s.title,
+      description: s.description,
+      project_id: projectIds[0],
+      assignee_id: null,
+      deadline: '',
+      importance: 'medium',
+      estimated_hours: 1.0,
+    })
+  }
+
+  const handleSave = async () => {
+    if (!editDraft || editingIdx === null || saving) return
+    setSaving(true)
+    try {
+      const todo = await createTodo({
+        title: editDraft.title,
+        description: editDraft.description || undefined,
+        project_id: editDraft.project_id,
+        assignee_id: editDraft.assignee_id,
+        deadline: editDraft.deadline || undefined,
+        importance: editDraft.importance,
+        estimated_hours: editDraft.estimated_hours,
+      })
+      markCreated(editingIdx)
+      onTodosCreated([todo.id])
+      setEditingIdx(null)
+      setEditDraft(null)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleAcceptAll = async () => {
+    const pending = suggestions.map((_, i) => i).filter((i) => !createdIndices.includes(i))
+    const newIds: number[] = []
+    for (const idx of pending) {
+      const s = suggestions[idx]
+      const todo = await createTodo({
+        title: s.title,
+        description: s.description || undefined,
+        project_id: projectIds[0],
+      })
+      newIds.push(todo.id)
+      markCreated(idx)
+    }
+    if (newIds.length > 0) onTodosCreated(newIds)
+  }
+
+  const pendingCount = suggestions.length - createdIndices.length
+
+  return (
+    <div className="mt-3">
+      <button
+        onClick={handleSuggest}
+        disabled={isFetching}
+        className="w-full flex items-center justify-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg hover:bg-amber-100 dark:hover:bg-amber-900/30 disabled:opacity-50 transition-colors"
+      >
+        {isFetching ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+        {isFetching ? 'Analyzing...' : suggestions.length > 0 ? 'Re-suggest Todos' : 'Suggest Todos from Content'}
+      </button>
+
+      {suggestions.length > 0 && (
+        <div className="mt-2 space-y-1.5">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-slate-500 dark:text-slate-400">{pendingCount} suggestion{pendingCount !== 1 ? 's' : ''}</span>
+            {pendingCount > 1 && (
+              <button
+                onClick={handleAcceptAll}
+                className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline"
+              >
+                Accept all
+              </button>
+            )}
+          </div>
+          {suggestions.map((s, idx) => {
+            const isCreated = createdIndices.includes(idx)
+            return (
+              <div
+                key={idx}
+                className={`p-2 rounded-lg border text-xs transition-all ${
+                  isCreated
+                    ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800 opacity-60'
+                    : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 cursor-pointer hover:border-indigo-300 dark:hover:border-indigo-600'
+                }`}
+                onClick={() => !isCreated && openEdit(idx)}
+              >
+                <div className="flex items-start gap-1.5">
+                  <span className="flex-1 font-medium text-slate-700 dark:text-slate-300">{s.title}</span>
+                  {isCreated ? (
+                    <Check size={12} className="text-emerald-500 flex-shrink-0 mt-0.5" />
+                  ) : (
+                    <div className="flex gap-1 flex-shrink-0">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); openEdit(idx) }}
+                        className="p-0.5 text-slate-400 hover:text-indigo-500"
+                        title="Edit & create"
+                      >
+                        <Pencil size={12} />
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleDismiss(idx) }}
+                        className="p-0.5 text-slate-400 hover:text-red-500"
+                        title="Dismiss"
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+                {s.description && (
+                  <p className="mt-1 text-slate-500 dark:text-slate-400">{s.description}</p>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {editDraft && editingIdx !== null && (
+        <TodoEditModal
+          draft={editDraft}
+          persons={persons}
+          projects={projects}
+          saving={saving}
+          onChange={setEditDraft}
+          onSave={handleSave}
+          onClose={() => { setEditingIdx(null); setEditDraft(null) }}
+        />
+      )}
+    </div>
+  )
+}
+
+function TodoEditModal({
+  draft,
+  persons,
+  projects,
+  saving,
+  onChange,
+  onSave,
+  onClose,
+}: {
+  draft: TodoDraft
+  persons: Person[]
+  projects: Project[]
+  saving: boolean
+  onChange: (d: TodoDraft) => void
+  onSave: () => void
+  onClose: () => void
+}) {
+  const update = (patch: Partial<TodoDraft>) => onChange({ ...draft, ...patch })
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/40" />
+      <div
+        className="relative bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-700">
+          <h3 className="text-base font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+            <Sparkles size={16} className="text-amber-500" />
+            Edit Suggested Todo
+          </h3>
+          <button onClick={onClose} className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="px-5 py-4 space-y-4 max-h-[70vh] overflow-y-auto">
+          {/* Title */}
+          <div>
+            <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Title</label>
+            <input
+              value={draft.title}
+              onChange={(e) => update({ title: e.target.value })}
+              className="w-full px-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+              placeholder="Todo title..."
+            />
+          </div>
+
+          {/* Description */}
+          <div>
+            <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Description</label>
+            <textarea
+              value={draft.description}
+              onChange={(e) => update({ description: e.target.value })}
+              rows={3}
+              className="w-full px-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none"
+              placeholder="Description..."
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            {/* Project */}
+            <div>
+              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Project</label>
+              <select
+                value={draft.project_id ?? ''}
+                onChange={(e) => update({ project_id: e.target.value ? parseInt(e.target.value) : undefined })}
+                className="w-full px-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+              >
+                <option value="">None</option>
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Assignee */}
+            <div>
+              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Assignee</label>
+              <select
+                value={draft.assignee_id ?? ''}
+                onChange={(e) => update({ assignee_id: e.target.value ? parseInt(e.target.value) : null })}
+                className="w-full px-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+              >
+                <option value="">Unassigned</option>
+                {persons.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Importance */}
+            <div>
+              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Importance</label>
+              <select
+                value={draft.importance}
+                onChange={(e) => update({ importance: e.target.value })}
+                className="w-full px-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+              >
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+              </select>
+            </div>
+
+            {/* Estimated Hours */}
+            <div>
+              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Est. Hours</label>
+              <input
+                type="number"
+                min={0}
+                step={0.5}
+                value={draft.estimated_hours}
+                onChange={(e) => update({ estimated_hours: parseFloat(e.target.value) || 0 })}
+                className="w-full px-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+              />
+            </div>
+          </div>
+
+          {/* Deadline */}
+          <div>
+            <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Deadline</label>
+            <input
+              type="date"
+              value={draft.deadline}
+              onChange={(e) => update({ deadline: e.target.value })}
+              className="w-full px-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            />
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-sm text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onSave}
+            disabled={saving || !draft.title.trim()}
+            className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors flex items-center gap-1.5"
+          >
+            {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+            {saving ? 'Creating...' : 'Create Todo'}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

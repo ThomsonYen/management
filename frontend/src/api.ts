@@ -215,3 +215,6 @@ export const getAudioDownloadUrl = (noteId: number, filename: string): string =>
 
 export const transcribeMeetingNote = (noteId: number): Promise<{ transcript: string }> =>
   api.post(`/meeting-notes/${noteId}/transcribe`).then((r) => r.data)
+
+export const suggestTodos = (noteId: number): Promise<{ suggestions: { title: string; description: string }[] }> =>
+  api.post(`/meeting-notes/${noteId}/suggest-todos`).then((r) => r.data)
