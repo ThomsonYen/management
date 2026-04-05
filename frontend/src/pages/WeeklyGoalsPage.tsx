@@ -7,7 +7,11 @@ import type { DailyGoal } from '../api'
 import { useTimezone } from '../TimezoneContext'
 import { useTheme } from '../ThemeContext'
 import { getTodayString } from '../dateUtils'
-import { parseContentBlocks, toggleCheckboxLine, ContentBlockList, type ContentBlock } from '../components/MarkdownRenderer'
+import {
+  parseContentBlocks, toggleCheckboxLine, editLineText, splitLineAt,
+  deleteLine, indentLine, unindentLine, mergeLineUp, pasteMultiLine,
+  ContentBlockList, type ContentBlock, type FocusRequest, type BlockEditHandlers,
+} from '../components/MarkdownRenderer'
 import { createMdEditorKeyHandler } from '../utils/mdEditorKeyHandler'
 import { useHotkeys } from '../HotkeysContext'
 
@@ -300,6 +304,81 @@ export default function WeeklyGoalsPage() {
     [localMarkdown, saveMutation]
   )
 
+  const [focusRequest, setFocusRequest] = useState<FocusRequest | null>(null)
+
+  // Clear focusRequest after it's been consumed
+  useEffect(() => {
+    if (focusRequest != null) {
+      const id = requestAnimationFrame(() => setFocusRequest(null))
+      return () => cancelAnimationFrame(id)
+    }
+  }, [focusRequest])
+
+  const updateMarkdown = useCallback((newMd: string) => {
+    setLocalMarkdown(newMd)
+    localMarkdownRef.current = newMd
+  }, [])
+
+  const editHandlers = useMemo((): BlockEditHandlers => ({
+    onEdit: (lineIndex, newText) => {
+      const newMd = editLineText(localMarkdownRef.current, lineIndex, newText)
+      updateMarkdown(newMd)
+      saveMutation.mutate(newMd)
+    },
+    onSplitLine: (lineIndex, textBefore, textAfter) => {
+      const result = splitLineAt(localMarkdownRef.current, lineIndex, textBefore, textAfter)
+      updateMarkdown(result.content)
+      setFocusRequest({ lineIndex: result.newLineIndex })
+    },
+    onDeleteLine: (lineIndex) => {
+      // Find previous block to focus
+      const pd = parseAssembled(localMarkdownRef.current, datesRef.current)
+      const allBlocks = pd.flatMap(d => d.blocks)
+      const prevBlock = allBlocks.filter(b => b.lineIndex < lineIndex).pop()
+      const newMd = deleteLine(localMarkdownRef.current, lineIndex)
+      updateMarkdown(newMd)
+      saveMutation.mutate(newMd)
+      if (prevBlock) {
+        setFocusRequest({ lineIndex: prevBlock.lineIndex, caretOffset: prevBlock.text.length })
+      }
+    },
+    onIndent: (lineIndex) => {
+      const newMd = indentLine(localMarkdownRef.current, lineIndex)
+      updateMarkdown(newMd)
+      setFocusRequest({ lineIndex })
+    },
+    onUnindent: (lineIndex) => {
+      const newMd = unindentLine(localMarkdownRef.current, lineIndex)
+      updateMarkdown(newMd)
+      setFocusRequest({ lineIndex })
+    },
+    onMergeUp: (lineIndex) => {
+      const result = mergeLineUp(localMarkdownRef.current, lineIndex)
+      if (!result) return
+      updateMarkdown(result.content)
+      saveMutation.mutate(result.content)
+      setFocusRequest({ lineIndex: result.targetLineIndex, caretOffset: result.caretOffset })
+    },
+    onNavigate: (fromLineIndex, direction, caretOffset) => {
+      const pd = parseAssembled(localMarkdownRef.current, datesRef.current)
+      const allLineIndexes = pd.flatMap(d => d.blocks.map(b => b.lineIndex))
+      const currentIdx = allLineIndexes.indexOf(fromLineIndex)
+      if (currentIdx < 0) return
+      const targetIdx = direction === 'up' ? currentIdx - 1 : currentIdx + 1
+      if (targetIdx < 0 || targetIdx >= allLineIndexes.length) return
+      // Preserve caret offset, clamped to target block's text length
+      const targetBlock = pd.flatMap(d => d.blocks).find(b => b.lineIndex === allLineIndexes[targetIdx])
+      const clampedOffset = targetBlock ? Math.min(caretOffset, targetBlock.text.length) : caretOffset
+      setFocusRequest({ lineIndex: allLineIndexes[targetIdx], caretOffset: clampedOffset })
+    },
+    onPasteMultiLine: (lineIndex, textBefore, textAfter, lines) => {
+      const result = pasteMultiLine(localMarkdownRef.current, lineIndex, textBefore, textAfter, lines)
+      updateMarkdown(result.content)
+      saveMutation.mutate(result.content)
+      setFocusRequest({ lineIndex: result.focusLineIndex, caretOffset: result.caretOffset })
+    },
+  }), [updateMarkdown, saveMutation])
+
   // Save on Cmd+S
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -494,7 +573,7 @@ export default function WeeklyGoalsPage() {
                   {!hasContent ? (
                     <p className="text-xs text-slate-400 dark:text-slate-600 italic">No goals</p>
                   ) : (
-                    <ContentBlockList blocks={day.blocks} onToggle={handleToggle} />
+                    <ContentBlockList blocks={day.blocks} onToggle={handleToggle} editHandlers={editHandlers} focusRequest={focusRequest} />
                   )}
                 </div>
               </div>
