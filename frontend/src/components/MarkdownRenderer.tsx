@@ -32,7 +32,6 @@ export function parseContentBlocks(content: string, lineOffset = 0): ContentBloc
   const lines = content.split('\n')
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]
-    if (!line.trim()) continue
 
     const todoMatch = line.match(/^(\s*)-\s+\[([ xX])\]\s+(.*)/)
     if (todoMatch) {
@@ -46,7 +45,7 @@ export function parseContentBlocks(content: string, lineOffset = 0): ContentBloc
       continue
     }
 
-    const headerMatch = line.match(/^(\s*)#{3,4}\s+(.+)/)
+    const headerMatch = line.match(/^(\s*)#{3,4}\s+(.*)/)
     if (headerMatch) {
       blocks.push({
         type: 'header',
@@ -56,7 +55,7 @@ export function parseContentBlocks(content: string, lineOffset = 0): ContentBloc
       continue
     }
 
-    const listMatch = line.match(/^(\s*)[-*]\s+(.+)/)
+    const listMatch = line.match(/^(\s*)[-*]\s+(.*)/)
     if (listMatch) {
       blocks.push({
         type: 'list',
@@ -315,15 +314,17 @@ function EditableText({
   // Sync original ref when text prop changes from parent
   useEffect(() => { original.current = text }, [text])
 
+  /** Read text from the span, stripping any zero-width placeholder */
+  const readText = useCallback(() => (ref.current?.textContent ?? '').replace(/\u200B/g, ''), [])
+
   const commitCurrent = useCallback(() => {
-    const el = ref.current
-    if (!el) return
-    const newText = el.textContent ?? ''
+    if (!ref.current) return
+    const newText = readText()
     if (newText !== original.current) {
       handlers.onEdit(lineIndex, newText)
       original.current = newText
     }
-  }, [lineIndex, handlers])
+  }, [lineIndex, handlers, readText])
 
   const handleBlur = useCallback(() => {
     if (skipBlurCommit.current) { skipBlurCommit.current = false; return }
@@ -334,7 +335,7 @@ function EditableText({
     (e: React.KeyboardEvent) => {
       const el = ref.current
       if (!el) return
-      const fullText = el.textContent ?? ''
+      const fullText = readText()
       const caretPos = getCaretOffset(el)
       const isCollapsed = window.getSelection()?.isCollapsed ?? true
 
@@ -370,8 +371,7 @@ function EditableText({
       if (e.key === 'Tab' && !e.shiftKey) {
         e.preventDefault()
         skipBlurCommit.current = true
-        // Commit current text first, then indent
-        const newText = el.textContent ?? ''
+        const newText = readText()
         if (newText !== original.current) {
           handlers.onEdit(lineIndex, newText)
           original.current = newText
@@ -384,7 +384,7 @@ function EditableText({
       if (e.key === 'Tab' && e.shiftKey) {
         e.preventDefault()
         skipBlurCommit.current = true
-        const newText = el.textContent ?? ''
+        const newText = readText()
         if (newText !== original.current) {
           handlers.onEdit(lineIndex, newText)
           original.current = newText
@@ -423,7 +423,7 @@ function EditableText({
 
       // Escape → revert and blur
       if (e.key === 'Escape') {
-        if (el) el.textContent = original.current
+        if (el) el.textContent = original.current || '\u200B'
         el.blur()
         return
       }
@@ -439,12 +439,12 @@ function EditableText({
       e.preventDefault()
       const el = ref.current
       if (!el) return
-      const fullText = el.textContent ?? ''
+      const fullText = readText()
       const caretPos = getCaretOffset(el)
       skipBlurCommit.current = true
       handlers.onPasteMultiLine(lineIndex, fullText.slice(0, caretPos), fullText.slice(caretPos), lines)
     },
-    [lineIndex, handlers]
+    [lineIndex, handlers, readText]
   )
 
   return (
@@ -453,12 +453,12 @@ function EditableText({
       contentEditable
       suppressContentEditableWarning
       spellCheck
-      className={`${className ?? ''} outline-none cursor-text`}
+      className={`${className ?? ''} outline-none cursor-text min-w-[2ch] inline-block`}
       onBlur={handleBlur}
       onKeyDown={handleKeyDown}
       onPaste={handlePaste}
     >
-      {text}
+      {text || '\u200B'}
     </span>
   )
 }

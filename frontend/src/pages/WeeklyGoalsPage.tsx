@@ -216,6 +216,10 @@ export default function WeeklyGoalsPage() {
   const todayStr = getTodayString(timezone)
   const queryClient = useQueryClient()
 
+  const [showEditor, setShowEditor] = useState(() => {
+    const saved = localStorage.getItem('goalShowEditor')
+    return saved !== null ? saved === 'true' : true
+  })
   const [anchor, setAnchor] = useState(() => todayStr)
   const [daysBefore, setDaysBefore] = useState(() => {
     const saved = localStorage.getItem('goalDaysBefore')
@@ -226,7 +230,8 @@ export default function WeeklyGoalsPage() {
     return saved ? parseInt(saved) : 6
   })
 
-  // Persist range prefs
+  // Persist prefs
+  useEffect(() => { localStorage.setItem('goalShowEditor', String(showEditor)) }, [showEditor])
   useEffect(() => { localStorage.setItem('goalDaysBefore', String(daysBefore)) }, [daysBefore])
   useEffect(() => { localStorage.setItem('goalDaysAfter', String(daysAfter)) }, [daysAfter])
 
@@ -495,6 +500,19 @@ export default function WeeklyGoalsPage() {
             </div>
           </div>
 
+          <div className="w-px h-5 bg-slate-300 dark:bg-slate-700" />
+
+          <button
+            onClick={() => setShowEditor((v) => !v)}
+            className={`px-2 py-1 rounded-md text-xs font-medium transition-colors ${
+              showEditor
+                ? 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200'
+                : 'hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400'
+            }`}
+          >
+            {showEditor ? 'Hide editor' : 'Show editor'}
+          </button>
+
           {/* Save status */}
           <div className="min-w-[70px] text-right">
             {saveMutation.isPending && <span className="text-xs text-slate-400">Saving...</span>}
@@ -507,28 +525,30 @@ export default function WeeklyGoalsPage() {
       {/* Side-by-side: Editor + Viewer */}
       <div className="flex gap-5 items-start">
         {/* Left: Markdown Editor */}
-        <div className="w-1/2 flex-shrink-0 sticky top-6">
-          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col max-h-[calc(100vh-140px)]" data-color-mode={theme} onKeyDownCapture={editorKeyDown}>
-            <div className="flex items-center justify-between px-4 py-2 border-b border-slate-200 dark:border-slate-700 flex-shrink-0">
-              <span className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">Editor</span>
-              {!localMarkdown.trim() && (
-                <button onClick={handleInsertTemplate} className="text-xs text-indigo-500 hover:text-indigo-700 dark:hover:text-indigo-300 font-medium">
-                  Insert template
-                </button>
-              )}
+        {showEditor && (
+          <div className="w-1/2 flex-shrink-0 sticky top-6">
+            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col max-h-[calc(100vh-140px)]" data-color-mode={theme} onKeyDownCapture={editorKeyDown}>
+              <div className="flex items-center justify-between px-4 py-2 border-b border-slate-200 dark:border-slate-700 flex-shrink-0">
+                <span className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">Editor</span>
+                {!localMarkdown.trim() && (
+                  <button onClick={handleInsertTemplate} className="text-xs text-indigo-500 hover:text-indigo-700 dark:hover:text-indigo-300 font-medium">
+                    Insert template
+                  </button>
+                )}
+              </div>
+              <MDEditor
+                value={localMarkdown}
+                onChange={(val) => handleContentChange(val ?? '')}
+                preview="edit"
+                visibleDragbar={false}
+                height={500}
+              />
             </div>
-            <MDEditor
-              value={localMarkdown}
-              onChange={(val) => handleContentChange(val ?? '')}
-              preview="edit"
-              visibleDragbar={false}
-              height={500}
-            />
           </div>
-        </div>
+        )}
 
         {/* Right: Rendered View */}
-        <div className="w-1/2 min-w-0 space-y-3">
+        <div className={`${showEditor ? 'w-1/2' : 'w-full'} min-w-0 space-y-3`}>
           {parsedDays.map((day, idx) => {
             const isAnchor = day.date === anchor
             const isPast = day.date < anchor
