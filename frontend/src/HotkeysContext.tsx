@@ -26,6 +26,10 @@ export interface HotkeyBindings {
   selectAll: string
   // General
   escape: string
+  // Editor
+  editorInsertTodo: string
+  editorIndent: string
+  editorUnindent: string
 }
 
 const DEFAULT_BINDINGS: HotkeyBindings = {
@@ -47,6 +51,9 @@ const DEFAULT_BINDINGS: HotkeyBindings = {
   focusSearch: '/',
   selectAll: 'meta+a',
   escape: 'escape',
+  editorInsertTodo: 'meta+t',
+  editorIndent: 'tab',
+  editorUnindent: 'shift+tab',
 }
 
 const STORAGE_KEY = 'hotkeyBindings'

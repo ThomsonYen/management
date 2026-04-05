@@ -169,6 +169,14 @@ class MustDoItem(Base):
     todo = relationship("Todo")
 
 
+class DailyGoal(Base):
+    __tablename__ = "daily_goals"
+    id = Column(Integer, primary_key=True, index=True)
+    date = Column(String, nullable=False, unique=True)  # YYYY-MM-DD
+    content = Column(Text, default="")
+    updated_at = Column(String, default=lambda: datetime.now(timezone.utc).isoformat())
+
+
 class MeetingNote(Base):
     __tablename__ = "meeting_notes"
     id = Column(Integer, primary_key=True, index=True)
@@ -349,6 +357,18 @@ class MustDoItemOut(BaseModel):
     text: str
     done: bool
     order: int
+    model_config = {"from_attributes": True}
+
+
+class DailyGoalUpdate(BaseModel):
+    content: str
+
+
+class DailyGoalOut(BaseModel):
+    id: int
+    date: str
+    content: str
+    updated_at: str
     model_config = {"from_attributes": True}
 
 
@@ -845,6 +865,37 @@ def delete_must_do(item_id: int, db: Session = Depends(get_db)):
     db.delete(item)
     db.commit()
     return {"ok": True}
+
+
+# ─── Daily Goals ─────────────────────────────────────────────────────────────
+
+
+@app.get("/daily-goals", response_model=List[DailyGoalOut])
+def list_daily_goals(
+    date_from: str = Query(...),
+    date_to: str = Query(...),
+    db: Session = Depends(get_db),
+):
+    return (
+        db.query(DailyGoal)
+        .filter(DailyGoal.date >= date_from, DailyGoal.date <= date_to)
+        .order_by(DailyGoal.date)
+        .all()
+    )
+
+
+@app.put("/daily-goals/{date}", response_model=DailyGoalOut)
+def upsert_daily_goal(date: str, data: DailyGoalUpdate, db: Session = Depends(get_db)):
+    goal = db.query(DailyGoal).filter(DailyGoal.date == date).first()
+    if not goal:
+        goal = DailyGoal(date=date, content=data.content, updated_at=datetime.now(timezone.utc).isoformat())
+        db.add(goal)
+    else:
+        goal.content = data.content
+        goal.updated_at = datetime.now(timezone.utc).isoformat()
+    db.commit()
+    db.refresh(goal)
+    return goal
 
 
 # ─── Schedule / Reminders ────────────────────────────────────────────────────

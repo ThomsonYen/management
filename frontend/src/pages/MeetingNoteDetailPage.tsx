@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useHotkeys } from '../HotkeysContext'
 import { useHotkey } from '../hooks/useHotkey'
@@ -23,6 +23,7 @@ import { useTheme } from '../ThemeContext'
 import AudioRecorder from '../components/AudioRecorder'
 import AudioFileList from '../components/AudioFileList'
 import TranscriptEditor from '../components/TranscriptEditor'
+import { createMdEditorKeyHandler } from '../utils/mdEditorKeyHandler'
 
 /**
  * remark plugin: remark-gfm won't parse `- [ ]` (no text after) as a task list item.
@@ -56,6 +57,7 @@ export default function MeetingNoteDetailPage() {
   const { theme } = useTheme()
   const noteId = parseInt(id!)
   const { bindings } = useHotkeys()
+  const editorKeyDown = useMemo(() => createMdEditorKeyHandler(bindings), [bindings])
 
   useHotkey(bindings.escape, useCallback(() => {
     navigate('/meeting-notes')
@@ -213,7 +215,7 @@ export default function MeetingNoteDetailPage() {
           </button>
         </div>
 
-        <div className="flex-1 px-6 pb-3" data-color-mode={theme}>
+        <div className="flex-1 px-6 pb-3" data-color-mode={theme} onKeyDownCapture={editorKeyDown}>
           <MDEditor
             value={content}
             onChange={handleContentChange}

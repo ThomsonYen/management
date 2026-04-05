@@ -218,3 +218,18 @@ export const transcribeMeetingNote = (noteId: number): Promise<{ transcript: str
 
 export const suggestTodos = (noteId: number): Promise<{ suggestions: { title: string; description: string }[] }> =>
   api.post(`/meeting-notes/${noteId}/suggest-todos`).then((r) => r.data)
+
+// ─── Daily Goals ───────────────────────────────────────────────────────────
+
+export interface DailyGoal {
+  id: number
+  date: string
+  content: string
+  updated_at: string
+}
+
+export const fetchDailyGoals = (dateFrom: string, dateTo: string): Promise<DailyGoal[]> =>
+  api.get('/daily-goals', { params: { date_from: dateFrom, date_to: dateTo } }).then((r) => r.data)
+
+export const upsertDailyGoal = (date: string, content: string): Promise<DailyGoal> =>
+  api.put(`/daily-goals/${date}`, { content }).then((r) => r.data)

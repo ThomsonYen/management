@@ -245,6 +245,16 @@ export default function SettingsPage() {
                 </div>
               </div>
 
+              {/* Editor */}
+              <div>
+                <h3 className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-3">Markdown Editor</h3>
+                <div className="space-y-3">
+                  <HotkeyInput label="Insert todo" description="Insert - [ ] at cursor" bindingKey="editorInsertTodo" />
+                  <HotkeyInput label="Indent" description="Add leading indentation" bindingKey="editorIndent" />
+                  <HotkeyInput label="Un-indent" description="Remove leading indentation" bindingKey="editorUnindent" />
+                </div>
+              </div>
+
               {/* Selection */}
               <div>
                 <h3 className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-3">Selection &amp; General</h3>
