@@ -1,20 +1,55 @@
+import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { fetchReminders, fetchRecentlyDone, fetchTodos, updateTodo } from '../api'
-import type { ScheduleStatus, Todo } from '../types'
-import { ListTodo, Loader2, CheckCircle2, ShieldAlert, type LucideIcon } from 'lucide-react'
+import { fetchReminders, fetchRecentlyDone, fetchTodos, fetchPersons, updateTodo } from '../api'
+import type { ScheduleStatus, Todo, Person } from '../types'
+import { ListTodo, Loader2, CheckCircle2, ShieldAlert, ExternalLink, type LucideIcon } from 'lucide-react'
 import { BlockerTreeNode } from '../components/BlockerTree'
+import DatePicker from '../components/DatePicker'
 
-function ScheduleCard({ item, allTodos, onOpenTodo }: { item: ScheduleStatus; allTodos: Todo[]; onOpenTodo: (id: number) => void }) {
+const STATUS_OPTIONS = ['todo', 'in-progress', 'done', 'blocked']
+const IMPORTANCE_OPTIONS = ['low', 'medium', 'high', 'critical']
+
+const autoOpenSelect = (el: HTMLSelectElement | null) => {
+  if (el) {
+    el.focus()
+    try { el.showPicker() } catch { /* not supported in all browsers */ }
+  }
+}
+
+function ScheduleCard({ item, allTodos, persons, onOpenTodo }: { item: ScheduleStatus; allTodos: Todo[]; persons: Person[]; onOpenTodo: (id: number) => void }) {
   const queryClient = useQueryClient()
   const mainTodoObj = allTodos.find((t) => t.id === item.todo_id)
   const isFocused = mainTodoObj?.is_focused ?? false
 
+  const [editingField, setEditingField] = useState<string | null>(null)
+  const [editValue, setEditValue] = useState('')
+
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ['todos'] })
+    queryClient.invalidateQueries({ queryKey: ['reminders'] })
+    queryClient.invalidateQueries({ queryKey: ['recently-done'] })
+  }
+
+  const updateMutation = useMutation({
+    mutationFn: (data: Parameters<typeof updateTodo>[1]) => updateTodo(item.todo_id, data),
+    onSuccess: invalidate,
+  })
+
   const toggleFocus = useMutation({
     mutationFn: () => updateTodo(item.todo_id, { is_focused: !isFocused }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['todos'] })
-    },
+    onSuccess: invalidate,
   })
+
+  const saveField = (field: string, value: unknown) => {
+    updateMutation.mutate({ [field]: value } as Parameters<typeof updateTodo>[1])
+    setEditingField(null)
+  }
+
+  const startEdit = (e: React.MouseEvent, field: string, currentValue: string) => {
+    e.stopPropagation()
+    setEditingField(field)
+    setEditValue(currentValue)
+  }
 
   const isBehind = item.status === 'behind'
   const deficit = item.chain_hours - item.available_hours
@@ -31,18 +66,57 @@ function ScheduleCard({ item, allTodos, onOpenTodo }: { item: ScheduleStatus; al
       }}
       className={`rounded-lg border-l-4 cursor-grab active:cursor-grabbing ${isBehind ? 'bg-red-50 dark:bg-red-900/30 border-red-500' : 'bg-yellow-50 dark:bg-yellow-900/30 border-yellow-400'}`}
     >
-      <button
-        onClick={() => onOpenTodo(item.todo_id)}
-        className="w-full text-left p-4 hover:brightness-95 transition-all"
-      >
+      <div className="p-4">
         <div className="flex items-start justify-between gap-2">
-          <div>
-            <p className="font-semibold text-slate-800 dark:text-slate-100 text-sm">{item.title}</p>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Assigned to <span className="font-medium text-slate-700 dark:text-slate-300">{item.assignee_name}</span>
-            </p>
+          <div className="min-w-0 flex-1">
+            <button
+              onClick={() => onOpenTodo(item.todo_id)}
+              className="font-semibold text-slate-800 dark:text-slate-100 text-sm hover:underline text-left"
+            >
+              {item.title}
+            </button>
+            <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 flex items-center gap-1">
+              Assigned to{' '}
+              {editingField === 'assignee_id' ? (
+                <select
+                  ref={autoOpenSelect}
+                  value={editValue}
+                  onChange={(e) => {
+                    const v = e.target.value
+                    saveField('assignee_id', v ? Number(v) : null)
+                  }}
+                  onBlur={() => setEditingField(null)}
+                  className="text-xs border border-slate-300 dark:border-slate-600 rounded px-1 py-0.5 dark:bg-slate-700 dark:text-slate-100"
+                >
+                  <option value="">Unassigned</option>
+                  {persons.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+              ) : (
+                <button
+                  onClick={(e) => startEdit(e, 'assignee_id', String(mainTodoObj?.assignee_id ?? ''))}
+                  className="font-medium text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 hover:underline"
+                >
+                  {item.assignee_name || 'Unassigned'}
+                </button>
+              )}
+            </div>
           </div>
           <div className="flex items-center gap-1.5 flex-shrink-0">
+            {/* Mark done */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                updateMutation.mutate({ status: 'done' })
+              }}
+              disabled={updateMutation.isPending}
+              title="Mark as done"
+              className="text-slate-300 hover:text-green-500 transition-colors"
+            >
+              <CheckCircle2 size={16} />
+            </button>
+            {/* Focus toggle */}
             <button
               onClick={(e) => {
                 e.stopPropagation()
@@ -58,14 +132,55 @@ function ScheduleCard({ item, allTodos, onOpenTodo }: { item: ScheduleStatus; al
             >
               {isFocused ? '★' : '☆'}
             </button>
+            {/* Open detail */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                onOpenTodo(item.todo_id)
+              }}
+              title="Open task"
+              className="text-slate-300 hover:text-indigo-500 transition-colors"
+            >
+              <ExternalLink size={14} />
+            </button>
             <span className={`text-xs font-bold px-2 py-1 rounded-full ${isBehind ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>
               {isBehind ? 'BEHIND' : 'WARNING'}
             </span>
           </div>
         </div>
-        <div className="mt-2 flex flex-wrap gap-3 text-xs text-slate-600 dark:text-slate-400">
-          <span>Deadline: <strong>{item.deadline}</strong></span>
-          <span>Own work: <strong>{item.estimated_hours}h</strong></span>
+        <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-slate-600 dark:text-slate-400">
+          {/* Editable deadline */}
+          <span className="flex items-center gap-1">
+            Deadline:
+            <DatePicker value={item.deadline} onChange={(v) => saveField('deadline', v)} />
+          </span>
+          {/* Editable estimated hours */}
+          <span className="flex items-center gap-1">
+            Own work:{' '}
+            {editingField === 'estimated_hours' ? (
+              <input
+                type="number"
+                autoFocus
+                step="0.25"
+                min="0"
+                value={editValue}
+                onChange={(e) => setEditValue(e.target.value)}
+                onBlur={() => { if (editValue) saveField('estimated_hours', Number(editValue)); else setEditingField(null) }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && editValue) saveField('estimated_hours', Number(editValue))
+                  if (e.key === 'Escape') setEditingField(null)
+                }}
+                className="w-16 text-xs border border-slate-300 dark:border-slate-600 rounded px-1 py-0.5 dark:bg-slate-700 dark:text-slate-100"
+              />
+            ) : (
+              <button
+                onClick={(e) => startEdit(e, 'estimated_hours', String(item.estimated_hours))}
+                className="font-bold hover:text-indigo-600 dark:hover:text-indigo-400 hover:underline"
+              >
+                {item.estimated_hours}h
+              </button>
+            )}
+          </span>
           {item.chain_hours > item.estimated_hours && (
             <span>Chain total: <strong>{item.chain_hours.toFixed(1)}h</strong></span>
           )}
@@ -73,8 +188,56 @@ function ScheduleCard({ item, allTodos, onOpenTodo }: { item: ScheduleStatus; al
           {isBehind && (
             <span className="text-red-600 font-semibold">Deficit: {deficit.toFixed(1)}h</span>
           )}
+          {/* Editable status */}
+          <span className="flex items-center gap-1">
+            Status:{' '}
+            {editingField === 'status' ? (
+              <select
+                ref={autoOpenSelect}
+                value={editValue}
+                onChange={(e) => saveField('status', e.target.value)}
+                onBlur={() => setEditingField(null)}
+                className="text-xs border border-slate-300 dark:border-slate-600 rounded px-1 py-0.5 dark:bg-slate-700 dark:text-slate-100 capitalize"
+              >
+                {STATUS_OPTIONS.map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+            ) : (
+              <button
+                onClick={(e) => startEdit(e, 'status', mainTodoObj?.status ?? 'todo')}
+                className="font-bold hover:text-indigo-600 dark:hover:text-indigo-400 hover:underline capitalize"
+              >
+                {mainTodoObj?.status ?? 'todo'}
+              </button>
+            )}
+          </span>
+          {/* Editable importance */}
+          <span className="flex items-center gap-1">
+            Importance:{' '}
+            {editingField === 'importance' ? (
+              <select
+                ref={autoOpenSelect}
+                value={editValue}
+                onChange={(e) => saveField('importance', e.target.value)}
+                onBlur={() => setEditingField(null)}
+                className="text-xs border border-slate-300 dark:border-slate-600 rounded px-1 py-0.5 dark:bg-slate-700 dark:text-slate-100 capitalize"
+              >
+                {IMPORTANCE_OPTIONS.map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+            ) : (
+              <button
+                onClick={(e) => startEdit(e, 'importance', mainTodoObj?.importance ?? 'medium')}
+                className="font-bold hover:text-indigo-600 dark:hover:text-indigo-400 hover:underline capitalize"
+              >
+                {mainTodoObj?.importance ?? 'medium'}
+              </button>
+            )}
+          </span>
         </div>
-      </button>
+      </div>
       {directBlockers.length > 0 && (
         <div className="px-4 pb-3">
           <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-2">Blocked by</p>
@@ -126,6 +289,11 @@ export default function Dashboard({ onOpenTodo }: { onOpenTodo: (id: number) => 
   const { data: recentlyDone = [] } = useQuery<Todo[]>({
     queryKey: ['recently-done'],
     queryFn: () => fetchRecentlyDone(),
+  })
+
+  const { data: persons = [] } = useQuery<Person[]>({
+    queryKey: ['persons'],
+    queryFn: fetchPersons,
   })
 
   const statusCounts = todos.reduce<Record<string, number>>((acc, t) => {
@@ -195,7 +363,7 @@ export default function Dashboard({ onOpenTodo }: { onOpenTodo: (id: number) => 
         ) : (
           <div className="space-y-3">
             {reminders.map((r) => (
-              <ScheduleCard key={r.todo_id} item={r} allTodos={allTodos} onOpenTodo={onOpenTodo} />
+              <ScheduleCard key={r.todo_id} item={r} allTodos={allTodos} persons={persons} onOpenTodo={onOpenTodo} />
             ))}
           </div>
         )}
