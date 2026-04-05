@@ -4,8 +4,8 @@ import { useResizableSidebar } from '../hooks/useResizableSidebar'
 import { useHotkeys } from '../HotkeysContext'
 import { useHotkey } from '../hooks/useHotkey'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import ReactMarkdown from 'react-markdown'
 import { ChevronsLeft, ChevronsRight } from 'lucide-react'
+import EditableMarkdown from '../components/EditableMarkdown'
 import { fetchProjectTree, fetchProjects, fetchTodos, createProject, createTodo, deleteProject, updateProject } from '../api'
 import type { ProjectTree, Project, Todo } from '../types'
 import TodoCard from '../components/TodoCard'
@@ -249,87 +249,58 @@ function AddTodoCard({ projectId, queryKeys }: { projectId: number; queryKeys: u
 }
 
 function ProjectNotes({ project }: { project: Project }) {
-  const queryClient = useQueryClient()
-  const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(project.notes || '')
-  const containerRef = useRef<HTMLDivElement>(null)
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const [showRaw, setShowRaw] = useState(false)
+  const draftRef = useRef(draft)
+  draftRef.current = draft
 
   useEffect(() => {
-    setDraft(project.notes || '')
-    setEditing(false)
+    const serverNotes = project.notes || ''
+    if (serverNotes !== draftRef.current) {
+      setDraft(serverNotes)
+    }
   }, [project.id, project.notes])
 
   const saveMutation = useMutation({
     mutationFn: (notes: string) => updateProject(project.id, { notes: notes || undefined }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['projects'] })
-      queryClient.invalidateQueries({ queryKey: ['projects-tree'] })
-    },
   })
 
-  const finishEditing = useCallback(() => {
-    setEditing(false)
-    if (draft !== (project.notes || '')) {
-      saveMutation.mutate(draft)
-    }
-  }, [draft, project.notes, saveMutation])
+  const handleChange = useCallback((md: string) => {
+    setDraft(md)
+  }, [])
 
-  useEffect(() => {
-    if (!editing) return
-    const handleClickOutside = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        finishEditing()
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [editing, finishEditing])
-
-  useEffect(() => {
-    if (editing && textareaRef.current) {
-      textareaRef.current.focus()
-      textareaRef.current.selectionStart = textareaRef.current.value.length
-    }
-  }, [editing])
+  const handleSave = useCallback((md: string) => {
+    saveMutation.mutate(md)
+  }, [saveMutation])
 
   return (
-    <div ref={containerRef} className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-5 mb-5">
-      <h3 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-2">Notes</h3>
-      {editing ? (
-        <div className="flex gap-4">
-          <textarea
-            ref={textareaRef}
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Escape') { setDraft(project.notes || ''); setEditing(false) }
-            }}
-            rows={8}
-            placeholder="Write the project notes..."
-            className="flex-1 min-w-0 border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-y font-mono"
-          />
-          {draft && (
-            <div className="flex-1 min-w-0 overflow-y-auto max-h-[300px] px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg">
-              <div className="prose prose-sm dark:prose-invert max-w-none text-slate-700 dark:text-slate-300">
-                <ReactMarkdown>{draft}</ReactMarkdown>
-              </div>
-            </div>
-          )}
-        </div>
-      ) : (
-        <div
-          onClick={() => setEditing(true)}
-          className="cursor-text min-h-[2rem]"
+    <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-5 mb-5">
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Notes</h3>
+        <button
+          onClick={() => setShowRaw(v => !v)}
+          className="text-[10px] font-mono text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
         >
-          {draft ? (
-            <div className="prose prose-sm dark:prose-invert max-w-none text-slate-700 dark:text-slate-300">
-              <ReactMarkdown>{draft}</ReactMarkdown>
-            </div>
-          ) : (
-            <p className="text-sm text-slate-400 dark:text-slate-500 italic">Click to add notes...</p>
-          )}
-        </div>
+          {showRaw ? 'Hide raw' : 'Raw'}
+        </button>
+      </div>
+      {draft ? (
+        <EditableMarkdown value={draft} onChange={handleChange} onSave={handleSave} />
+      ) : (
+        <p
+          onClick={() => setDraft(' ')}
+          className="text-sm text-slate-400 dark:text-slate-500 italic cursor-text"
+        >
+          Click to add notes...
+        </p>
+      )}
+      {showRaw && (
+        <textarea
+          value={draft}
+          onChange={(e) => { setDraft(e.target.value); saveMutation.mutate(e.target.value) }}
+          rows={8}
+          className="mt-3 w-full border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-y"
+        />
       )}
     </div>
   )

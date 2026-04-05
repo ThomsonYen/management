@@ -45,7 +45,7 @@ export function parseContentBlocks(content: string, lineOffset = 0): ContentBloc
       continue
     }
 
-    const headerMatch = line.match(/^(\s*)#{3,4}\s+(.*)/)
+    const headerMatch = line.match(/^(\s*)#{1,6}\s+(.*)/)
     if (headerMatch) {
       blocks.push({
         type: 'header',
@@ -79,7 +79,7 @@ export function parseContentBlocks(content: string, lineOffset = 0): ContentBloc
 
 // ─── Markdown line operations ─────────────────────────────────────────────────
 
-const PREFIX_RE = /^(\s*(?:-\s+\[[ xX]\]\s+|-\s+|\*\s+|#{1,4}\s+))/
+const PREFIX_RE = /^(\s*(?:-\s+\[[ xX]\]\s+|-\s+|\*\s+|#{1,6}\s+))/
 
 function getPrefix(line: string): string {
   const m = line.match(PREFIX_RE)
