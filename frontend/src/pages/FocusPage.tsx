@@ -566,6 +566,17 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
           <span className="text-xs text-amber-400 dark:text-amber-600 ml-auto">
             {todayItems.filter((i) => i.done || (i.todo_id && todos.find((t) => t.id === i.todo_id)?.status === 'done')).length}/{todayItems.length} done
           </span>
+          <button
+            onClick={async () => {
+              const doneItems = todayItems.filter((i) => i.done || (i.todo_id && todos.find((t) => t.id === i.todo_id)?.status === 'done'))
+              await Promise.all(doneItems.map((i) => deleteMustDoItem(i.id)))
+              queryClient.invalidateQueries({ queryKey: ['must-do', todayKey] })
+            }}
+            className="text-amber-400 hover:text-amber-600 dark:text-amber-600 dark:hover:text-amber-400 transition-colors"
+            title="Clear done items"
+          >
+            &#8635;
+          </button>
         </div>
 
         {todayItems.length > 0 && (
