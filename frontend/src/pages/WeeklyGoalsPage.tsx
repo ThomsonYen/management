@@ -224,6 +224,7 @@ export default function WeeklyGoalsPage() {
   const [anchor, setAnchor] = useState(() => todayStr)
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set())
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
+  const [dayHeights, setDayHeights] = useState<Map<string, number>>(() => new Map())
   const [daysBefore, setDaysBefore] = useState(() => {
     const saved = localStorage.getItem('goalDaysBefore')
     return saved ? parseInt(saved) : 2
@@ -625,14 +626,39 @@ export default function WeeklyGoalsPage() {
 
                 {/* Day Content */}
                 {!isCollapsed && (
-                  <div
-                    className="px-4 py-3 bg-white dark:bg-slate-900 rounded-b-[10px] min-h-[40px] overflow-y-auto"
-                    style={isExpanded ? undefined : { maxHeight: config.goal_day_box_height_px }}
-                  >
-                    {!hasContent ? (
-                      <p className="text-xs text-slate-400 dark:text-slate-600 italic">No goals</p>
-                    ) : (
-                      <ContentBlockList blocks={day.blocks} onToggle={handleToggle} editHandlers={editHandlers} focusRequest={focusRequest} />
+                  <div className="relative bg-white dark:bg-slate-900 rounded-b-[10px]">
+                    <div
+                      className="px-4 py-3 min-h-[40px] overflow-y-auto"
+                      style={isExpanded ? undefined : { maxHeight: dayHeights.get(day.date) ?? config.goal_day_box_height_px }}
+                    >
+                      {!hasContent ? (
+                        <p className="text-xs text-slate-400 dark:text-slate-600 italic">No goals</p>
+                      ) : (
+                        <ContentBlockList blocks={day.blocks} onToggle={handleToggle} editHandlers={editHandlers} focusRequest={focusRequest} />
+                      )}
+                    </div>
+                    {/* Drag handle */}
+                    {!isExpanded && (
+                      <div
+                        className="h-1.5 cursor-row-resize flex items-center justify-center hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors rounded-b-[10px]"
+                        onMouseDown={(e) => {
+                          e.preventDefault()
+                          const startY = e.clientY
+                          const startH = dayHeights.get(day.date) ?? config.goal_day_box_height_px
+                          const onMove = (ev: MouseEvent) => {
+                            const newH = Math.max(60, startH + ev.clientY - startY)
+                            setDayHeights(prev => new Map(prev).set(day.date, newH))
+                          }
+                          const onUp = () => {
+                            window.removeEventListener('mousemove', onMove)
+                            window.removeEventListener('mouseup', onUp)
+                          }
+                          window.addEventListener('mousemove', onMove)
+                          window.addEventListener('mouseup', onUp)
+                        }}
+                      >
+                        <div className="w-8 h-0.5 rounded bg-slate-300 dark:bg-slate-600" />
+                      </div>
                     )}
                   </div>
                 )}
