@@ -1118,11 +1118,21 @@ async def upload_audio(
         raise HTTPException(404, "Meeting note not found")
     audio_dir = MEETING_AUDIO_DIR / str(note_id)
     audio_dir.mkdir(exist_ok=True)
-    ext = Path(file.filename or "recording.webm").suffix or ".webm"
-    dest = audio_dir / f"{uuid.uuid4().hex}{ext}"
-    with open(dest, "wb") as f:
+    # Save uploaded file to a temp location first
+    tmp_name = f"{uuid.uuid4().hex}_raw"
+    raw_ext = Path(file.filename or "recording.webm").suffix or ".webm"
+    raw_dest = audio_dir / f"{tmp_name}{raw_ext}"
+    with open(raw_dest, "wb") as f:
         while chunk := await file.read(1024 * 1024):
             f.write(chunk)
+    # Convert to MP3 for universal compatibility
+    dest = audio_dir / f"{uuid.uuid4().hex}.mp3"
+    try:
+        from pydub import AudioSegment
+        audio = AudioSegment.from_file(raw_dest)
+        audio.export(str(dest), format="mp3", bitrate="128k")
+    finally:
+        raw_dest.unlink(missing_ok=True)
     stat = dest.stat()
     return AudioFileInfo(
         filename=dest.name,
@@ -1173,7 +1183,8 @@ def download_audio(
         or not path.resolve().is_relative_to(MEETING_AUDIO_DIR.resolve())
     ):
         raise HTTPException(404, "Audio file not found")
-    return FileResponse(path, media_type="audio/webm")
+    media_type = "audio/mpeg" if path.suffix == ".mp3" else "audio/webm"
+    return FileResponse(path, media_type=media_type)
 
 
 def _transcribe_chunked(audio_path: Path, chunk_duration_ms: int = 10 * 60 * 1000) -> list[str]:

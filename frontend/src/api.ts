@@ -203,7 +203,7 @@ export const fetchMeetingTemplates = (): Promise<MeetingTemplate[]> =>
 
 export const uploadAudio = (noteId: number, file: Blob, filename?: string): Promise<AudioFileInfo> => {
   const formData = new FormData()
-  formData.append('file', file, filename || 'recording.webm')
+  formData.append('file', file, filename || 'recording.webm')  // backend converts to mp3
   return api.post(`/meeting-notes/${noteId}/audio`, formData).then((r) => r.data)
 }
 

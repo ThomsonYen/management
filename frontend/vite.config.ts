@@ -17,7 +17,7 @@ function getBackendPort(): number {
 function getFrontendConfig() {
   const configPath = path.resolve(__dirname, '_frontend_config.yaml')
   const content = fs.readFileSync(configPath, 'utf-8')
-  return yaml.load(content) as { todo_done_fade_seconds: number; unfocus_fade_seconds: number }
+  return yaml.load(content) as { todo_done_fade_seconds: number; unfocus_fade_seconds: number; goal_day_box_height_px: number }
 }
 
 const keyPath = path.resolve(__dirname, 'localhost-key.pem')

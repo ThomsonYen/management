@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import MDEditor from '@uiw/react-md-editor'
-import { Calendar } from 'lucide-react'
+import { Calendar, ChevronDown, ChevronRight, Maximize2, Minimize2 } from 'lucide-react'
 import { fetchDailyGoals, upsertDailyGoal } from '../api'
 import type { DailyGoal } from '../api'
 import { useTimezone } from '../TimezoneContext'
@@ -12,6 +12,7 @@ import {
   deleteLine, indentLine, unindentLine, mergeLineUp, pasteMultiLine,
   ContentBlockList, type ContentBlock, type FocusRequest, type BlockEditHandlers,
 } from '../components/MarkdownRenderer'
+import { config } from '../config'
 import { createMdEditorKeyHandler } from '../utils/mdEditorKeyHandler'
 import { useHotkeys } from '../HotkeysContext'
 
@@ -221,6 +222,8 @@ export default function WeeklyGoalsPage() {
     return saved !== null ? saved === 'true' : true
   })
   const [anchor, setAnchor] = useState(() => todayStr)
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set())
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
   const [daysBefore, setDaysBefore] = useState(() => {
     const saved = localStorage.getItem('goalDaysBefore')
     return saved ? parseInt(saved) : 2
@@ -552,6 +555,8 @@ export default function WeeklyGoalsPage() {
           {parsedDays.map((day, idx) => {
             const isAnchor = day.date === anchor
             const isPast = day.date < anchor
+            const isCollapsed = collapsed.has(day.date)
+            const isExpanded = expanded.has(day.date)
             const hasContent = day.blocks.length > 0
             const todos = day.blocks.filter((b): b is ContentBlock & { type: 'todo' } => b.type === 'todo')
             const doneCount = todos.filter((t) => t.done).length
@@ -568,34 +573,69 @@ export default function WeeklyGoalsPage() {
               >
                 {/* Day Header */}
                 <div
-                  className={`px-4 py-2.5 rounded-t-[10px] flex items-center justify-between ${
+                  onClick={() => setAnchor(day.date)}
+                  className={`px-4 py-2.5 ${isCollapsed ? 'rounded-[10px]' : 'rounded-t-[10px]'} flex items-center justify-between cursor-pointer select-none ${
                     isAnchor
                       ? 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300'
                       : HEADER_COLORS[idx % HEADER_COLORS.length]
                   }`}
                 >
                   <div className="flex items-center gap-2">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setCollapsed(prev => {
+                          const next = new Set(prev)
+                          next.has(day.date) ? next.delete(day.date) : next.add(day.date)
+                          return next
+                        })
+                      }}
+                      className="p-0.5 -ml-1 rounded hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
+                    >
+                      {isCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+                    </button>
                     <span className="text-sm font-bold">{day.dayName}</span>
                     <span className="text-xs opacity-70">{formatDate(day.date)}</span>
                     {isAnchor && (
                       <span className="text-[10px] font-bold uppercase tracking-wider bg-indigo-500 text-white px-1.5 py-0.5 rounded">Anchor</span>
                     )}
                   </div>
-                  {totalCount > 0 && (
-                    <span className={`text-xs font-medium ${doneCount === totalCount ? 'text-green-600 dark:text-green-400' : 'opacity-60'}`}>
-                      {doneCount}/{totalCount}
-                    </span>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {totalCount > 0 && (
+                      <span className={`text-xs font-medium ${doneCount === totalCount ? 'text-green-600 dark:text-green-400' : 'opacity-60'}`}>
+                        {doneCount}/{totalCount}
+                      </span>
+                    )}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setExpanded(prev => {
+                          const next = new Set(prev)
+                          next.has(day.date) ? next.delete(day.date) : next.add(day.date)
+                          return next
+                        })
+                      }}
+                      className="p-0.5 rounded hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
+                      title={isExpanded ? 'Collapse to default size' : 'Expand fully'}
+                    >
+                      {isExpanded ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
+                    </button>
+                  </div>
                 </div>
 
                 {/* Day Content */}
-                <div className="px-4 py-3 bg-white dark:bg-slate-900 rounded-b-[10px] min-h-[40px]">
-                  {!hasContent ? (
-                    <p className="text-xs text-slate-400 dark:text-slate-600 italic">No goals</p>
-                  ) : (
-                    <ContentBlockList blocks={day.blocks} onToggle={handleToggle} editHandlers={editHandlers} focusRequest={focusRequest} />
-                  )}
-                </div>
+                {!isCollapsed && (
+                  <div
+                    className="px-4 py-3 bg-white dark:bg-slate-900 rounded-b-[10px] min-h-[40px] overflow-y-auto"
+                    style={isExpanded ? undefined : { maxHeight: config.goal_day_box_height_px }}
+                  >
+                    {!hasContent ? (
+                      <p className="text-xs text-slate-400 dark:text-slate-600 italic">No goals</p>
+                    ) : (
+                      <ContentBlockList blocks={day.blocks} onToggle={handleToggle} editHandlers={editHandlers} focusRequest={focusRequest} />
+                    )}
+                  </div>
+                )}
               </div>
             )
           })}
