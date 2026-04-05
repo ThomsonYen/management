@@ -26,8 +26,20 @@ const httpsConfig = fs.existsSync(keyPath) && fs.existsSync(certPath)
   ? { key: fs.readFileSync(keyPath), cert: fs.readFileSync(certPath) }
   : undefined
 
+function hstsPlugin() {
+  return {
+    name: 'hsts-header',
+    configureServer(server: import('vite').ViteDevServer) {
+      server.middlewares.use((_req, res, next) => {
+        res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
+        next()
+      })
+    },
+  }
+}
+
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), ...(httpsConfig ? [hstsPlugin()] : [])],
   define: {
     __FRONTEND_CONFIG__: JSON.stringify(getFrontendConfig()),
   },
