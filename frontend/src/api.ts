@@ -119,6 +119,7 @@ export interface MustDoItem {
   text: string
   done: boolean
   order: number
+  section: string  // morning | afternoon | evening
 }
 
 export const fetchMustDoItems = (date: string): Promise<MustDoItem[]> =>
@@ -126,12 +127,12 @@ export const fetchMustDoItems = (date: string): Promise<MustDoItem[]> =>
 
 export const createMustDoItem = (
   date: string,
-  data: { todo_id?: number; text: string; done?: boolean; order?: number },
+  data: { todo_id?: number; text: string; done?: boolean; order?: number; section?: string },
 ): Promise<MustDoItem> => api.post(`/must-do/${date}`, data).then((r) => r.data)
 
 export const updateMustDoItem = (
   id: number,
-  data: { text?: string; done?: boolean; order?: number },
+  data: { text?: string; done?: boolean; order?: number; section?: string },
 ): Promise<MustDoItem> => api.put(`/must-do/items/${id}`, data).then((r) => r.data)
 
 export const deleteMustDoItem = (id: number): Promise<void> =>

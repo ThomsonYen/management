@@ -20,8 +20,8 @@ function getFrontendConfig() {
   return yaml.load(content) as { todo_done_fade_seconds: number; unfocus_fade_seconds: number; goal_day_box_height_px: number }
 }
 
-const keyPath = path.resolve(__dirname, 'localhost-key.pem')
-const certPath = path.resolve(__dirname, 'localhost.pem')
+const keyPath = path.resolve(__dirname, 'dev.localhost-key.pem')
+const certPath = path.resolve(__dirname, 'dev.localhost.pem')
 const httpsConfig = fs.existsSync(keyPath) && fs.existsSync(certPath)
   ? { key: fs.readFileSync(keyPath), cert: fs.readFileSync(certPath) }
   : undefined
@@ -38,13 +38,17 @@ function hstsPlugin() {
   }
 }
 
+const DEV_HOST = 'dev.localhost'
+const DEV_PORT = 5173
+
 export default defineConfig({
   plugins: [react(), ...(httpsConfig ? [hstsPlugin()] : [])],
   define: {
     __FRONTEND_CONFIG__: JSON.stringify(getFrontendConfig()),
   },
   server: {
-    host: 'localhost',
+    host: DEV_HOST,
+    port: DEV_PORT,
     ...(httpsConfig ? { https: httpsConfig } : {}),
     proxy: {
       '/api': {

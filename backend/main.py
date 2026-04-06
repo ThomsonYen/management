@@ -166,6 +166,7 @@ class MustDoItem(Base):
     text = Column(String, nullable=False)
     done = Column(Boolean, default=False)
     order = Column(Integer, default=0)
+    section = Column(String, default="morning")  # morning | afternoon | evening
     todo = relationship("Todo")
 
 
@@ -192,6 +193,14 @@ class MeetingNote(Base):
 
 
 Base.metadata.create_all(bind=engine)
+
+# Migrate: add section column to must_do_items if missing
+with engine.connect() as _conn:
+    _insp = inspect(engine)
+    _cols = [c["name"] for c in _insp.get_columns("must_do_items")]
+    if "section" not in _cols:
+        _conn.execute(text("ALTER TABLE must_do_items ADD COLUMN section TEXT DEFAULT 'morning'"))
+        _conn.commit()
 
 
 def get_db():
@@ -342,12 +351,14 @@ class MustDoItemCreate(BaseModel):
     text: str
     done: bool = False
     order: int = 0
+    section: str = "morning"
 
 
 class MustDoItemUpdate(BaseModel):
     text: Optional[str] = None
     done: Optional[bool] = None
     order: Optional[int] = None
+    section: Optional[str] = None
 
 
 class MustDoItemOut(BaseModel):
@@ -357,6 +368,7 @@ class MustDoItemOut(BaseModel):
     text: str
     done: bool
     order: int
+    section: str = "morning"
     model_config = {"from_attributes": True}
 
 

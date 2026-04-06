@@ -13,6 +13,7 @@ import {
   createTodo,
 } from '../api'
 import type { SubTodo, Todo, Person, Project } from '../types'
+import DatePicker from '../components/DatePicker'
 import TodoModal from '../components/TodoModal'
 import { BlockerTreeNode, BlockingTreeNode } from '../components/BlockerTree'
 import { config } from '../config'
@@ -460,33 +461,16 @@ export default function TodoDetailPage() {
               </p>
             )}
           </div>
-          <div
-            onClick={(e) => startEdit(e, 'deadline', todo.deadline || '')}
-            title="Click to change deadline"
-            className="bg-slate-50 dark:bg-slate-700 rounded-lg p-3 cursor-pointer hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:ring-1 hover:ring-indigo-200 transition-all"
-          >
+          <div className="bg-slate-50 dark:bg-slate-700 rounded-lg p-3">
             <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">
               Deadline
             </p>
-            {editingField === 'deadline' ? (
-              <input
-                autoFocus
-                type="date"
-                value={editValue}
-                onChange={(e) => setEditValue(e.target.value)}
-                onBlur={() => saveField('deadline', editValue || null)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') saveField('deadline', editValue || null)
-                  if (e.key === 'Escape') setEditingField(null)
-                }}
-                onClick={(e) => e.stopPropagation()}
-                className="text-sm w-full bg-transparent border-b border-indigo-400 focus:outline-none"
-              />
-            ) : (
-              <p className={`text-sm font-medium ${isOverdue ? 'text-red-600' : 'text-slate-800'}`}>
-                {todo.deadline || <span className="text-slate-400 dark:text-slate-500 font-normal">None</span>}
-              </p>
-            )}
+            <DatePicker
+              value={todo.deadline || ''}
+              onChange={(v) => saveField('deadline', v || null)}
+              placeholder="None"
+              triggerClassName={`text-sm font-medium ${isOverdue ? '!text-red-600' : '!text-slate-800 dark:!text-slate-200'}`}
+            />
           </div>
           <div
             onClick={(e) => startEdit(e, 'project_id', todo.project_id?.toString() || '')}

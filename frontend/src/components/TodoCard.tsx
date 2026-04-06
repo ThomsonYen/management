@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
 import { createTodo, createSubTodo, deleteTodo, updateSubTodo, updateTodo, fetchPersons, fetchProjects, fetchTodos } from '../api'
+import DatePicker from './DatePicker'
 import type { Todo, Person, Project } from '../types'
 import { config } from '../config'
 import { useTimezone } from '../TimezoneContext'
@@ -405,30 +406,15 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
               )}
 
               {/* Deadline */}
-              {editingField === 'deadline' ? (
-                <input
-                  autoFocus
-                  type="date"
-                  value={editValue}
-                  onChange={(e) => setEditValue(e.target.value)}
-                  onBlur={() => saveField('deadline', editValue || null)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') saveField('deadline', editValue || null)
-                    if (e.key === 'Escape') setEditingField(null)
-                  }}
-                  onClick={(e) => e.stopPropagation()}
-                  className="text-xs border border-indigo-300 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+              <span className={`flex items-center gap-1 ${isOverdue ? 'text-red-600 font-semibold' : ''}`}>
+                <span>◷</span>
+                <DatePicker
+                  value={todo.deadline || ''}
+                  onChange={(v) => saveField('deadline', v || null)}
+                  placeholder="+ date"
+                  triggerClassName={isOverdue ? 'text-red-600 font-semibold' : ''}
                 />
-              ) : (
-                <span
-                  onClick={(e) => startEdit(e, 'deadline', todo.deadline || '')}
-                  title="Click to change deadline"
-                  className={`flex items-center gap-1 cursor-pointer hover:text-indigo-600 transition-colors ${isOverdue ? 'text-red-600 font-semibold' : ''}`}
-                >
-                  <span>◷</span>
-                  {todo.deadline ?? <em className="text-slate-300 dark:text-slate-600 not-italic">+ date</em>}
-                </span>
-              )}
+              </span>
 
               {/* Project */}
               {editingField === 'project_id' ? (

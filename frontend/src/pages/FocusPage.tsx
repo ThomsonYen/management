@@ -75,8 +75,12 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
   const todayKey = getTodayString(timezone)
   const [todayInput, setTodayInput] = useState('')
   const [todaySearchOpen, setTodaySearchOpen] = useState(false)
-  const [todayDragOver, setTodayDragOver] = useState(false)
+  const [todayDragOver, setTodayDragOver] = useState<string | false>(false)
   const todayInputRef = useRef<HTMLInputElement>(null)
+  const [activeSection, setActiveSection] = useState<string>('morning')
+  const mustDoSections = ['morning', 'afternoon', 'evening'] as const
+  const dragMustDoId = useRef<number | null>(null)
+  const [mustDoDragOverSection, setMustDoDragOverSection] = useState<string | null>(null)
 
   const { data: todayItems = [] } = useQuery<MustDoItem[]>({
     queryKey: ['must-do', todayKey],
@@ -84,13 +88,13 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
   })
 
   const addMustDo = useMutation({
-    mutationFn: (data: { todo_id?: number; text: string; order?: number }) =>
+    mutationFn: (data: { todo_id?: number; text: string; order?: number; section?: string }) =>
       createMustDoItem(todayKey, data),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['must-do', todayKey] }),
   })
 
   const updateMustDo = useMutation({
-    mutationFn: ({ id, ...data }: { id: number; text?: string; done?: boolean; order?: number }) =>
+    mutationFn: ({ id, ...data }: { id: number; text?: string; done?: boolean; order?: number; section?: string }) =>
       updateMustDoItem(id, data),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['must-do', todayKey] }),
   })
@@ -100,15 +104,18 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['must-do', todayKey] }),
   })
 
-  const addTodayText = useCallback((text: string) => {
+  const addTodayText = useCallback((text: string, section?: string) => {
     if (!text.trim()) return
-    addMustDo.mutate({ text: text.trim(), order: todayItems.length })
-  }, [addMustDo, todayItems.length])
+    const sectionItems = todayItems.filter((i) => i.section === (section || activeSection))
+    addMustDo.mutate({ text: text.trim(), order: sectionItems.length, section: section || activeSection })
+  }, [addMustDo, todayItems, activeSection])
 
-  const addTodayTodo = useCallback((todo: Todo) => {
+  const addTodayTodo = useCallback((todo: Todo, section?: string) => {
     if (todayItems.some((i) => i.todo_id === todo.id)) return
-    addMustDo.mutate({ todo_id: todo.id, text: todo.title, order: todayItems.length })
-  }, [todayItems, addMustDo])
+    const sec = section || activeSection
+    const sectionItems = todayItems.filter((i) => i.section === sec)
+    addMustDo.mutate({ todo_id: todo.id, text: todo.title, order: sectionItems.length, section: sec })
+  }, [todayItems, addMustDo, activeSection])
 
   const toggleTodayDone = useCallback((item: MustDoItem) => {
     const newDone = !item.done
@@ -537,24 +544,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
       <div className="max-w-4xl mx-auto">
 
       {/* Must Do Today */}
-      <div
-        className={`rounded-xl border-2 ${todayDragOver ? 'border-amber-400 bg-amber-50 dark:bg-amber-900/20' : 'border-amber-200 dark:border-amber-700 bg-amber-50/50 dark:bg-amber-950/30'} shadow-sm mb-6 transition-colors`}
-        onDragOver={(e) => {
-          if (e.dataTransfer.types.includes('application/x-todo-id')) {
-            e.preventDefault()
-            setTodayDragOver(true)
-          }
-        }}
-        onDragLeave={() => setTodayDragOver(false)}
-        onDrop={(e) => {
-          e.preventDefault()
-          setTodayDragOver(false)
-          const todoId = parseInt(e.dataTransfer.getData('application/x-todo-id'))
-          if (!todoId) return
-          const todo = todos.find((t) => t.id === todoId)
-          if (todo) addTodayTodo(todo)
-        }}
-      >
+      <div className="rounded-xl border-2 border-amber-200 dark:border-amber-700 bg-amber-50/50 dark:bg-amber-950/30 shadow-sm mb-6">
         <div className="px-5 pt-4 pb-2 flex items-center gap-2">
           <span className="text-amber-500 text-lg">&#9733;</span>
           <h3 className="text-sm font-bold text-amber-700 dark:text-amber-400 uppercase tracking-wide">
@@ -579,170 +569,275 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
           </button>
         </div>
 
-        {todayItems.length > 0 && (
-          <ul className="px-5 pb-1 space-y-1">
-            {todayItems.map((item) => {
-              const linkedTodo = item.todo_id ? todos.find((t) => t.id === item.todo_id) : undefined
-              const effectiveDone = item.done || (linkedTodo?.status === 'done')
-              return (
-              <li key={item.id} className="flex items-center gap-2 group">
-                <button
-                  onClick={() => toggleTodayDone(item)}
-                  className={`flex-shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
-                    effectiveDone
-                      ? 'bg-amber-500 border-amber-500 text-white'
-                      : 'border-amber-300 dark:border-amber-600 hover:border-amber-500'
-                  }`}
-                >
-                  {effectiveDone && <span className="text-xs">&#10003;</span>}
-                </button>
-                {editingMustDoId === item.id && !item.todo_id ? (
+        {/* Section tabs */}
+        <div className="px-5 pb-2 flex gap-1">
+          {mustDoSections.map((sec) => {
+            const count = todayItems.filter((i) => (i.section || 'morning') === sec).length
+            return (
+              <button
+                key={sec}
+                onClick={() => setActiveSection(sec)}
+                className={`px-3 py-1 rounded-lg text-xs font-semibold capitalize transition-colors ${
+                  activeSection === sec
+                    ? 'bg-amber-200 dark:bg-amber-800 text-amber-800 dark:text-amber-200'
+                    : 'text-amber-500 dark:text-amber-500 hover:bg-amber-100 dark:hover:bg-amber-900/40'
+                }`}
+              >
+                {sec} {count > 0 && <span className="ml-0.5 opacity-70">({count})</span>}
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Sections */}
+        {mustDoSections.map((sec) => {
+          const sectionItems = todayItems
+            .filter((i) => (i.section || 'morning') === sec)
+            .sort((a, b) => a.order - b.order)
+          const isActive = activeSection === sec
+          const isDragOver = todayDragOver === sec || mustDoDragOverSection === sec
+
+          return (
+            <div
+              key={sec}
+              className={`transition-colors ${isDragOver ? 'bg-amber-100/60 dark:bg-amber-900/30' : ''}`}
+              onDragOver={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                if (e.dataTransfer.types.includes('application/x-todo-id')) {
+                  setTodayDragOver(sec)
+                } else if (e.dataTransfer.types.includes('application/x-must-do-id')) {
+                  setMustDoDragOverSection(sec)
+                }
+              }}
+              onDragLeave={(e) => {
+                if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                  if (todayDragOver === sec) setTodayDragOver(false)
+                  if (mustDoDragOverSection === sec) setMustDoDragOverSection(null)
+                }
+              }}
+              onDrop={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                setTodayDragOver(false)
+                setMustDoDragOverSection(null)
+
+                // Handle drop of a focused todo card
+                const todoIdStr = e.dataTransfer.getData('application/x-todo-id')
+                if (todoIdStr) {
+                  const todoId = parseInt(todoIdStr)
+                  const todo = todos.find((t) => t.id === todoId)
+                  if (todo) addTodayTodo(todo, sec)
+                  return
+                }
+
+                // Handle drop of a must-do item between sections
+                const mustDoIdStr = e.dataTransfer.getData('application/x-must-do-id')
+                if (mustDoIdStr) {
+                  const mustDoId = parseInt(mustDoIdStr)
+                  const item = todayItems.find((i) => i.id === mustDoId)
+                  if (item && (item.section || 'morning') !== sec) {
+                    const sectionCount = todayItems.filter((i) => (i.section || 'morning') === sec).length
+                    updateMustDo.mutate({ id: mustDoId, section: sec, order: sectionCount })
+                  }
+                }
+              }}
+            >
+              <div className={`px-5 py-1.5 flex items-center gap-2 ${sec !== 'morning' ? 'border-t border-amber-200/60 dark:border-amber-800/40' : ''}`}>
+                <span className="text-xs font-semibold uppercase tracking-wider text-amber-400 dark:text-amber-600 capitalize">
+                  {sec === 'morning' ? '🌅 Morning' : sec === 'afternoon' ? '☀️ Afternoon' : '🌙 Evening'}
+                </span>
+                <div className="flex-1 h-px bg-amber-200/50 dark:bg-amber-800/30" />
+                {sectionItems.length > 0 && (
+                  <span className="text-xs text-amber-400 dark:text-amber-600">
+                    {sectionItems.filter((i) => i.done || (i.todo_id && todos.find((t) => t.id === i.todo_id)?.status === 'done')).length}/{sectionItems.length}
+                  </span>
+                )}
+              </div>
+
+              {sectionItems.length > 0 && (
+                <ul className="px-5 pb-1 space-y-1">
+                  {sectionItems.map((item) => {
+                    const linkedTodo = item.todo_id ? todos.find((t) => t.id === item.todo_id) : undefined
+                    const effectiveDone = item.done || (linkedTodo?.status === 'done')
+                    return (
+                    <li
+                      key={item.id}
+                      className="flex items-center gap-2 group"
+                      draggable
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData('application/x-must-do-id', String(item.id))
+                        e.dataTransfer.effectAllowed = 'move'
+                        dragMustDoId.current = item.id
+                      }}
+                      onDragEnd={() => {
+                        dragMustDoId.current = null
+                        setMustDoDragOverSection(null)
+                      }}
+                    >
+                      <span className="text-slate-300 dark:text-slate-600 text-xs cursor-grab active:cursor-grabbing select-none">⠿</span>
+                      <button
+                        onClick={() => toggleTodayDone(item)}
+                        className={`flex-shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
+                          effectiveDone
+                            ? 'bg-amber-500 border-amber-500 text-white'
+                            : 'border-amber-300 dark:border-amber-600 hover:border-amber-500'
+                        }`}
+                      >
+                        {effectiveDone && <span className="text-xs">&#10003;</span>}
+                      </button>
+                      {editingMustDoId === item.id && !item.todo_id ? (
+                        <input
+                          autoFocus
+                          className="flex-1 text-sm text-slate-700 dark:text-slate-200 bg-transparent outline-none border-b border-amber-400 dark:border-amber-500 py-0"
+                          value={editingMustDoText}
+                          onChange={(e) => setEditingMustDoText(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              const trimmed = editingMustDoText.trim()
+                              if (trimmed && trimmed !== item.text) {
+                                updateMustDo.mutate({ id: item.id, text: trimmed })
+                              }
+                              setEditingMustDoId(null)
+                            }
+                            if (e.key === 'Escape') {
+                              setEditingMustDoId(null)
+                            }
+                          }}
+                          onBlur={() => {
+                            const trimmed = editingMustDoText.trim()
+                            if (trimmed && trimmed !== item.text) {
+                              updateMustDo.mutate({ id: item.id, text: trimmed })
+                            }
+                            setEditingMustDoId(null)
+                          }}
+                        />
+                      ) : (
+                      <span
+                        className={`flex-1 text-sm ${
+                          effectiveDone
+                            ? 'line-through text-amber-400 dark:text-amber-600'
+                            : 'text-slate-700 dark:text-slate-200'
+                        } ${item.todo_id ? 'cursor-pointer hover:text-amber-600 dark:hover:text-amber-300' : 'cursor-text'}`}
+                        onClick={() => {
+                          if (item.todo_id) {
+                            const el = document.getElementById(`focus-todo-${item.todo_id}`)
+                            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                            if (highlightTimer.current) clearTimeout(highlightTimer.current)
+                            setHighlightedTodoId(item.todo_id)
+                            setCollapseSignal((c) => c + 1)
+                            highlightTimer.current = setTimeout(() => setHighlightedTodoId(null), 2000)
+                          }
+                        }}
+                        onDoubleClick={() => {
+                          if (!item.todo_id) {
+                            setEditingMustDoId(item.id)
+                            setEditingMustDoText(item.text)
+                          }
+                        }}
+                      >
+                        {item.text}
+                        {item.todo_id && (() => {
+                          const lt = todos.find((t) => t.id === item.todo_id)
+                          if (!lt) return null
+                          const parts = [lt.assignee_name, lt.project_name].filter(Boolean)
+                          return parts.length > 0 ? (
+                            <span className="ml-1.5 text-xs text-slate-400 dark:text-slate-500 font-medium">
+                              — {parts.join(' · ')}
+                            </span>
+                          ) : null
+                        })()}
+                        {item.todo_id && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); onOpenTodo(item.todo_id!) }}
+                            className="ml-1.5 text-xs text-amber-500 hover:text-amber-700 dark:hover:text-amber-300"
+                            title="Open todo detail"
+                          >
+                            &#8599;
+                          </button>
+                        )}
+                      </span>
+                      )}
+                      <button
+                        onClick={() => removeTodayItem(item.id)}
+                        className="opacity-0 group-hover:opacity-100 text-xs text-amber-400 hover:text-red-500 transition-opacity"
+                        title="Remove"
+                      >
+                        &#10005;
+                      </button>
+                    </li>
+                    )
+                  })}
+                </ul>
+              )}
+
+              {/* Inline input for the active section */}
+              {isActive && (
+                <div className="px-5 pb-2 pt-0.5 relative">
                   <input
-                    autoFocus
-                    className="flex-1 text-sm text-slate-700 dark:text-slate-200 bg-transparent outline-none border-b border-amber-400 dark:border-amber-500 py-0"
-                    value={editingMustDoText}
-                    onChange={(e) => setEditingMustDoText(e.target.value)}
+                    ref={sec === activeSection ? todayInputRef : undefined}
+                    type="text"
+                    value={todayInput}
+                    onChange={(e) => {
+                      setTodayInput(e.target.value)
+                      setTodaySearchOpen(e.target.value.length > 0)
+                    }}
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        const trimmed = editingMustDoText.trim()
-                        if (trimmed && trimmed !== item.text) {
-                          updateMustDo.mutate({ id: item.id, text: trimmed })
-                        }
-                        setEditingMustDoId(null)
+                      if (e.key === 'Enter' && todayInput.trim()) {
+                        const match = todos.find((t) =>
+                          t.title.toLowerCase() === todayInput.trim().toLowerCase()
+                        )
+                        if (match) addTodayTodo(match, sec)
+                        else addTodayText(todayInput, sec)
+                        setTodayInput('')
+                        setTodaySearchOpen(false)
                       }
                       if (e.key === 'Escape') {
-                        setEditingMustDoId(null)
+                        setTodaySearchOpen(false)
+                        setTodayInput('')
                       }
                     }}
-                    onBlur={() => {
-                      const trimmed = editingMustDoText.trim()
-                      if (trimmed && trimmed !== item.text) {
-                        updateMustDo.mutate({ id: item.id, text: trimmed })
-                      }
-                      setEditingMustDoId(null)
-                    }}
+                    onFocus={() => { if (todayInput.length > 0) setTodaySearchOpen(true) }}
+                    onBlur={() => setTimeout(() => setTodaySearchOpen(false), 150)}
+                    placeholder={`Add to ${sec}... or drag a todo here`}
+                    className="w-full text-sm text-slate-600 dark:text-slate-300 placeholder-amber-300 dark:placeholder-amber-700 bg-transparent outline-none"
                   />
-                ) : (
-                <span
-                  className={`flex-1 text-sm ${
-                    effectiveDone
-                      ? 'line-through text-amber-400 dark:text-amber-600'
-                      : 'text-slate-700 dark:text-slate-200'
-                  } ${item.todo_id ? 'cursor-pointer hover:text-amber-600 dark:hover:text-amber-300' : 'cursor-text'}`}
-                  onClick={() => {
-                    if (item.todo_id) {
-                      const el = document.getElementById(`focus-todo-${item.todo_id}`)
-                      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-                      if (highlightTimer.current) clearTimeout(highlightTimer.current)
-                      setHighlightedTodoId(item.todo_id)
-                      setCollapseSignal((c) => c + 1)
-                      highlightTimer.current = setTimeout(() => setHighlightedTodoId(null), 2000)
-                    }
-                  }}
-                  onDoubleClick={() => {
-                    if (!item.todo_id) {
-                      setEditingMustDoId(item.id)
-                      setEditingMustDoText(item.text)
-                    }
-                  }}
-                >
-                  {item.text}
-                  {item.todo_id && (() => {
-                    const linkedTodo = todos.find((t) => t.id === item.todo_id)
-                    if (!linkedTodo) return null
-                    const parts = [linkedTodo.assignee_name, linkedTodo.project_name].filter(Boolean)
-                    return parts.length > 0 ? (
-                      <span className="ml-1.5 text-xs text-slate-400 dark:text-slate-500 font-medium">
-                        — {parts.join(' · ')}
-                      </span>
-                    ) : null
+                  {todaySearchOpen && todayInput.trim() && (() => {
+                    const q = todayInput.trim().toLowerCase()
+                    const matches = todos.filter(
+                      (t) =>
+                        t.title.toLowerCase().includes(q) &&
+                        !todayItems.some((i) => i.todo_id === t.id)
+                    ).slice(0, 6)
+                    if (matches.length === 0) return null
+                    return (
+                      <div className="absolute left-5 right-5 top-full z-20 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                        {matches.map((t) => (
+                          <button
+                            key={t.id}
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-amber-50 dark:hover:bg-amber-900/30 text-slate-700 dark:text-slate-200 flex items-center gap-2"
+                            onMouseDown={(e) => {
+                              e.preventDefault()
+                              addTodayTodo(t, sec)
+                              setTodayInput('')
+                              setTodaySearchOpen(false)
+                            }}
+                          >
+                            <span className="text-amber-400 text-xs">&#9733;</span>
+                            {t.title}
+                            {t.project_name && (
+                              <span className="ml-auto text-xs text-slate-400">{t.project_name}</span>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    )
                   })()}
-                  {item.todo_id && (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); onOpenTodo(item.todo_id!) }}
-                      className="ml-1.5 text-xs text-amber-500 hover:text-amber-700 dark:hover:text-amber-300"
-                      title="Open todo detail"
-                    >
-                      &#8599;
-                    </button>
-                  )}
-                </span>
-                )}
-                <button
-                  onClick={() => removeTodayItem(item.id)}
-                  className="opacity-0 group-hover:opacity-100 text-xs text-amber-400 hover:text-red-500 transition-opacity"
-                  title="Remove"
-                >
-                  &#10005;
-                </button>
-              </li>
-              )
-            })}
-          </ul>
-        )}
-
-        <div className="px-5 pb-4 pt-1 relative">
-          <input
-            ref={todayInputRef}
-            type="text"
-            value={todayInput}
-            onChange={(e) => {
-              setTodayInput(e.target.value)
-              setTodaySearchOpen(e.target.value.length > 0)
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && todayInput.trim()) {
-                // Check if input matches a focused todo
-                const match = todos.find((t) =>
-                  t.title.toLowerCase() === todayInput.trim().toLowerCase()
-                )
-                if (match) addTodayTodo(match)
-                else addTodayText(todayInput)
-                setTodayInput('')
-                setTodaySearchOpen(false)
-              }
-              if (e.key === 'Escape') {
-                setTodaySearchOpen(false)
-                setTodayInput('')
-              }
-            }}
-            onFocus={() => { if (todayInput.length > 0) setTodaySearchOpen(true) }}
-            onBlur={() => setTimeout(() => setTodaySearchOpen(false), 150)}
-            placeholder="Type to add or search todos... or drag a todo here"
-            className="w-full text-sm text-slate-600 dark:text-slate-300 placeholder-amber-300 dark:placeholder-amber-700 bg-transparent outline-none"
-          />
-          {todaySearchOpen && todayInput.trim() && (() => {
-            const q = todayInput.trim().toLowerCase()
-            const matches = todos.filter(
-              (t) =>
-                t.title.toLowerCase().includes(q) &&
-                !todayItems.some((i) => i.todo_id === t.id)
-            ).slice(0, 6)
-            if (matches.length === 0) return null
-            return (
-              <div className="absolute left-5 right-5 top-full z-20 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                {matches.map((t) => (
-                  <button
-                    key={t.id}
-                    className="w-full text-left px-3 py-2 text-sm hover:bg-amber-50 dark:hover:bg-amber-900/30 text-slate-700 dark:text-slate-200 flex items-center gap-2"
-                    onMouseDown={(e) => {
-                      e.preventDefault()
-                      addTodayTodo(t)
-                      setTodayInput('')
-                      setTodaySearchOpen(false)
-                    }}
-                  >
-                    <span className="text-amber-400 text-xs">&#9733;</span>
-                    {t.title}
-                    {t.project_name && (
-                      <span className="ml-auto text-xs text-slate-400">{t.project_name}</span>
-                    )}
-                  </button>
-                ))}
-              </div>
-            )
-          })()}
-        </div>
+                </div>
+              )}
+            </div>
+          )
+        })}
       </div>
 
       {isLoading ? (

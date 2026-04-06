@@ -8,6 +8,7 @@ import type { Root, ListItem, Paragraph, Text } from 'mdast'
 import { visit } from 'unist-util-visit'
 import { ArrowLeft, Trash2, Users, FolderKanban, CheckSquare, X, Mic, Sparkles, Loader2, Check, Pencil } from 'lucide-react'
 import type { Person, Project } from '../types'
+import DatePicker from '../components/DatePicker'
 import { useSuggestedNotes } from '../SuggestedNotesContext'
 import {
   fetchMeetingNote,
@@ -199,11 +200,11 @@ export default function MeetingNoteDetailPage() {
             className="flex-1 text-xl font-bold bg-transparent border-none outline-none text-slate-800 dark:text-slate-100 placeholder-slate-300"
             placeholder="Meeting title..."
           />
-          <input
-            type="date"
+          <DatePicker
             value={date}
-            onChange={(e) => handleDateChange(e.target.value)}
-            className="px-2 py-1 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            onChange={handleDateChange}
+            variant="input"
+            triggerClassName="!px-2 !py-1 !text-sm"
           />
           <button
             onClick={() => {
@@ -717,11 +718,12 @@ function TodoEditModal({
           {/* Deadline */}
           <div>
             <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Deadline</label>
-            <input
-              type="date"
+            <DatePicker
               value={draft.deadline}
-              onChange={(e) => update({ deadline: e.target.value })}
-              className="w-full px-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+              onChange={(v) => update({ deadline: v })}
+              variant="input"
+              placeholder="No deadline"
+              className="w-full"
             />
           </div>
         </div>

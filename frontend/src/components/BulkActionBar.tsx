@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { fetchPersons, fetchProjects, updateTodo } from '../api'
 import type { Person, Project } from '../types'
+import DatePicker from './DatePicker'
 
 interface BulkActionBarProps {
   selectedIds: Set<number>
@@ -101,18 +102,14 @@ export default function BulkActionBar({ selectedIds, onClearSelection, queryKeys
 
         {/* Set Deadline */}
         {activeAction === 'deadline' ? (
-          <input
-            autoFocus
-            type="date"
+          <DatePicker
             value={deadlineValue}
-            onChange={(e) => {
-              setDeadlineValue(e.target.value)
-              if (e.target.value) {
-                bulkUpdate.mutate({ deadline: e.target.value })
-              }
+            onChange={(v) => {
+              setDeadlineValue(v)
+              if (v) bulkUpdate.mutate({ deadline: v })
             }}
-            onBlur={() => { if (!deadlineValue) setActiveAction(null) }}
-            className="text-sm bg-white text-slate-800 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-white"
+            variant="input"
+            triggerClassName="!bg-white !text-slate-800 !px-3 !py-1.5 !text-sm !rounded-lg"
           />
         ) : (
           <button

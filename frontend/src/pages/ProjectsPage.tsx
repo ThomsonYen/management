@@ -8,6 +8,7 @@ import { ChevronsLeft, ChevronsRight } from 'lucide-react'
 import EditableMarkdown from '../components/EditableMarkdown'
 import { fetchProjectTree, fetchProjects, fetchTodos, createProject, createTodo, deleteProject, updateProject } from '../api'
 import type { ProjectTree, Project, Todo } from '../types'
+import DatePicker from '../components/DatePicker'
 import TodoCard from '../components/TodoCard'
 import TodoModal from '../components/TodoModal'
 import BulkActionBar from '../components/BulkActionBar'
@@ -175,11 +176,12 @@ function AddProjectModal({ parentId, onClose }: AddProjectModalProps) {
             <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">
               Deadline
             </label>
-            <input
-              type="date"
+            <DatePicker
               value={deadline}
-              onChange={(e) => setDeadline(e.target.value)}
-              className="w-full border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              onChange={setDeadline}
+              variant="input"
+              placeholder="No deadline"
+              className="w-full"
             />
           </div>
         </div>

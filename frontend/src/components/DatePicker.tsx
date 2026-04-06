@@ -1,39 +1,94 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { DayPicker } from 'react-day-picker'
 import { format, parse } from 'date-fns'
 
 interface DatePickerProps {
-  value: string // YYYY-MM-DD
+  value: string // YYYY-MM-DD or ''
   onChange: (value: string) => void
+  /** "inline" = clickable text label, "input" = bordered input field */
+  variant?: 'inline' | 'input'
+  placeholder?: string
   className?: string
+  /** Extra classes applied to the trigger button/input */
+  triggerClassName?: string
 }
 
-export default function DatePicker({ value, onChange, className = '' }: DatePickerProps) {
+export default function DatePicker({
+  value,
+  onChange,
+  variant = 'inline',
+  placeholder = 'Set date',
+  className = '',
+  triggerClassName = '',
+}: DatePickerProps) {
   const [open, setOpen] = useState(false)
-  const containerRef = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const popoverRef = useRef<HTMLDivElement>(null)
+  const [pos, setPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 })
   const selected = value ? parse(value, 'yyyy-MM-dd', new Date()) : undefined
 
-  useEffect(() => {
-    const onClickOutside = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setOpen(false)
-      }
+  const updatePosition = useCallback(() => {
+    if (!triggerRef.current) return
+    const rect = triggerRef.current.getBoundingClientRect()
+    const popoverWidth = 288
+    const popoverHeight = 320
+    let top = rect.bottom + 4
+    let left = rect.left
+
+    // Flip up if not enough room below
+    if (top + popoverHeight > window.innerHeight) {
+      top = rect.top - popoverHeight - 4
     }
-    if (open) document.addEventListener('mousedown', onClickOutside)
-    return () => document.removeEventListener('mousedown', onClickOutside)
-  }, [open])
+    // Push left if overflowing right
+    if (left + popoverWidth > window.innerWidth) {
+      left = window.innerWidth - popoverWidth - 8
+    }
+
+    setPos({ top, left })
+  }, [])
+
+  useEffect(() => {
+    if (!open) return
+    updatePosition()
+    const onClickOutside = (e: MouseEvent) => {
+      if (
+        triggerRef.current?.contains(e.target as Node) ||
+        popoverRef.current?.contains(e.target as Node)
+      ) return
+      setOpen(false)
+    }
+    document.addEventListener('mousedown', onClickOutside)
+    window.addEventListener('scroll', updatePosition, true)
+    window.addEventListener('resize', updatePosition)
+    return () => {
+      document.removeEventListener('mousedown', onClickOutside)
+      window.removeEventListener('scroll', updatePosition, true)
+      window.removeEventListener('resize', updatePosition)
+    }
+  }, [open, updatePosition])
+
+  const triggerBase =
+    variant === 'input'
+      ? `w-full text-left px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-400 ${!value ? 'text-slate-400 dark:text-slate-500' : 'text-slate-800 dark:text-slate-200'}`
+      : 'font-bold text-xs hover:text-indigo-600 dark:hover:text-indigo-400 dark:text-slate-300 transition-colors'
 
   return (
-    <div ref={containerRef} className={`relative inline-block ${className}`}>
+    <div className={`relative inline-block ${className}`}>
       <button
+        ref={triggerRef}
         type="button"
-        onClick={() => setOpen(!open)}
-        className="font-bold text-xs hover:text-indigo-600 dark:hover:text-indigo-400 dark:text-slate-300 transition-colors"
+        onClick={(e) => { e.stopPropagation(); setOpen(!open) }}
+        className={`${triggerBase} ${triggerClassName}`}
       >
-        {value || 'Set date'}
+        {value || placeholder}
       </button>
-      {open && (
-        <div className="absolute z-50 mt-1 bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 p-2">
+      {open && createPortal(
+        <div
+          ref={popoverRef}
+          style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 9999 }}
+          className="bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 p-2"
+        >
           <DayPicker
             mode="single"
             selected={selected}
@@ -66,7 +121,17 @@ export default function DatePicker({ value, onChange, className = '' }: DatePick
               chevron: 'w-4 h-4',
             }}
           />
-        </div>
+          {value && (
+            <button
+              type="button"
+              onClick={() => { onChange(''); setOpen(false) }}
+              className="w-full mt-1 text-xs text-slate-400 hover:text-red-500 transition-colors py-1"
+            >
+              Clear date
+            </button>
+          )}
+        </div>,
+        document.body,
       )}
     </div>
   )

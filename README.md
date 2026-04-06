@@ -10,7 +10,7 @@ Some browsers (e.g. Arc) require HTTPS to grant microphone access. Without this,
 brew install mkcert
 mkcert -install
 cd frontend
-mkcert -key-file localhost-key.pem -cert-file localhost.pem localhost
+mkcert dev.localhost
 ```
 
-When the pem files are present, Vite automatically serves over `https://localhost:5173`. Without them, it falls back to plain HTTP.
+When the pem files are present, Vite automatically serves over `https://dev.localhost:5173`. Without them, it falls back to plain HTTP.
