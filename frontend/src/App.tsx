@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react'
 import { NavLink, Route, Routes, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, CheckSquare, FolderKanban, Users, CheckCircle2, Crosshair, Settings, ChevronsLeft, ChevronsRight, FileText, Target } from 'lucide-react'
+import { LayoutDashboard, CheckSquare, FolderKanban, Users, CheckCircle2, Crosshair, Settings, ChevronsLeft, ChevronsRight, FileText, Target, BarChart3 } from 'lucide-react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { updateTodo, createMeetingNote } from './api'
 import { useResizableSidebar } from './hooks/useResizableSidebar'
@@ -20,6 +20,7 @@ import SettingsPage from './pages/SettingsPage'
 import MeetingNotesPage from './pages/MeetingNotesPage'
 import MeetingNoteDetailPage from './pages/MeetingNoteDetailPage'
 import WeeklyGoalsPage from './pages/WeeklyGoalsPage'
+import ProgressPage from './pages/ProgressPage'
 import TodoModal from './components/TodoModal'
 
 const navItems = [
@@ -30,6 +31,7 @@ const navItems = [
   { to: '/people', label: 'People', icon: Users, end: false },
   { to: '/meeting-notes', label: 'Meetings', icon: FileText, end: false },
   { to: '/weekly-goals', label: 'Weekly Goals', icon: Target, end: false },
+  { to: '/progress', label: 'Progress', icon: BarChart3, end: false },
   { to: '/done', label: 'Recently Done', icon: CheckCircle2, end: false },
 ]
 
@@ -215,6 +217,7 @@ export default function App() {
           <Route path="/meeting-notes" element={<MeetingNotesPage />} />
           <Route path="/meeting-notes/:id" element={<MeetingNoteDetailPage />} />
           <Route path="/weekly-goals" element={<WeeklyGoalsPage />} />
+          <Route path="/progress" element={<ProgressPage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Routes>
       </main>

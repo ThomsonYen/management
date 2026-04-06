@@ -5,6 +5,7 @@ import tempfile
 import uuid
 from datetime import date, datetime, timezone
 from pathlib import Path
+from collections import defaultdict
 from typing import List, Optional
 
 import yaml
@@ -384,6 +385,20 @@ class DailyGoalOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class PersonProgressBucket(BaseModel):
+    period: str
+    task_count: int
+    total_hours: float
+
+
+class PersonProgress(BaseModel):
+    person_id: int
+    person_name: str
+    buckets: List[PersonProgressBucket]
+    total_task_count: int
+    total_hours: float
+
+
 class MeetingNoteCreate(BaseModel):
     title: str
     date: str
@@ -606,6 +621,61 @@ def delete_person(person_id: int, db: Session = Depends(get_db)):
     db.delete(p)
     db.commit()
     return {"ok": True}
+
+
+@app.get("/persons/progress", response_model=List[PersonProgress])
+def person_progress(
+    granularity: str = Query("week", pattern="^(day|week|month)$"),
+    since: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    if since is None:
+        from datetime import timedelta
+        days_back = {"day": 90, "week": 180, "month": 365}[granularity]
+        since = (datetime.now(timezone.utc) - timedelta(days=days_back)).strftime("%Y-%m-%d")
+
+    todos = (
+        db.query(Todo)
+        .filter(
+            Todo.status == "done",
+            Todo.assignee_id != None,
+            Todo.done_at != None,
+            Todo.done_at >= since,
+        )
+        .all()
+    )
+    persons_map = {p.id: p.name for p in db.query(Person).all()}
+
+    data: dict = defaultdict(lambda: defaultdict(lambda: {"count": 0, "hours": 0.0}))
+    for t in todos:
+        try:
+            dt = datetime.fromisoformat(t.done_at)
+        except (ValueError, TypeError):
+            continue
+        if granularity == "day":
+            key = dt.strftime("%Y-%m-%d")
+        elif granularity == "week":
+            iso = dt.isocalendar()
+            key = f"{iso[0]}-W{iso[1]:02d}"
+        else:
+            key = dt.strftime("%Y-%m")
+        data[t.assignee_id][key]["count"] += 1
+        data[t.assignee_id][key]["hours"] += t.estimated_hours
+
+    result = []
+    for pid, buckets in data.items():
+        sorted_buckets = sorted(buckets.items())
+        result.append(PersonProgress(
+            person_id=pid,
+            person_name=persons_map.get(pid, "Unknown"),
+            buckets=[
+                PersonProgressBucket(period=k, task_count=v["count"], total_hours=v["hours"])
+                for k, v in sorted_buckets
+            ],
+            total_task_count=sum(v["count"] for v in buckets.values()),
+            total_hours=sum(v["hours"] for v in buckets.values()),
+        ))
+    return sorted(result, key=lambda r: r.person_name)
 
 
 # ─── Projects ────────────────────────────────────────────────────────────────

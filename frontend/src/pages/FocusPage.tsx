@@ -69,6 +69,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
   const [focusSearchOpen, setFocusSearchOpen] = useState(false)
   const [editingMustDoId, setEditingMustDoId] = useState<number | null>(null)
   const [editingMustDoText, setEditingMustDoText] = useState('')
+  const [selectedMustDoIds, setSelectedMustDoIds] = useState<Set<number>>(new Set())
   const queryClient = useQueryClient()
 
   // --- Must Do Today ---
@@ -569,26 +570,6 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
           </button>
         </div>
 
-        {/* Section tabs */}
-        <div className="px-5 pb-2 flex gap-1">
-          {mustDoSections.map((sec) => {
-            const count = todayItems.filter((i) => (i.section || 'morning') === sec).length
-            return (
-              <button
-                key={sec}
-                onClick={() => setActiveSection(sec)}
-                className={`px-3 py-1 rounded-lg text-xs font-semibold capitalize transition-colors ${
-                  activeSection === sec
-                    ? 'bg-amber-200 dark:bg-amber-800 text-amber-800 dark:text-amber-200'
-                    : 'text-amber-500 dark:text-amber-500 hover:bg-amber-100 dark:hover:bg-amber-900/40'
-                }`}
-              >
-                {sec} {count > 0 && <span className="ml-0.5 opacity-70">({count})</span>}
-              </button>
-            )
-          })}
-        </div>
-
         {/* Sections */}
         {mustDoSections.map((sec) => {
           const sectionItems = todayItems
@@ -631,15 +612,21 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
                   return
                 }
 
-                // Handle drop of a must-do item between sections
+                // Handle drop of must-do item(s) between sections
+                const mustDoIdsStr = e.dataTransfer.getData('application/x-must-do-ids')
                 const mustDoIdStr = e.dataTransfer.getData('application/x-must-do-id')
-                if (mustDoIdStr) {
-                  const mustDoId = parseInt(mustDoIdStr)
-                  const item = todayItems.find((i) => i.id === mustDoId)
-                  if (item && (item.section || 'morning') !== sec) {
-                    const sectionCount = todayItems.filter((i) => (i.section || 'morning') === sec).length
-                    updateMustDo.mutate({ id: mustDoId, section: sec, order: sectionCount })
-                  }
+                if (mustDoIdsStr || mustDoIdStr) {
+                  const ids: number[] = mustDoIdsStr
+                    ? JSON.parse(mustDoIdsStr)
+                    : [parseInt(mustDoIdStr)]
+                  let sectionCount = todayItems.filter((i) => (i.section || 'morning') === sec).length
+                  const moves = ids
+                    .map((id) => todayItems.find((i) => i.id === id))
+                    .filter((item): item is MustDoItem => !!item && (item.section || 'morning') !== sec)
+                  moves.forEach((item, idx) => {
+                    updateMustDo.mutate({ id: item.id, section: sec, order: sectionCount + idx })
+                  })
+                  if (moves.length > 0) setSelectedMustDoIds(new Set())
                 }
               }}
             >
@@ -663,10 +650,25 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
                     return (
                     <li
                       key={item.id}
-                      className="flex items-center gap-2 group"
+                      className={`flex items-center gap-2 group cursor-pointer rounded px-1 -mx-1 ${selectedMustDoIds.has(item.id) ? 'bg-amber-200/70 dark:bg-amber-800/40 ring-1 ring-amber-300 dark:ring-amber-700' : 'hover:bg-amber-50 dark:hover:bg-amber-900/20'}`}
+                      onClick={(e) => {
+                        // Don't toggle select when clicking checkbox, text input, or buttons
+                        if ((e.target as HTMLElement).closest('button, input')) return
+                        setSelectedMustDoIds((prev) => {
+                          const next = new Set(prev)
+                          if (next.has(item.id)) next.delete(item.id)
+                          else next.add(item.id)
+                          return next
+                        })
+                      }}
                       draggable
                       onDragStart={(e) => {
+                        // If this item is selected, drag all selected items
+                        const ids = selectedMustDoIds.has(item.id) && selectedMustDoIds.size > 1
+                          ? Array.from(selectedMustDoIds)
+                          : [item.id]
                         e.dataTransfer.setData('application/x-must-do-id', String(item.id))
+                        e.dataTransfer.setData('application/x-must-do-ids', JSON.stringify(ids))
                         e.dataTransfer.effectAllowed = 'move'
                         dragMustDoId.current = item.id
                       }}
@@ -718,17 +720,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
                           effectiveDone
                             ? 'line-through text-amber-400 dark:text-amber-600'
                             : 'text-slate-700 dark:text-slate-200'
-                        } ${item.todo_id ? 'cursor-pointer hover:text-amber-600 dark:hover:text-amber-300' : 'cursor-text'}`}
-                        onClick={() => {
-                          if (item.todo_id) {
-                            const el = document.getElementById(`focus-todo-${item.todo_id}`)
-                            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-                            if (highlightTimer.current) clearTimeout(highlightTimer.current)
-                            setHighlightedTodoId(item.todo_id)
-                            setCollapseSignal((c) => c + 1)
-                            highlightTimer.current = setTimeout(() => setHighlightedTodoId(null), 2000)
-                          }
-                        }}
+                        } ${!item.todo_id ? 'cursor-text' : ''}`}
                         onDoubleClick={() => {
                           if (!item.todo_id) {
                             setEditingMustDoId(item.id)
@@ -749,7 +741,15 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
                         })()}
                         {item.todo_id && (
                           <button
-                            onClick={(e) => { e.stopPropagation(); onOpenTodo(item.todo_id!) }}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              const el = document.getElementById(`focus-todo-${item.todo_id}`)
+                              if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                              if (highlightTimer.current) clearTimeout(highlightTimer.current)
+                              setHighlightedTodoId(item.todo_id!)
+                              setCollapseSignal((c) => c + 1)
+                              highlightTimer.current = setTimeout(() => setHighlightedTodoId(null), 2000)
+                            }}
                             className="ml-1.5 text-xs text-amber-500 hover:text-amber-700 dark:hover:text-amber-300"
                             title="Open todo detail"
                           >
@@ -771,73 +771,118 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
                 </ul>
               )}
 
-              {/* Inline input for the active section */}
-              {isActive && (
-                <div className="px-5 pb-2 pt-0.5 relative">
-                  <input
-                    ref={sec === activeSection ? todayInputRef : undefined}
-                    type="text"
-                    value={todayInput}
-                    onChange={(e) => {
-                      setTodayInput(e.target.value)
-                      setTodaySearchOpen(e.target.value.length > 0)
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && todayInput.trim()) {
-                        const match = todos.find((t) =>
-                          t.title.toLowerCase() === todayInput.trim().toLowerCase()
-                        )
-                        if (match) addTodayTodo(match, sec)
-                        else addTodayText(todayInput, sec)
-                        setTodayInput('')
-                        setTodaySearchOpen(false)
-                      }
-                      if (e.key === 'Escape') {
-                        setTodaySearchOpen(false)
-                        setTodayInput('')
-                      }
-                    }}
-                    onFocus={() => { if (todayInput.length > 0) setTodaySearchOpen(true) }}
-                    onBlur={() => setTimeout(() => setTodaySearchOpen(false), 150)}
-                    placeholder={`Add to ${sec}... or drag a todo here`}
-                    className="w-full text-sm text-slate-600 dark:text-slate-300 placeholder-amber-300 dark:placeholder-amber-700 bg-transparent outline-none"
-                  />
-                  {todaySearchOpen && todayInput.trim() && (() => {
-                    const q = todayInput.trim().toLowerCase()
-                    const matches = todos.filter(
-                      (t) =>
-                        t.title.toLowerCase().includes(q) &&
-                        !todayItems.some((i) => i.todo_id === t.id)
-                    ).slice(0, 6)
-                    if (matches.length === 0) return null
-                    return (
-                      <div className="absolute left-5 right-5 top-full z-20 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                        {matches.map((t) => (
-                          <button
-                            key={t.id}
-                            className="w-full text-left px-3 py-2 text-sm hover:bg-amber-50 dark:hover:bg-amber-900/30 text-slate-700 dark:text-slate-200 flex items-center gap-2"
-                            onMouseDown={(e) => {
-                              e.preventDefault()
-                              addTodayTodo(t, sec)
-                              setTodayInput('')
-                              setTodaySearchOpen(false)
-                            }}
-                          >
-                            <span className="text-amber-400 text-xs">&#9733;</span>
-                            {t.title}
-                            {t.project_name && (
-                              <span className="ml-auto text-xs text-slate-400">{t.project_name}</span>
-                            )}
-                          </button>
-                        ))}
-                      </div>
-                    )
-                  })()}
-                </div>
-              )}
+              {/* Inline input for every section */}
+              <div className="px-5 pb-2 pt-0.5 relative">
+                <input
+                  ref={sec === activeSection ? todayInputRef : undefined}
+                  type="text"
+                  value={isActive ? todayInput : undefined}
+                  onChange={isActive ? (e) => {
+                    setTodayInput(e.target.value)
+                    setTodaySearchOpen(e.target.value.length > 0)
+                  } : undefined}
+                  onFocus={() => {
+                    setActiveSection(sec)
+                    if (todayInput.length > 0) setTodaySearchOpen(true)
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && todayInput.trim()) {
+                      const match = todos.find((t) =>
+                        t.title.toLowerCase() === todayInput.trim().toLowerCase()
+                      )
+                      if (match) addTodayTodo(match, sec)
+                      else addTodayText(todayInput, sec)
+                      setTodayInput('')
+                      setTodaySearchOpen(false)
+                    }
+                    if (e.key === 'Escape') {
+                      setTodaySearchOpen(false)
+                      setTodayInput('')
+                    }
+                  }}
+                  onBlur={() => setTimeout(() => setTodaySearchOpen(false), 150)}
+                  placeholder={`Add to ${sec}...`}
+                  className="w-full text-sm text-slate-600 dark:text-slate-300 placeholder-amber-300 dark:placeholder-amber-700 bg-transparent outline-none"
+                />
+                {isActive && todaySearchOpen && todayInput.trim() && (() => {
+                  const q = todayInput.trim().toLowerCase()
+                  const matches = todos.filter(
+                    (t) =>
+                      t.title.toLowerCase().includes(q) &&
+                      !todayItems.some((i) => i.todo_id === t.id)
+                  ).slice(0, 6)
+                  if (matches.length === 0) return null
+                  return (
+                    <div className="absolute left-5 right-5 top-full z-20 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                      {matches.map((t) => (
+                        <button
+                          key={t.id}
+                          className="w-full text-left px-3 py-2 text-sm hover:bg-amber-50 dark:hover:bg-amber-900/30 text-slate-700 dark:text-slate-200 flex items-center gap-2"
+                          onMouseDown={(e) => {
+                            e.preventDefault()
+                            addTodayTodo(t, sec)
+                            setTodayInput('')
+                            setTodaySearchOpen(false)
+                          }}
+                        >
+                          <span className="text-amber-400 text-xs">&#9733;</span>
+                          {t.title}
+                          {t.project_name && (
+                            <span className="ml-auto text-xs text-slate-400">{t.project_name}</span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )
+                })()}
+              </div>
             </div>
           )
         })}
+
+        {/* Bulk action bar for must-do items */}
+        {selectedMustDoIds.size > 0 && (
+          <div className="px-5 py-2 border-t border-amber-200/60 dark:border-amber-800/40 flex items-center gap-2 flex-wrap">
+            <span className="text-xs font-semibold text-amber-600 dark:text-amber-400">
+              {selectedMustDoIds.size} selected
+            </span>
+            <div className="h-4 w-px bg-amber-300 dark:bg-amber-700" />
+            {mustDoSections.map((sec) => (
+              <button
+                key={sec}
+                onClick={() => {
+                  let sectionCount = todayItems.filter((i) => (i.section || 'morning') === sec).length
+                  const moves = Array.from(selectedMustDoIds)
+                    .map((id) => todayItems.find((i) => i.id === id))
+                    .filter((item): item is MustDoItem => !!item && (item.section || 'morning') !== sec)
+                  moves.forEach((item, idx) => {
+                    updateMustDo.mutate({ id: item.id, section: sec, order: sectionCount + idx })
+                  })
+                  setSelectedMustDoIds(new Set())
+                }}
+                className="px-2 py-0.5 rounded text-xs font-medium capitalize bg-amber-100 dark:bg-amber-800/50 text-amber-700 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-700/50 transition-colors"
+              >
+                Move to {sec}
+              </button>
+            ))}
+            <div className="flex-1" />
+            <button
+              onClick={() => {
+                selectedMustDoIds.forEach((id) => deleteMustDo.mutate(id))
+                setSelectedMustDoIds(new Set())
+              }}
+              className="px-2 py-0.5 rounded text-xs font-medium bg-red-50 dark:bg-red-900/30 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/50 transition-colors"
+            >
+              Delete
+            </button>
+            <button
+              onClick={() => setSelectedMustDoIds(new Set())}
+              className="text-xs text-amber-400 hover:text-amber-600 dark:hover:text-amber-300 font-medium"
+            >
+              Cancel
+            </button>
+          </div>
+        )}
       </div>
 
       {isLoading ? (

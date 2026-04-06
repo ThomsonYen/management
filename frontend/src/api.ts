@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { Person, Project, ProjectTree, Todo, SubTodo, ScheduleStatus, MeetingNote, MeetingNoteSummary, MeetingTemplate, MeetingNoteSearchResult, AudioFileInfo } from './types'
+import type { Person, PersonProgress, Project, ProjectTree, Todo, SubTodo, ScheduleStatus, MeetingNote, MeetingNoteSummary, MeetingTemplate, MeetingNoteSearchResult, AudioFileInfo } from './types'
 
 const api = axios.create({
   baseURL: '/api',
@@ -15,6 +15,12 @@ export const createPerson = (data: { name: string; email?: string }): Promise<Pe
 
 export const deletePerson = (id: number): Promise<void> =>
   api.delete(`/persons/${id}`).then((r) => r.data)
+
+export const fetchPersonProgress = (
+  granularity: 'day' | 'week' | 'month' = 'week',
+  since?: string,
+): Promise<PersonProgress[]> =>
+  api.get('/persons/progress', { params: { granularity, since } }).then((r) => r.data)
 
 // ─── Projects ────────────────────────────────────────────────────────────────
 

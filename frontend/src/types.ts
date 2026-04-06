@@ -102,3 +102,17 @@ export interface MeetingNoteSearchResult {
   date: string
   snippet: string
 }
+
+export interface PersonProgressBucket {
+  period: string
+  task_count: number
+  total_hours: number
+}
+
+export interface PersonProgress {
+  person_id: number
+  person_name: string
+  buckets: PersonProgressBucket[]
+  total_task_count: number
+  total_hours: number
+}
