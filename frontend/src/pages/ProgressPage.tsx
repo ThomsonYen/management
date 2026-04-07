@@ -47,7 +47,11 @@ function getCurrentPeriodKey(granularity: Granularity): string {
 }
 
 export default function ProgressPage() {
-  const [granularity, setGranularity] = useState<Granularity>('week')
+  const [granularity, setGranularity] = useState<Granularity>(() => {
+    const saved = localStorage.getItem('progress-granularity')
+    if (saved === 'day' || saved === 'week' || saved === 'month') return saved
+    return 'week'
+  })
   const [counts, setCounts] = useState<Record<Granularity, number>>(() => {
     try {
       const saved = localStorage.getItem('progress-counts')
@@ -171,6 +175,7 @@ export default function ProgressPage() {
 
   const handleGranularityChange = (g: Granularity) => {
     setGranularity(g)
+    localStorage.setItem('progress-granularity', g)
     setPageOffset(0)
   }
 

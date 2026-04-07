@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react'
+import React, { useState, useRef, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { fetchTodos, fetchProjects, updateTodo, createTodo, reorderFocus, fetchMustDoItems, createMustDoItem, updateMustDoItem, deleteMustDoItem } from '../api'
 import type { Todo, Project } from '../types'
@@ -47,7 +47,9 @@ function groupTodosNested(todos: Todo[]): NestedGroup[] {
 
 export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => void }) {
   const { timezone } = useTimezone()
-  const [selectedProject, setSelectedProject] = useState<string>('')
+  const [selectedProject, setSelectedProject] = useState<string>(() => {
+    return localStorage.getItem('focusSelectedProject') || ''
+  })
   const [groupBy, setGroupBy] = useState<GroupBy>(() => {
     const saved = localStorage.getItem('focusGroupBy')
     return (saved === 'project' || saved === 'user' || saved === 'both') ? saved : 'none'
@@ -82,6 +84,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
   const mustDoSections = ['morning', 'afternoon', 'evening'] as const
   const dragMustDoId = useRef<number | null>(null)
   const [mustDoDragOverSection, setMustDoDragOverSection] = useState<string | null>(null)
+  const [mustDoDragOverPos, setMustDoDragOverPos] = useState<{ section: string; index: number } | null>(null)
 
   const { data: todayItems = [] } = useQuery<MustDoItem[]>({
     queryKey: ['must-do', todayKey],
@@ -436,7 +439,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
             </label>
             <select
               value={selectedProject}
-              onChange={(e) => setSelectedProject(e.target.value)}
+              onChange={(e) => { setSelectedProject(e.target.value); localStorage.setItem('focusSelectedProject', e.target.value) }}
               className="w-full border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             >
               <option value="">All projects</option>
@@ -451,7 +454,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
             </select>
             {selectedProject && (
               <button
-                onClick={() => setSelectedProject('')}
+                onClick={() => { setSelectedProject(''); localStorage.removeItem('focusSelectedProject') }}
                 className="text-xs text-indigo-600 hover:text-indigo-800 font-medium mt-1"
               >
                 Clear filter
@@ -595,6 +598,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
                 if (!e.currentTarget.contains(e.relatedTarget as Node)) {
                   if (todayDragOver === sec) setTodayDragOver(false)
                   if (mustDoDragOverSection === sec) setMustDoDragOverSection(null)
+                  if (mustDoDragOverPos?.section === sec) setMustDoDragOverPos(null)
                 }
               }}
               onDrop={(e) => {
@@ -602,6 +606,8 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
                 e.stopPropagation()
                 setTodayDragOver(false)
                 setMustDoDragOverSection(null)
+                const dropPos = mustDoDragOverPos
+                setMustDoDragOverPos(null)
 
                 // Handle drop of a focused todo card
                 const todoIdStr = e.dataTransfer.getData('application/x-todo-id')
@@ -612,21 +618,58 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
                   return
                 }
 
-                // Handle drop of must-do item(s) between sections
+                // Handle drop of must-do item(s)
                 const mustDoIdsStr = e.dataTransfer.getData('application/x-must-do-ids')
                 const mustDoIdStr = e.dataTransfer.getData('application/x-must-do-id')
                 if (mustDoIdsStr || mustDoIdStr) {
                   const ids: number[] = mustDoIdsStr
                     ? JSON.parse(mustDoIdsStr)
                     : [parseInt(mustDoIdStr)]
-                  let sectionCount = todayItems.filter((i) => (i.section || 'morning') === sec).length
-                  const moves = ids
+
+                  // Check if this is a within-section reorder (single item, same section)
+                  const currentSectionItems = todayItems
+                    .filter((i) => (i.section || 'morning') === sec)
+                    .sort((a, b) => a.order - b.order)
+                  const draggedItems = ids
                     .map((id) => todayItems.find((i) => i.id === id))
-                    .filter((item): item is MustDoItem => !!item && (item.section || 'morning') !== sec)
-                  moves.forEach((item, idx) => {
-                    updateMustDo.mutate({ id: item.id, section: sec, order: sectionCount + idx })
-                  })
-                  if (moves.length > 0) setSelectedMustDoIds(new Set())
+                    .filter((item): item is MustDoItem => !!item)
+                  const allInSameSection = draggedItems.length > 0 && draggedItems.every((item) => (item.section || 'morning') === sec)
+
+                  if (allInSameSection && dropPos?.section === sec) {
+                    // Reorder within section (single or multi)
+                    const dragIdSet = new Set(ids)
+                    const insertIdx = dropPos.index
+
+                    // Remove dragged items, then insert them at the target position
+                    const remaining = currentSectionItems.filter((i) => !dragIdSet.has(i.id))
+                    // Compute adjusted insert: count how many non-dragged items are before the original insert index
+                    let adjustedIdx = 0
+                    for (let i = 0; i < insertIdx && i < currentSectionItems.length; i++) {
+                      if (!dragIdSet.has(currentSectionItems[i].id)) adjustedIdx++
+                    }
+                    // Preserve relative order of dragged items
+                    const movedItems = currentSectionItems.filter((i) => dragIdSet.has(i.id))
+                    const reordered = [...remaining]
+                    reordered.splice(adjustedIdx, 0, ...movedItems)
+
+                    // Check if order actually changed
+                    const changed = reordered.some((item, i) => item.order !== i)
+                    if (changed) {
+                      reordered.forEach((item, i) => {
+                        if (item.order !== i) {
+                          updateMustDo.mutate({ id: item.id, order: i })
+                        }
+                      })
+                    }
+                  } else {
+                    // Move between sections
+                    const moves = draggedItems.filter((item) => (item.section || 'morning') !== sec)
+                    let sectionCount = currentSectionItems.length
+                    moves.forEach((item, idx) => {
+                      updateMustDo.mutate({ id: item.id, section: sec, order: sectionCount + idx })
+                    })
+                    if (moves.length > 0) setSelectedMustDoIds(new Set())
+                  }
                 }
               }}
             >
@@ -644,13 +687,49 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
 
               {sectionItems.length > 0 && (
                 <ul className="px-5 pb-1 space-y-1">
-                  {sectionItems.map((item) => {
+                  {sectionItems.map((item, itemIdx) => {
                     const linkedTodo = item.todo_id ? todos.find((t) => t.id === item.todo_id) : undefined
                     const effectiveDone = item.done || (linkedTodo?.status === 'done')
+                    const isNoOp = (insertIdx: number) => {
+                      if (dragMustDoId.current === null) return false
+                      // Get all dragged IDs (multi-select aware)
+                      const dragIds = selectedMustDoIds.has(dragMustDoId.current) && selectedMustDoIds.size > 1
+                        ? selectedMustDoIds
+                        : new Set([dragMustDoId.current])
+                      // Check if all dragged items are in this section
+                      const dragIndices = sectionItems
+                        .map((si, idx) => dragIds.has(si.id) ? idx : -1)
+                        .filter((idx) => idx !== -1)
+                      if (dragIndices.length === 0) return false
+                      // It's a no-op if inserting at a position that's within or adjacent to the contiguous block
+                      const minIdx = Math.min(...dragIndices)
+                      const maxIdx = Math.max(...dragIndices)
+                      // Check if they form a contiguous block
+                      const isContiguous = maxIdx - minIdx + 1 === dragIndices.length
+                      if (!isContiguous) return false
+                      return insertIdx >= minIdx && insertIdx <= maxIdx + 1
+                    }
+                    const showLineBefore = mustDoDragOverPos?.section === sec && mustDoDragOverPos.index === itemIdx && dragMustDoId.current !== null && !isNoOp(itemIdx)
+                    const showLineAfter = itemIdx === sectionItems.length - 1 && mustDoDragOverPos?.section === sec && mustDoDragOverPos.index === sectionItems.length && dragMustDoId.current !== null && !isNoOp(sectionItems.length)
                     return (
+                    <React.Fragment key={item.id}>
+                    {showLineBefore && (
+                      <div className="h-0.5 bg-amber-400 rounded-full mx-1 my-0.5 transition-all" />
+                    )}
                     <li
-                      key={item.id}
                       className={`flex items-center gap-2 group cursor-pointer rounded px-1 -mx-1 ${selectedMustDoIds.has(item.id) ? 'bg-amber-200/70 dark:bg-amber-800/40 ring-1 ring-amber-300 dark:ring-amber-700' : 'hover:bg-amber-50 dark:hover:bg-amber-900/20'}`}
+                      onDragOver={(e) => {
+                        if (!e.dataTransfer.types.includes('application/x-must-do-id')) return
+                        e.preventDefault()
+                        e.stopPropagation()
+                        const rect = e.currentTarget.getBoundingClientRect()
+                        const midY = rect.top + rect.height / 2
+                        const idx = sectionItems.indexOf(item)
+                        const insertIdx = e.clientY < midY ? idx : idx + 1
+                        setMustDoDragOverPos((prev) =>
+                          prev?.section === sec && prev?.index === insertIdx ? prev : { section: sec, index: insertIdx }
+                        )
+                      }}
                       onClick={(e) => {
                         // Don't toggle select when clicking checkbox, text input, or buttons
                         if ((e.target as HTMLElement).closest('button, input')) return
@@ -675,6 +754,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
                       onDragEnd={() => {
                         dragMustDoId.current = null
                         setMustDoDragOverSection(null)
+                        setMustDoDragOverPos(null)
                       }}
                     >
                       <span className="text-slate-300 dark:text-slate-600 text-xs cursor-grab active:cursor-grabbing select-none">⠿</span>
@@ -766,6 +846,10 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
                         &#10005;
                       </button>
                     </li>
+                    {showLineAfter && (
+                      <div className="h-0.5 bg-amber-400 rounded-full mx-1 my-0.5 transition-all" />
+                    )}
+                    </React.Fragment>
                     )
                   })}
                 </ul>
