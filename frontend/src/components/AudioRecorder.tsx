@@ -1,8 +1,6 @@
 import { useState } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Mic, Square, Monitor, Loader2 } from 'lucide-react'
-import { useAudioRecorder, supportsSystemAudio, type RecordingMode } from '../hooks/useAudioRecorder'
-import { uploadAudio } from '../api'
+import { useRecording, supportsSystemAudio, type RecordingMode } from '../RecordingContext'
 
 function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60)
@@ -11,40 +9,35 @@ function formatDuration(seconds: number): string {
 }
 
 export default function AudioRecorder({ noteId }: { noteId: number }) {
-  const queryClient = useQueryClient()
-  const { isRecording, duration, error, start, stop } = useAudioRecorder()
+  const { isRecording, noteId: recordingNoteId, duration, error, isUploading, start, stop } =
+    useRecording()
   const [mode, setMode] = useState<RecordingMode>('mic')
 
-  const uploadMutation = useMutation({
-    mutationFn: (blob: Blob) => uploadAudio(noteId, blob),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['meeting-note', noteId] })
-    },
-  })
+  const isThisNote = recordingNoteId === noteId
+  const isOtherNote = isRecording && !isThisNote
 
-  const handleStart = () => start(mode)
-
-  const handleStop = async () => {
-    const blob = await stop()
-    if (blob.size > 0) {
-      uploadMutation.mutate(blob)
-    }
-  }
+  const handleStart = () => start(noteId, mode)
+  const handleStop = () => stop()
 
   return (
     <div className="space-y-2">
-      {!isRecording ? (
+      {!isThisNote || !isRecording ? (
         <>
           <div className="flex items-center gap-2">
             <button
               onClick={handleStart}
-              disabled={uploadMutation.isPending}
+              disabled={isUploading || isOtherNote}
+              title={isOtherNote ? `Recording in progress on another meeting note` : undefined}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors disabled:opacity-50"
             >
-              {uploadMutation.isPending ? (
-                <><Loader2 size={12} className="animate-spin" /> Uploading...</>
+              {isUploading && isThisNote ? (
+                <>
+                  <Loader2 size={12} className="animate-spin" /> Uploading...
+                </>
               ) : (
-                <><Mic size={12} /> Record</>
+                <>
+                  <Mic size={12} /> Record
+                </>
               )}
             </button>
             {supportsSystemAudio && (
@@ -60,9 +53,15 @@ export default function AudioRecorder({ noteId }: { noteId: number }) {
               </label>
             )}
           </div>
-          {mode === 'mic+system' && !isRecording && (
+          {mode === 'mic+system' && (
             <p className="text-xs text-slate-400 dark:text-slate-500 leading-tight">
-              Your browser will ask you to share a screen. Check "Share audio" to capture meeting audio.
+              Your browser will ask you to share a screen. Check "Share audio" to capture meeting
+              audio.
+            </p>
+          )}
+          {isOtherNote && (
+            <p className="text-xs text-amber-600 dark:text-amber-400 leading-tight">
+              Recording in progress on another meeting note.
             </p>
           )}
         </>
@@ -72,7 +71,9 @@ export default function AudioRecorder({ noteId }: { noteId: number }) {
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
             <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500" />
           </span>
-          <span className="text-xs font-mono text-red-600 dark:text-red-400">{formatDuration(duration)}</span>
+          <span className="text-xs font-mono text-red-600 dark:text-red-400">
+            {formatDuration(duration)}
+          </span>
           <button
             onClick={handleStop}
             className="flex items-center gap-1 px-2 py-1 text-xs font-medium bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"

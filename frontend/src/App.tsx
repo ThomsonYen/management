@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react'
 import { NavLink, Route, Routes, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, CheckSquare, FolderKanban, Users, CheckCircle2, Crosshair, Settings, ChevronsLeft, ChevronsRight, FileText, Target, BarChart3 } from 'lucide-react'
+import { LayoutDashboard, CheckSquare, FolderKanban, Users, CheckCircle2, Crosshair, Settings, ChevronsLeft, ChevronsRight, FileText, Target, BarChart3, Square } from 'lucide-react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { updateTodo, createMeetingNote } from './api'
 import { useResizableSidebar } from './hooks/useResizableSidebar'
@@ -8,6 +8,7 @@ import { useHotkeys } from './HotkeysContext'
 import { useHotkey } from './hooks/useHotkey'
 import { useTheme } from './ThemeContext'
 import { useTimezone } from './TimezoneContext'
+import { useRecording } from './RecordingContext'
 import { getTodayString } from './dateUtils'
 import Dashboard from './pages/Dashboard'
 import TodosPage from './pages/TodosPage'
@@ -44,6 +45,7 @@ export default function App() {
   const { bindings } = useHotkeys()
   const { theme, setTheme } = useTheme()
   const { timezone } = useTimezone()
+  const { isRecording, noteId: recordingNoteId, duration, isUploading, stop: stopRecording } = useRecording()
 
   // Sidebar toggle
   const stableToggleSidebar = useCallback(() => toggleSidebar(), [toggleSidebar])
@@ -162,6 +164,42 @@ export default function App() {
             )
           })}
         </nav>
+        {/* Global recording indicator */}
+        {(isRecording || isUploading) && recordingNoteId != null && (
+          <div className="px-2 py-2 border-t border-slate-800">
+            <div
+              className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-900/30 cursor-pointer hover:bg-red-900/50 transition-colors"
+              onClick={() => navigate(`/meeting-notes/${recordingNoteId}`)}
+              title="Go to recording"
+            >
+              {isRecording && (
+                <span className="relative flex h-2.5 w-2.5 flex-shrink-0">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500" />
+                </span>
+              )}
+              {!sidebarCollapsed && (
+                <span className="text-xs font-mono text-red-400 flex-1 truncate">
+                  {isUploading
+                    ? 'Uploading...'
+                    : `REC ${Math.floor(duration / 60)}:${(duration % 60).toString().padStart(2, '0')}`}
+                </span>
+              )}
+              {isRecording && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    stopRecording()
+                  }}
+                  className="p-1 rounded text-red-400 hover:text-white hover:bg-red-800 transition-colors flex-shrink-0"
+                  title="Stop recording"
+                >
+                  <Square size={12} />
+                </button>
+              )}
+            </div>
+          </div>
+        )}
         <div className="border-t border-slate-800">
           <div className="px-2 py-2">
             <NavLink

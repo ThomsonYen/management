@@ -9,6 +9,7 @@ import { TimezoneProvider } from './TimezoneContext'
 import { MeetingNoteSortProvider } from './MeetingNoteSortContext'
 import { SuggestedNotesProvider } from './SuggestedNotesContext'
 import { HotkeysProvider } from './HotkeysContext'
+import { RecordingProvider } from './RecordingContext'
 import './index.css'
 
 const queryClient = new QueryClient({
@@ -30,7 +31,9 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
               <MeetingNoteSortProvider>
                 <SuggestedNotesProvider>
                 <HotkeysProvider>
-                  <App />
+                  <RecordingProvider>
+                    <App />
+                  </RecordingProvider>
                 </HotkeysProvider>
                 </SuggestedNotesProvider>
               </MeetingNoteSortProvider>
