@@ -1,5 +1,6 @@
 backend:
   port: 8001
+  venv_path: null # Path to the Python virtual environment
 
 models:
   suggest_todos: "gpt-4o-mini"

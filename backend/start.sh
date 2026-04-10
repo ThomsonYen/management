@@ -5,9 +5,14 @@ cd "$(dirname "$0")"
 
 set -e
 
-source /Users/michi/.uv/uv_venvs/mana_back/bin/activate
+CONFIG="../project_config.yaml"
 
-PORT=$(grep 'port:' "$(dirname "$0")/../project_config.yaml" | awk '{print $2}')
+VENV_PATH=$(grep 'venv_path:' "$CONFIG" | awk '{print $2}')
+if [ -n "$VENV_PATH" ] && [ "$VENV_PATH" != "null" ]; then
+    source "$VENV_PATH/bin/activate"
+fi
+
+PORT=$(grep 'port:' "$CONFIG" | awk '{print $2}')
 
 echo "Starting backend on port $PORT..."
 uvicorn main:app --reload --port "$PORT"
