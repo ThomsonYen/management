@@ -360,6 +360,7 @@ class MustDoItemUpdate(BaseModel):
     done: Optional[bool] = None
     order: Optional[int] = None
     section: Optional[str] = None
+    todo_id: Optional[int] = None
 
 
 class MustDoItemOut(BaseModel):

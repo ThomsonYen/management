@@ -138,7 +138,7 @@ export const createMustDoItem = (
 
 export const updateMustDoItem = (
   id: number,
-  data: { text?: string; done?: boolean; order?: number; section?: string },
+  data: { text?: string; done?: boolean; order?: number; section?: string; todo_id?: number },
 ): Promise<MustDoItem> => api.put(`/must-do/items/${id}`, data).then((r) => r.data)
 
 export const deleteMustDoItem = (id: number): Promise<void> =>

@@ -98,7 +98,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
   })
 
   const updateMustDo = useMutation({
-    mutationFn: ({ id, ...data }: { id: number; text?: string; done?: boolean; order?: number; section?: string }) =>
+    mutationFn: ({ id, ...data }: { id: number; text?: string; done?: boolean; order?: number; section?: string; todo_id?: number }) =>
       updateMustDoItem(id, data),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['must-do', todayKey] }),
   })
@@ -134,6 +134,16 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
   const removeTodayItem = useCallback((itemId: number) => {
     deleteMustDo.mutate(itemId)
   }, [deleteMustDo])
+
+  const convertToTodo = useCallback(async (item: MustDoItem) => {
+    const cached = queryClient.getQueryData<Todo[]>(['todos', { is_focused: true }]) || []
+    const maxOrder = cached.reduce((max, t) => Math.max(max, t.focus_order), 0)
+    const todo = await createTodo({ title: item.text, status: 'todo', importance: 'medium', estimated_hours: 1 })
+    await updateTodo(todo.id, { is_focused: true, focus_order: maxOrder + 1 })
+    await updateMustDoItem(item.id, { todo_id: todo.id })
+    queryClient.invalidateQueries({ queryKey: ['must-do', todayKey] })
+    queryClient.invalidateQueries({ queryKey: ['todos'] })
+  }, [queryClient, todayKey])
 
   const { data: todos = [], isLoading } = useQuery<Todo[]>({
     queryKey: ['todos', { is_focused: true }],
@@ -837,6 +847,15 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
                           </button>
                         )}
                       </span>
+                      )}
+                      {!item.todo_id && (
+                        <button
+                          onClick={() => convertToTodo(item)}
+                          className="opacity-0 group-hover:opacity-100 text-xs text-amber-500 hover:text-amber-700 dark:hover:text-amber-300 transition-opacity"
+                          title="Convert to todo"
+                        >
+                          &#9745;
+                        </button>
                       )}
                       <button
                         onClick={() => removeTodayItem(item.id)}
