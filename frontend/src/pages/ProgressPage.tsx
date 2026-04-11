@@ -306,9 +306,9 @@ export default function ProgressPage() {
                           >
                             {cnt > 0 ? (
                               <div>
-                                <span className="font-medium text-slate-900 dark:text-white">{cnt}</span>
+                                <span className="font-medium text-slate-900 dark:text-white">{hrs.toFixed(1)}h</span>
                                 <span className="text-slate-400 dark:text-slate-500 text-xs ml-1">
-                                  {hrs.toFixed(1)}h
+                                  {cnt}
                                 </span>
                               </div>
                             ) : (
@@ -318,9 +318,9 @@ export default function ProgressPage() {
                         )
                       })}
                       <td className="sticky right-0 z-10 bg-white dark:bg-slate-900 px-4 py-3 text-center font-semibold">
-                        <span className="text-slate-900 dark:text-white">{pTotals.count}</span>
+                        <span className="text-slate-900 dark:text-white">{pTotals.hours.toFixed(1)}h</span>
                         <span className="text-slate-400 dark:text-slate-500 text-xs ml-1">
-                          {pTotals.hours.toFixed(1)}h
+                          {pTotals.count}
                         </span>
                       </td>
                     </tr>
@@ -335,17 +335,17 @@ export default function ProgressPage() {
                     const col = columnTotals.get(period)!
                     return (
                       <td key={period} className="px-3 py-3 text-center font-semibold">
-                        <span className="text-slate-700 dark:text-slate-300">{col.count}</span>
+                        <span className="text-slate-700 dark:text-slate-300">{col.hours.toFixed(1)}h</span>
                         <span className="text-slate-400 dark:text-slate-500 text-xs ml-1">
-                          {col.hours.toFixed(1)}h
+                          {col.count}
                         </span>
                       </td>
                     )
                   })}
                   <td className="sticky right-0 z-10 bg-slate-50 dark:bg-slate-800/50 px-4 py-3 text-center font-bold">
-                    <span className="text-slate-900 dark:text-white">{totalTasks}</span>
+                    <span className="text-slate-900 dark:text-white">{totalHours.toFixed(1)}h</span>
                     <span className="text-slate-400 dark:text-slate-500 text-xs ml-1">
-                      {totalHours.toFixed(1)}h
+                      {totalTasks}
                     </span>
                   </td>
                 </tr>
