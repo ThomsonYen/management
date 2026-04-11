@@ -1,12 +1,35 @@
 import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
+import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  CartesianGrid,
+  Legend,
+} from 'recharts'
 import { fetchPersonProgress } from '../api'
+import { useTodoDefaults } from '../TodoDefaultsContext'
 import type { PersonProgress } from '../types'
 
 type Granularity = 'day' | 'week' | 'month'
 
 const DEFAULT_COUNTS: Record<Granularity, number> = { day: 14, week: 8, month: 6 }
+const DEFAULT_K: Record<Granularity, number> = { day: 7, week: 4, month: 3 }
+
+function computeRollingAverage(
+  values: number[],
+  k: number,
+): number[] {
+  return values.map((_, i) => {
+    const start = Math.max(0, i - k + 1)
+    const window = values.slice(start, i + 1)
+    return window.reduce((a, b) => a + b, 0) / window.length
+  })
+}
 
 function formatPeriodLabel(period: string, granularity: Granularity): string {
   if (granularity === 'day') {
@@ -60,6 +83,16 @@ export default function ProgressPage() {
     return { ...DEFAULT_COUNTS }
   })
   const [pageOffset, setPageOffset] = useState(0) // 0 = most recent, 1 = one page back, etc.
+
+  const { defaults } = useTodoDefaults()
+  const [selectedPersonId, setSelectedPersonId] = useState<number | null>(null)
+  const [kWindow, setKWindow] = useState<Record<Granularity, number>>(() => {
+    try {
+      const saved = localStorage.getItem('progress-k-window')
+      if (saved) return { ...DEFAULT_K, ...JSON.parse(saved) }
+    } catch { /* ignore */ }
+    return { ...DEFAULT_K }
+  })
 
   const count = counts[granularity]
 
@@ -159,6 +192,45 @@ export default function ProgressPage() {
   const totalTasks = Array.from(visibleTotals.values()).reduce((s, v) => s + v.count, 0)
   const totalHours = Array.from(visibleTotals.values()).reduce((s, v) => s + v.hours, 0)
 
+  // Resolve which person is selected for the chart
+  const chartPersonId = useMemo(() => {
+    if (selectedPersonId !== null) return selectedPersonId
+    const defaultId = defaults.assigneeId ? parseInt(defaults.assigneeId) : null
+    if (defaultId && progress.some((p) => p.person_id === defaultId)) return defaultId
+    return progress.length > 0 ? progress[0].person_id : null
+  }, [selectedPersonId, defaults.assigneeId, progress])
+
+  const k = kWindow[granularity]
+
+  // Build chart data for selected person
+  const chartData = useMemo(() => {
+    if (chartPersonId === null) return []
+    const person = progress.find((p) => p.person_id === chartPersonId)
+    if (!person) return []
+
+    const bucketMap = new Map(person.buckets.map((b) => [b.period, b]))
+    const hoursRaw = allPeriods.map((p) => bucketMap.get(p)?.total_hours ?? 0)
+    const avgHours = computeRollingAverage(hoursRaw, k)
+
+    return allPeriods.map((period, i) => ({
+      period,
+      label: formatPeriodLabel(period, granularity),
+      hours: hoursRaw[i],
+      avg: Math.round(avgHours[i] * 100) / 100,
+    }))
+  }, [chartPersonId, progress, allPeriods, granularity, k])
+
+  const handleKChange = (val: string) => {
+    const n = parseInt(val, 10)
+    if (n > 0 && n <= 100) {
+      setKWindow((prev) => {
+        const next = { ...prev, [granularity]: n }
+        localStorage.setItem('progress-k-window', JSON.stringify(next))
+        return next
+      })
+    }
+  }
+
   const granularityOptions: Granularity[] = ['day', 'week', 'month']
 
   const handleCountChange = (val: string) => {
@@ -231,6 +303,77 @@ export default function ProgressPage() {
           <p className="text-2xl font-bold text-slate-900 dark:text-white">{totalHours.toFixed(1)}</p>
         </div>
       </div>
+
+      {/* Rolling average chart */}
+      {progress.length > 0 && (
+        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Hours Trend</h2>
+              <select
+                value={chartPersonId ?? ''}
+                onChange={(e) => setSelectedPersonId(parseInt(e.target.value))}
+                className="text-sm border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                {progress.map((p) => (
+                  <option key={p.person_id} value={p.person_id}>
+                    {p.person_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-sm text-slate-500 dark:text-slate-400">Window</label>
+              <input
+                type="number"
+                min={1}
+                max={100}
+                value={k}
+                onChange={(e) => handleKChange(e.target.value)}
+                className="w-14 px-2 py-1 text-sm rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-center"
+              />
+              <span className="text-sm text-slate-500 dark:text-slate-400">{granularity}s</span>
+            </div>
+          </div>
+          <ResponsiveContainer width="100%" height={260}>
+            <LineChart data={chartData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="currentColor" className="text-slate-200 dark:text-slate-700" />
+              <XAxis
+                dataKey="label"
+                tick={{ fontSize: 11 }}
+                interval="preserveStartEnd"
+                className="text-slate-500 dark:text-slate-400"
+              />
+              <YAxis tick={{ fontSize: 11 }} className="text-slate-500 dark:text-slate-400" />
+              <Tooltip
+                contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e2e8f0' }}
+                formatter={(value, name) => [
+                  `${Number(value).toFixed(1)}h`,
+                  name === 'hours' ? 'Hours' : `${k}-${granularity} avg`,
+                ]}
+              />
+              <Legend
+                formatter={(value) => (value === 'hours' ? 'Hours' : `${k}-${granularity} avg`)}
+              />
+              <Line
+                type="monotone"
+                dataKey="hours"
+                stroke="#94a3b8"
+                strokeWidth={1}
+                dot={false}
+                opacity={0.5}
+              />
+              <Line
+                type="monotone"
+                dataKey="avg"
+                stroke="#22c55e"
+                strokeWidth={2}
+                dot={false}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      )}
 
       {isLoading ? (
         <p className="text-slate-500 dark:text-slate-400">Loading...</p>
