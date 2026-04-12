@@ -19,8 +19,9 @@ export const deletePerson = (id: number): Promise<void> =>
 export const fetchPersonProgress = (
   granularity: 'day' | 'week' | 'month' = 'week',
   since?: string,
+  tz?: string,
 ): Promise<PersonProgress[]> =>
-  api.get('/persons/progress', { params: { granularity, since } }).then((r) => r.data)
+  api.get('/persons/progress', { params: { granularity, since, tz } }).then((r) => r.data)
 
 // ─── Projects ────────────────────────────────────────────────────────────────
 

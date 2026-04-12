@@ -628,8 +628,17 @@ def delete_person(person_id: int, db: Session = Depends(get_db)):
 def person_progress(
     granularity: str = Query("week", pattern="^(day|week|month)$"),
     since: Optional[str] = Query(None),
+    tz: Optional[str] = Query(None),
     db: Session = Depends(get_db),
 ):
+    from zoneinfo import ZoneInfo
+    local_tz = None
+    if tz:
+        try:
+            local_tz = ZoneInfo(tz)
+        except (KeyError, ValueError):
+            pass
+
     if since is None:
         from datetime import timedelta
         days_back = {"day": 90, "week": 180, "month": 365}[granularity]
@@ -653,6 +662,10 @@ def person_progress(
             dt = datetime.fromisoformat(t.done_at)
         except (ValueError, TypeError):
             continue
+        if local_tz:
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            dt = dt.astimezone(local_tz)
         if granularity == "day":
             key = dt.strftime("%Y-%m-%d")
         elif granularity == "week":

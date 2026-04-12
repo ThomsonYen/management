@@ -13,6 +13,7 @@ import {
 } from 'recharts'
 import { fetchPersonProgress } from '../api'
 import { useTodoDefaults } from '../TodoDefaultsContext'
+import { useTimezone } from '../TimezoneContext'
 import type { PersonProgress } from '../types'
 
 type Granularity = 'day' | 'week' | 'month'
@@ -56,7 +57,10 @@ function heatColor(hours: number, maxHours: number): string {
 function getCurrentPeriodKey(granularity: Granularity): string {
   const now = new Date()
   if (granularity === 'day') {
-    return now.toISOString().slice(0, 10)
+    const y = now.getFullYear()
+    const m = String(now.getMonth() + 1).padStart(2, '0')
+    const d = String(now.getDate()).padStart(2, '0')
+    return `${y}-${m}-${d}`
   }
   if (granularity === 'week') {
     // ISO week calculation
@@ -85,6 +89,7 @@ export default function ProgressPage() {
   const [pageOffset, setPageOffset] = useState(0) // 0 = most recent, 1 = one page back, etc.
 
   const { defaults } = useTodoDefaults()
+  const { timezone } = useTimezone()
   const [selectedPersonId, setSelectedPersonId] = useState<number | null>(null)
   const [kWindow, setKWindow] = useState<Record<Granularity, number>>(() => {
     try {
@@ -97,8 +102,8 @@ export default function ProgressPage() {
   const count = counts[granularity]
 
   const { data: progress = [], isLoading } = useQuery<PersonProgress[]>({
-    queryKey: ['person-progress', granularity],
-    queryFn: () => fetchPersonProgress(granularity),
+    queryKey: ['person-progress', granularity, timezone],
+    queryFn: () => fetchPersonProgress(granularity, undefined, timezone),
   })
 
   // Collect all unique periods, sorted chronologically
