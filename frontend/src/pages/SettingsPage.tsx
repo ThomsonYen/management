@@ -1,11 +1,17 @@
 import { useState, useEffect, useRef } from 'react'
 import { Moon, Sun } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
-import { useTheme } from '../ThemeContext'
-import { useTodoDefaults } from '../TodoDefaultsContext'
-import { useTimezone } from '../TimezoneContext'
-import { useMeetingNoteSort, type MeetingNoteSortField } from '../MeetingNoteSortContext'
-import { useHotkeys, formatHotkey, eventToBinding, type HotkeyBindings } from '../HotkeysContext'
+import {
+  useTheme,
+  useTodoDefaults,
+  useTimezone,
+  useMeetingNoteSort,
+  useHotkeys,
+  formatHotkey,
+  eventToBinding,
+  type MeetingNoteSortField,
+  type HotkeyBindings,
+} from '../SettingsContext'
 import { fetchPersons } from '../api'
 
 function HotkeyInput({ label, description, bindingKey }: { label: string; description: string; bindingKey: keyof HotkeyBindings }) {
@@ -276,22 +282,27 @@ export default function SettingsPage() {
             </p>
 
             <div className="space-y-4">
-              {/* Default Assignee */}
+              {/* Default Assignee (stored by name so restores survive person id changes) */}
               <div className="flex items-center justify-between gap-4">
                 <label className="text-sm text-slate-700 dark:text-slate-300 shrink-0">
                   Default assignee
                 </label>
                 <select
-                  value={defaults.assigneeId}
-                  onChange={(e) => updateField('assigneeId', e.target.value)}
+                  value={defaults.assigneeName}
+                  onChange={(e) => updateField('assigneeName', e.target.value)}
                   className="w-48 border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 >
                   <option value="">None</option>
                   {persons.map((p) => (
-                    <option key={p.id} value={p.id}>
+                    <option key={p.id} value={p.name}>
                       {p.name}
                     </option>
                   ))}
+                  {defaults.assigneeName && !persons.some((p) => p.name === defaults.assigneeName) && (
+                    <option value={defaults.assigneeName}>
+                      {defaults.assigneeName} (not found)
+                    </option>
+                  )}
                 </select>
               </div>
 

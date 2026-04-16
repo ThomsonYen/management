@@ -241,3 +241,34 @@ export const fetchDailyGoals = (dateFrom: string, dateTo: string): Promise<Daily
 
 export const upsertDailyGoal = (date: string, content: string): Promise<DailyGoal> =>
   api.put(`/daily-goals/${date}`, { content }).then((r) => r.data)
+
+// ─── Config ────────────────────────────────────────────────────────────────
+
+export interface UserSettings {
+  timezone: string | null
+  theme: 'light' | 'dark'
+  meeting_note_sort: 'created_at' | 'updated_at'
+  todo_defaults: {
+    assignee_name: string
+    deadline_to_today: boolean
+    estimated_hours: string
+    importance: string
+  }
+  hotkeys: Record<string, string>
+}
+
+export type UserSettingsPatch = Partial<Omit<UserSettings, 'todo_defaults' | 'hotkeys'>> & {
+  todo_defaults?: Partial<UserSettings['todo_defaults']>
+  hotkeys?: Record<string, string>
+}
+
+export const fetchSettings = (): Promise<UserSettings> =>
+  api.get('/config/settings').then((r) => r.data)
+
+export const updateSettings = (patch: UserSettingsPatch): Promise<UserSettings> =>
+  api.put('/config/settings', patch).then((r) => r.data)
+
+// ─── Backup ────────────────────────────────────────────────────────────────
+
+export const runBackup = (): Promise<{ date: string; snapshot: string }> =>
+  api.post('/backup/run').then((r) => r.data)

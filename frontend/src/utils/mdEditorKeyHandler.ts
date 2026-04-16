@@ -10,7 +10,7 @@
  *   <div onKeyDownCapture={handler}><MDEditor ... /></div>
  */
 
-import { matchesBinding, type HotkeyBindings } from '../HotkeysContext'
+import { matchesBinding, type HotkeyBindings } from '../SettingsContext'
 
 const TAB_SIZE = 2
 

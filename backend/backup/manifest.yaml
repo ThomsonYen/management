@@ -1,0 +1,57 @@
+repo_root: /Users/michi/Documents/tyen/Work/Personal/management
+drive_backup_root: /Users/michi/Library/CloudStorage/GoogleDrive-thomson.yen.ty@gmail.com/My Drive/management-backup
+
+retention:
+  daily_keep_days: 10
+
+targets:
+  - name: database
+    source: backend/management.db
+    dest: data/management.db
+    method: sqlite_backup
+
+  - name: meeting_notes
+    source: backend/meeting_notes
+    dest: data/meeting_notes
+    method: copy
+
+  - name: meeting_transcripts
+    source: backend/meeting_transcripts
+    dest: data/meeting_transcripts
+    method: copy
+
+  - name: meeting_templates
+    source: backend/meeting_templates
+    dest: data/meeting_templates
+    method: copy
+
+  - name: meeting_audio
+    source: backend/meeting_audio
+    dest: data/meeting_audio
+    method: copy
+
+  - name: backend_code
+    source: backend
+    dest: code/backend
+    method: copy
+    exclude:
+      - __pycache__
+      - venv
+      - .venv
+      - "*.db"
+      - "*.db-journal"
+      - meeting_audio
+      - meeting_notes
+      - meeting_transcripts
+      - meeting_templates
+      - backup
+
+  - name: frontend_code
+    source: frontend
+    dest: code/frontend
+    method: copy
+    exclude:
+      - node_modules
+      - dist
+      - .vite
+      - "*.log"

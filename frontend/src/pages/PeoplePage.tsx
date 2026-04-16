@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useResizableSidebar } from '../hooks/useResizableSidebar'
-import { useHotkeys } from '../HotkeysContext'
+import { useHotkeys } from '../SettingsContext'
 import { useHotkey } from '../hooks/useHotkey'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ChevronsLeft, ChevronsRight } from 'lucide-react'

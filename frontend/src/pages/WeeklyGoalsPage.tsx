@@ -4,8 +4,7 @@ import MDEditor from '@uiw/react-md-editor'
 import { Calendar, ChevronDown, ChevronRight, Maximize2, Minimize2 } from 'lucide-react'
 import { fetchDailyGoals, upsertDailyGoal } from '../api'
 import type { DailyGoal } from '../api'
-import { useTimezone } from '../TimezoneContext'
-import { useTheme } from '../ThemeContext'
+import { useTimezone, useTheme, useHotkeys } from '../SettingsContext'
 import { getTodayString } from '../dateUtils'
 import {
   parseContentBlocks, toggleCheckboxLine, editLineText, splitLineAt,
@@ -14,7 +13,6 @@ import {
 } from '../components/MarkdownRenderer'
 import { config } from '../config'
 import { createMdEditorKeyHandler } from '../utils/mdEditorKeyHandler'
-import { useHotkeys } from '../HotkeysContext'
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 

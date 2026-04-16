@@ -2,7 +2,7 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { fetchRecentlyDone } from '../api'
 import type { Todo } from '../types'
-import { useTimezone } from '../TimezoneContext'
+import { useTimezone } from '../SettingsContext'
 import { getTodayString, getDateString } from '../dateUtils'
 
 const importanceBadge = (imp: string) => {

@@ -6,10 +6,8 @@ import type { Todo, Person, Project } from '../types'
 import TodoCard from '../components/TodoCard'
 import TodoModal from '../components/TodoModal'
 import BulkActionBar from '../components/BulkActionBar'
-import { useTodoDefaults } from '../TodoDefaultsContext'
-import { useTimezone } from '../TimezoneContext'
+import { useTodoDefaults, useTimezone, useHotkeys, resolveAssigneeId } from '../SettingsContext'
 import { getTodayString } from '../dateUtils'
-import { useHotkeys } from '../HotkeysContext'
 import { useHotkey } from '../hooks/useHotkey'
 
 const STATUS_OPTIONS = ['', 'todo', 'in-progress', 'blocked']
@@ -30,6 +28,7 @@ function AddTodoCard({
   const queryClient = useQueryClient()
   const { defaults } = useTodoDefaults()
   const { timezone } = useTimezone()
+  const { data: persons = [] } = useQuery({ queryKey: ['persons'], queryFn: fetchPersons })
 
   const createMutation = useMutation({
     mutationFn: createTodo,
@@ -41,7 +40,7 @@ function AddTodoCard({
 
   const handleSubmit = () => {
     if (!title.trim() || createMutation.isPending) return
-    const assignee = defaultAssigneeId ?? (defaults.assigneeId ? parseInt(defaults.assigneeId) : null)
+    const assignee = defaultAssigneeId ?? resolveAssigneeId(defaults.assigneeName, persons)
     createMutation.mutate({
       title: title.trim(),
       assignee_id: assignee,

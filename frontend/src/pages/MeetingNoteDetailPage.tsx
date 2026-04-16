@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { useHotkeys } from '../HotkeysContext'
+import { useHotkeys, useTheme } from '../SettingsContext'
 import { useHotkey } from '../hooks/useHotkey'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import MDEditor from '@uiw/react-md-editor'
@@ -20,7 +20,6 @@ import {
   suggestTodos,
   createTodo,
 } from '../api'
-import { useTheme } from '../ThemeContext'
 import AudioRecorder from '../components/AudioRecorder'
 import AudioFileList from '../components/AudioFileList'
 import TranscriptEditor from '../components/TranscriptEditor'

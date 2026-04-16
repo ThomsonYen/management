@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { matchesBinding } from '../HotkeysContext'
+import { matchesBinding } from '../SettingsContext'
 
 interface UseHotkeyOptions {
   /** Fire even when an input/textarea/select is focused (useful for Escape) */

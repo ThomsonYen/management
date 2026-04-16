@@ -14,11 +14,9 @@ import {
   fetchProjects,
 } from '../api'
 import type { MeetingNoteSummary, MeetingNoteSearchResult } from '../types'
-import { useTimezone } from '../TimezoneContext'
-import { useMeetingNoteSort } from '../MeetingNoteSortContext'
+import { useTimezone, useMeetingNoteSort, useHotkeys } from '../SettingsContext'
 import { getTodayString } from '../dateUtils'
 import { useSuggestedNotes } from '../SuggestedNotesContext'
-import { useHotkeys } from '../HotkeysContext'
 import { useHotkey } from '../hooks/useHotkey'
 
 function formatInTimezone(isoString: string, tz: string): string {

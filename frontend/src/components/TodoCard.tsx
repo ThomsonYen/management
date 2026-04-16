@@ -6,7 +6,7 @@ import { createTodo, createSubTodo, deleteTodo, updateSubTodo, updateTodo, fetch
 import DatePicker from './DatePicker'
 import type { Todo, Person, Project } from '../types'
 import { config } from '../config'
-import { useTimezone } from '../TimezoneContext'
+import { useTimezone } from '../SettingsContext'
 import { isOverdue as checkOverdue, getTodayString } from '../dateUtils'
 
 const IMPORTANCE_OPTIONS = ['low', 'medium', 'high', 'critical']

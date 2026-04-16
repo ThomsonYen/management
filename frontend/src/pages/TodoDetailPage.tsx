@@ -17,9 +17,8 @@ import DatePicker from '../components/DatePicker'
 import TodoModal from '../components/TodoModal'
 import { BlockerTreeNode, BlockingTreeNode } from '../components/BlockerTree'
 import { config } from '../config'
-import { useTimezone } from '../TimezoneContext'
+import { useTimezone, useHotkeys } from '../SettingsContext'
 import { isOverdue as checkOverdue } from '../dateUtils'
-import { useHotkeys } from '../HotkeysContext'
 import { useHotkey } from '../hooks/useHotkey'
 
 const importanceBadge = (imp: string) => {

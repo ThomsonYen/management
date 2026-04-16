@@ -12,8 +12,7 @@ import {
   Legend,
 } from 'recharts'
 import { fetchPersonProgress } from '../api'
-import { useTodoDefaults } from '../TodoDefaultsContext'
-import { useTimezone } from '../TimezoneContext'
+import { useTodoDefaults, useTimezone } from '../SettingsContext'
 import type { PersonProgress } from '../types'
 
 type Granularity = 'day' | 'week' | 'month'
@@ -90,7 +89,12 @@ export default function ProgressPage() {
 
   const { defaults } = useTodoDefaults()
   const { timezone } = useTimezone()
-  const [selectedPersonId, setSelectedPersonId] = useState<number | null>(null)
+  const [selectedPersonId, setSelectedPersonId] = useState<number | null>(() => {
+    const saved = localStorage.getItem('progress-chart-person')
+    if (saved === null) return null
+    const n = parseInt(saved, 10)
+    return Number.isFinite(n) ? n : null
+  })
   const [kWindow, setKWindow] = useState<Record<Granularity, number>>(() => {
     try {
       const saved = localStorage.getItem('progress-k-window')
@@ -200,10 +204,13 @@ export default function ProgressPage() {
   // Resolve which person is selected for the chart
   const chartPersonId = useMemo(() => {
     if (selectedPersonId !== null) return selectedPersonId
-    const defaultId = defaults.assigneeId ? parseInt(defaults.assigneeId) : null
-    if (defaultId && progress.some((p) => p.person_id === defaultId)) return defaultId
+    const defaultName = defaults.assigneeName
+    if (defaultName) {
+      const match = progress.find((p) => p.person_name === defaultName)
+      if (match) return match.person_id
+    }
     return progress.length > 0 ? progress[0].person_id : null
-  }, [selectedPersonId, defaults.assigneeId, progress])
+  }, [selectedPersonId, defaults.assigneeName, progress])
 
   const k = kWindow[granularity]
 
@@ -317,7 +324,11 @@ export default function ProgressPage() {
               <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Hours Trend</h2>
               <select
                 value={chartPersonId ?? ''}
-                onChange={(e) => setSelectedPersonId(parseInt(e.target.value))}
+                onChange={(e) => {
+                  const n = parseInt(e.target.value)
+                  setSelectedPersonId(n)
+                  localStorage.setItem('progress-chart-person', String(n))
+                }}
                 className="text-sm border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-500"
               >
                 {progress.map((p) => (

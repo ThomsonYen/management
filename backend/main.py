@@ -1,8 +1,12 @@
+import asyncio
 import io
+import json
+import logging
 import math
 import shutil
 import tempfile
 import uuid
+from contextlib import asynccontextmanager
 from datetime import date, datetime, timezone
 from pathlib import Path
 from collections import defaultdict
@@ -10,6 +14,9 @@ from typing import List, Optional
 
 import yaml
 from fastapi import Depends, FastAPI, HTTPException, Query, UploadFile
+
+from backup.backup import run_backup_once
+from backup.scheduler import backup_loop
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from openai import OpenAI
@@ -37,6 +44,63 @@ with open(PROJECT_CONFIG_PATH, encoding="utf-8") as _f:
 
 _openai_key = (PROJECT_CONFIG.get("keys") or {}).get("openai_key", "")
 openai_client: Optional[OpenAI] = OpenAI(api_key=_openai_key) if _openai_key else None
+
+# ─── User settings (persisted, shared with frontend) ─────────────────────────
+
+USER_SETTINGS_PATH = Path(__file__).parent / "user_settings.json"
+
+DEFAULT_USER_SETTINGS: dict = {
+    "timezone": None,
+    "theme": "light",
+    "meeting_note_sort": "updated_at",
+    "todo_defaults": {
+        "assignee_name": "",
+        "deadline_to_today": False,
+        "estimated_hours": "1",
+        "importance": "medium",
+    },
+    "hotkeys": {},
+}
+
+
+def _load_user_settings() -> dict:
+    try:
+        with open(USER_SETTINGS_PATH, encoding="utf-8") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return {}
+    except json.JSONDecodeError:
+        return {}
+
+
+def _save_user_settings(data: dict) -> None:
+    tmp = USER_SETTINGS_PATH.with_suffix(".json.tmp")
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+    tmp.replace(USER_SETTINGS_PATH)
+
+
+def _merged_user_settings() -> dict:
+    """Return stored settings merged on top of DEFAULT_USER_SETTINGS (deep merge todo_defaults)."""
+    stored = _load_user_settings()
+    merged = {**DEFAULT_USER_SETTINGS, **{k: v for k, v in stored.items() if v is not None or k == "timezone"}}
+    merged["todo_defaults"] = {
+        **DEFAULT_USER_SETTINGS["todo_defaults"],
+        **(stored.get("todo_defaults") or {}),
+    }
+    merged["hotkeys"] = {**(stored.get("hotkeys") or {})}
+    return merged
+
+
+def get_user_timezone() -> str:
+    """Return the user's preferred IANA timezone, falling back to system local."""
+    tz = _load_user_settings().get("timezone")
+    if tz:
+        return tz
+    try:
+        return datetime.now().astimezone().tzinfo.key  # type: ignore[attr-defined]
+    except Exception:
+        return "UTC"
 
 MEETING_NOTES_DIR = Path(__file__).parent / "meeting_notes"
 MEETING_TEMPLATES_DIR = Path(__file__).parent / "meeting_templates"
@@ -586,7 +650,23 @@ def meeting_note_to_summary(n: MeetingNote) -> MeetingNoteSummary:
 
 # ─── App ─────────────────────────────────────────────────────────────────────
 
-app = FastAPI(title="Management API")
+log = logging.getLogger("management")
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    task = asyncio.create_task(backup_loop(get_user_timezone))
+    try:
+        yield
+    finally:
+        task.cancel()
+        try:
+            await task
+        except (asyncio.CancelledError, Exception):
+            pass
+
+
+app = FastAPI(title="Management API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -1496,3 +1576,83 @@ def get_meeting_template(name: str):
     if not path.exists():
         raise HTTPException(404, "Template not found")
     return MeetingTemplateOut(name=name, content=path.read_text(encoding="utf-8"))
+
+
+# ─── Config (user settings shared with frontend) ─────────────────────────────
+
+
+class TodoDefaultsPatch(BaseModel):
+    assignee_name: Optional[str] = None
+    deadline_to_today: Optional[bool] = None
+    estimated_hours: Optional[str] = None
+    importance: Optional[str] = None
+
+
+class UserSettingsPatch(BaseModel):
+    timezone: Optional[str] = None
+    theme: Optional[str] = None
+    meeting_note_sort: Optional[str] = None
+    todo_defaults: Optional[TodoDefaultsPatch] = None
+    hotkeys: Optional[dict] = None
+
+
+def _validate_patch(patch: UserSettingsPatch) -> None:
+    if patch.timezone is not None:
+        try:
+            from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+            ZoneInfo(patch.timezone)
+        except ZoneInfoNotFoundError:
+            raise HTTPException(400, f"Unknown IANA timezone: {patch.timezone}")
+    if patch.theme is not None and patch.theme not in ("light", "dark"):
+        raise HTTPException(400, f"Unknown theme: {patch.theme}")
+    if patch.meeting_note_sort is not None and patch.meeting_note_sort not in ("created_at", "updated_at"):
+        raise HTTPException(400, f"Unknown meeting_note_sort: {patch.meeting_note_sort}")
+    if patch.todo_defaults and patch.todo_defaults.importance is not None:
+        if patch.todo_defaults.importance not in ("low", "medium", "high", "critical"):
+            raise HTTPException(400, f"Unknown importance: {patch.todo_defaults.importance}")
+
+
+@app.get("/config/settings")
+def get_settings_endpoint():
+    return _merged_user_settings()
+
+
+@app.put("/config/settings")
+def update_settings_endpoint(patch: UserSettingsPatch):
+    _validate_patch(patch)
+    stored = _load_user_settings()
+    data = patch.model_dump(exclude_unset=True)
+    if "todo_defaults" in data and data["todo_defaults"] is not None:
+        existing_td = stored.get("todo_defaults") or {}
+        stored["todo_defaults"] = {**existing_td, **data["todo_defaults"]}
+        del data["todo_defaults"]
+    if "hotkeys" in data and data["hotkeys"] is not None:
+        existing_hk = stored.get("hotkeys") or {}
+        stored["hotkeys"] = {**existing_hk, **data["hotkeys"]}
+        del data["hotkeys"]
+    stored.update(data)
+    _save_user_settings(stored)
+    return _merged_user_settings()
+
+
+# ─── Backup (manual trigger) ─────────────────────────────────────────────────
+
+
+class BackupRunOut(BaseModel):
+    date: str
+    snapshot: str
+
+
+@app.post("/backup/run", response_model=BackupRunOut)
+async def run_backup_endpoint():
+    from zoneinfo import ZoneInfo
+    try:
+        now_local = datetime.now(ZoneInfo(get_user_timezone()))
+    except Exception:
+        now_local = datetime.now().astimezone()
+    try:
+        result = await asyncio.to_thread(lambda: run_backup_once(today=now_local.date()))
+    except Exception as e:
+        log.exception("manual backup failed")
+        raise HTTPException(500, f"backup failed: {e}")
+    return BackupRunOut(**result)

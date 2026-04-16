@@ -1,19 +1,17 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useResizableSidebar } from '../hooks/useResizableSidebar'
-import { useHotkeys } from '../HotkeysContext'
 import { useHotkey } from '../hooks/useHotkey'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ChevronsLeft, ChevronsRight } from 'lucide-react'
 import EditableMarkdown from '../components/EditableMarkdown'
-import { fetchProjectTree, fetchProjects, fetchTodos, createProject, createTodo, deleteProject, updateProject } from '../api'
+import { fetchProjectTree, fetchProjects, fetchTodos, fetchPersons, createProject, createTodo, deleteProject, updateProject } from '../api'
 import type { ProjectTree, Project, Todo } from '../types'
 import DatePicker from '../components/DatePicker'
 import TodoCard from '../components/TodoCard'
 import TodoModal from '../components/TodoModal'
 import BulkActionBar from '../components/BulkActionBar'
-import { useTodoDefaults } from '../TodoDefaultsContext'
-import { useTimezone } from '../TimezoneContext'
+import { useTodoDefaults, useTimezone, useHotkeys, resolveAssigneeId } from '../SettingsContext'
 import { getTodayString } from '../dateUtils'
 
 function ProjectNode({
@@ -210,6 +208,7 @@ function AddTodoCard({ projectId, queryKeys }: { projectId: number; queryKeys: u
   const queryClient = useQueryClient()
   const { defaults } = useTodoDefaults()
   const { timezone } = useTimezone()
+  const { data: persons = [] } = useQuery({ queryKey: ['persons'], queryFn: fetchPersons })
 
   const createMutation = useMutation({
     mutationFn: createTodo,
@@ -223,7 +222,7 @@ function AddTodoCard({ projectId, queryKeys }: { projectId: number; queryKeys: u
     if (!title.trim() || createMutation.isPending) return
     createMutation.mutate({
       title: title.trim(),
-      assignee_id: defaults.assigneeId ? parseInt(defaults.assigneeId) : null,
+      assignee_id: resolveAssigneeId(defaults.assigneeName, persons),
       project_id: projectId,
       status: 'todo',
       importance: defaults.importance,

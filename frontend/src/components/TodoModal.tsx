@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   createTodo,
@@ -12,8 +12,7 @@ import {
 } from '../api'
 import type { Todo, SubTodo } from '../types'
 import DatePicker from './DatePicker'
-import { useTodoDefaults } from '../TodoDefaultsContext'
-import { useTimezone } from '../TimezoneContext'
+import { useTodoDefaults, useTimezone, resolveAssigneeId } from '../SettingsContext'
 import { getTodayString } from '../dateUtils'
 
 interface Props {
@@ -37,7 +36,7 @@ export default function TodoModal({ todo, onClose, invalidateKeys, defaultAssign
   const [title, setTitle] = useState(todo?.title || '')
   const [description, setDescription] = useState(todo?.description || '')
   const [projectId, setProjectId] = useState<string>(todo?.project_id?.toString() || '')
-  const [assigneeId, setAssigneeId] = useState<string>(todo?.assignee_id?.toString() || (isEdit ? '' : (defaultAssigneeId?.toString() || defaults.assigneeId)))
+  const [assigneeId, setAssigneeId] = useState<string>(todo?.assignee_id?.toString() || (isEdit ? '' : (defaultAssigneeId?.toString() || '')))
   const [deadline, setDeadline] = useState(todo?.deadline || (isEdit ? '' : defaults.deadlineToToday ? todayStr : ''))
   const [importance, setImportance] = useState(todo?.importance || (isEdit ? 'medium' : defaults.importance))
   const [estimatedHours, setEstimatedHours] = useState(todo?.estimated_hours?.toString() || (isEdit ? '1' : defaults.estimatedHours))
@@ -51,6 +50,18 @@ export default function TodoModal({ todo, onClose, invalidateKeys, defaultAssign
   const { data: persons = [] } = useQuery({ queryKey: ['persons'], queryFn: fetchPersons })
   const { data: projects = [] } = useQuery({ queryKey: ['projects'], queryFn: fetchProjects })
   const { data: allTodos = [] } = useQuery({ queryKey: ['todos'], queryFn: () => fetchTodos() })
+
+  // Apply the name-based default assignee once persons load (new todo only, no explicit default,
+  // user hasn't touched the field). If the saved name no longer matches any person, leave empty.
+  const defaultAssigneeAppliedRef = useRef(false)
+  useEffect(() => {
+    if (defaultAssigneeAppliedRef.current) return
+    if (isEdit || defaultAssigneeId != null) return
+    if (!persons.length) return
+    defaultAssigneeAppliedRef.current = true
+    const resolved = resolveAssigneeId(defaults.assigneeName, persons)
+    if (resolved !== null) setAssigneeId(resolved.toString())
+  }, [persons, isEdit, defaultAssigneeId, defaults.assigneeName])
 
   const invalidate = () => {
     const keys = invalidateKeys || [['todos']]
