@@ -51,6 +51,8 @@ There are no automated tests or linters configured.
 
 Proposed features and usability improvements are tracked in `claude_readmes/features.md`. When the user brainstorms new ideas or directions, append them there as numbered sections following the existing format (title, description, bullet specifics, **Why:** line) and update the implementation order at the bottom. Treat this file as the living product backlog for this project.
 
+**After finishing implementation of a feature from `claude_readmes/features.md`**, always ask the user whether the feature is fully completed and safe to delete from the backlog. Do not remove it unilaterally — wait for confirmation. Once confirmed, delete the section, renumber the remaining sections (and any cross-references like "see #7" or "#4–6"), and update the implementation order list accordingly.
+
 ## Configuration
 
 | File | Purpose |

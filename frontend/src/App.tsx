@@ -22,6 +22,7 @@ import MeetingNoteDetailPage from './pages/MeetingNoteDetailPage'
 import WeeklyGoalsPage from './pages/WeeklyGoalsPage'
 import ProgressPage from './pages/ProgressPage'
 import TodoModal from './components/TodoModal'
+import CommandPalette from './components/CommandPalette'
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
@@ -41,6 +42,7 @@ export default function App() {
   const queryClient = useQueryClient()
   const [dragOverFocus, setDragOverFocus] = useState(false)
   const [showNewTodoModal, setShowNewTodoModal] = useState(false)
+  const [showCommandPalette, setShowCommandPalette] = useState(false)
   const { width: sidebarWidth, collapsed: sidebarCollapsed, startResize, toggleCollapsed: toggleSidebar } = useResizableSidebar('sidebarWidth', 224)
   const { bindings } = useHotkeys()
   const { theme, setTheme } = useTheme()
@@ -67,6 +69,9 @@ export default function App() {
 
   // New todo (global)
   useHotkey(bindings.newTodo, useCallback(() => setShowNewTodoModal(true), []))
+
+  // Command palette (global)
+  useHotkey(bindings.openCommandPalette, useCallback(() => setShowCommandPalette(true), []))
 
   // New meeting note (global)
   const newMeetingNoteMutation = useMutation({
@@ -267,6 +272,19 @@ export default function App() {
           todo={null}
           onClose={() => setShowNewTodoModal(false)}
           invalidateKeys={[['todos']]}
+        />
+      )}
+
+      {/* Global command palette */}
+      {showCommandPalette && (
+        <CommandPalette
+          onClose={() => setShowCommandPalette(false)}
+          onNewTodo={() => setShowNewTodoModal(true)}
+          onNewMeetingNote={() => {
+            if (newMeetingNoteMutation.isPending) return
+            const todayStr = getTodayString(timezone)
+            newMeetingNoteMutation.mutate({ title: `Untitled-Meeting`, date: todayStr, template: 'default_meeting' })
+          }}
         />
       )}
     </div>

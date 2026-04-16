@@ -24,21 +24,7 @@ The morning/afternoon/evening "Must Do Today" strip is currently only on the Foc
 
 **Why:** The Dashboard is where users naturally land, but today's priorities are one click away. This makes the most important content most prominent.
 
-## 3. Command palette (⌘K)
-
-A global fuzzy-search palette invoked by ⌘K that searches across:
-
-- Todos (title, description)
-- Meetings (title, attendees)
-- Projects (name)
-- People (name)
-- Actions ("Create todo", "Toggle theme", "Go to Focus", etc.)
-
-Keyboard-first navigation: arrow keys to move, Enter to select, Esc to close. Recent items shown by default.
-
-**Why:** Solves multiple problems at once — navigation (beyond ⌘1–7), search (no global search exists), hotkey discoverability (actions appear with their shortcuts), and fast jumps to specific records.
-
-## 4. Daily focus coach (Dashboard chatbot with memory)
+## 3. Daily focus coach (Dashboard chatbot with memory)
 
 An AI chat panel on the Dashboard that proposes what to focus on today given pending todos, deadlines, blockers, and linked project context. Always available, opens daily with a fresh suggestion.
 
@@ -49,7 +35,7 @@ An AI chat panel on the Dashboard that proposes what to focus on today given pen
 
 **Why:** The Dashboard has the data but the user still has to synthesize "what matters today" by hand. A coach that persists its own judgments across days turns the app into something that watches trends with you, not just stores them.
 
-## 5. Per-project memory on ProjectsPage
+## 4. Per-project memory on ProjectsPage
 
 Each project gets a living AI-maintained memory document: perceived importance, risk signals (missed deadlines, stuck blockers, no recent activity), last meaningful update, open threads pulled from linked meeting notes.
 
@@ -59,27 +45,27 @@ Each project gets a living AI-maintained memory document: perceived importance, 
 
 **Why:** Project context lives scattered across meeting notes, todo descriptions, and implicit knowledge. A durable per-project memory consolidates it and gives the coach something to cite.
 
-## 6. Per-person briefs on PeoplePage
+## 5. Per-person briefs on PeoplePage
 
 Same memory pattern scoped per person. The agent tracks commitments each person has made across meeting notes, todos they own, slip patterns, and mentions.
 
 - "Before you meet with X…" brief on the person's page: recent commitments, open items they own, anything flagged for a close watch
 - User can mark a person as "watch closely" — agent weights their activity more heavily in daily suggestions
-- Draws from meeting transcripts once extracted (see #7)
+- Draws from meeting transcripts once extracted (see #6)
 
 **Why:** The user's close-watch use case. Keeping track of who owes what across a week of meetings is exactly the synthesis an LLM is good at.
 
-## 7. Structured meeting extraction (beyond todo suggestions)
+## 6. Structured meeting extraction (beyond todo suggestions)
 
 Extend the existing GPT-4o-mini meeting-notes pipeline to also pull: decisions, open questions, and per-attendee commitments from the transcript. Todo suggestions already exist — this layer extracts the rest.
 
-- Commitments flow into the per-person memory (#6)
-- Decisions and open questions flow into the per-project memory (#5)
+- Commitments flow into the per-person memory (#5)
+- Decisions and open questions flow into the per-project memory (#4)
 - After a meeting is saved, agent proposes updates to project/person memory; user approves or edits
 
 **Why:** Transcripts contain far more structured signal than just action items. The existing pipeline leaves decisions and commitments on the floor.
 
-## 8. Weekly retrospective on WeeklyGoalsPage
+## 7. Weekly retrospective on WeeklyGoalsPage
 
 AI-generated retrospective over the previous week: what shipped, what slipped, patterns in what slipped, suggested focus for next week. Based on completed todos, daily goals, and meeting notes from the window.
 
@@ -88,16 +74,16 @@ AI-generated retrospective over the previous week: what shipped, what slipped, p
 
 **Why:** The data for a retrospective is already in the system. Generating the synthesis is the part the user won't do manually every week.
 
-## 9. Natural-language todo capture
+## 8. Natural-language todo capture
 
 Single text input that parses free-form entries into structured todos: "ping Sarah re design doc by Fri, high" → assignee Sarah, deadline Friday, importance high, project guessed from context.
 
-- Lives in the command palette (#3) and/or a dedicated quick-capture hotkey
+- Lives in the command palette and/or a dedicated quick-capture hotkey
 - Shows parsed preview before saving; user can tweak before confirming
 
 **Why:** Lowest-friction path from thought to structured todo. The current form is several fields away from the keyboard.
 
-## 10. Smart triage on todo creation
+## 9. Smart triage on todo creation
 
 When the user fills in a todo title, AI suggests importance, estimated hours, project, and potential blockers by matching against existing tasks and recent meeting notes.
 
@@ -106,12 +92,12 @@ When the user fills in a todo title, AI suggests importance, estimated hours, pr
 
 **Why:** The fields are there but filling them honestly is tedious, so users skip them and the data degrades. Good defaults make the fields actually used.
 
-## 11. Semantic search across the corpus
+## 10. Semantic search across the corpus
 
 Embeddings over todos, project notes, meeting notes, and transcripts. A single "ask anything" input answers questions with cited sources: "what did we decide about billing?" → answer + links to the meeting note(s) it came from.
 
-- Can live inside the command palette (#3) as a fallback when no exact match is found
-- Memory docs from #4–6 become prime retrieval targets
+- Can live inside the command palette as a fallback when no exact match is found
+- Memory docs from #3–5 become prime retrieval targets
 
 **Why:** No global search exists today. Once memory docs and meeting extracts are in place, semantic retrieval multiplies their value.
 
@@ -119,11 +105,10 @@ Embeddings over todos, project notes, meeting notes, and transcripts. A single "
 
 Suggested sequence when picking these up:
 
-1. Command palette (independent, high-value)
-2. Inline-edit affordances (small CSS pass across components)
-3. Dashboard "Must Do Today" (reuses existing Focus components)
-4. Daily focus coach + memory document (unlocks the agentic layer)
-5. Per-project and per-person memory docs (give the coach something to cite)
-6. Structured meeting extraction (feeds the memory docs automatically)
-7. Weekly retrospective, natural-language capture, smart triage (quality-of-life on top)
-8. Semantic search (capstone once there's enough structured content to index)
+1. Inline-edit affordances (small CSS pass across components)
+2. Dashboard "Must Do Today" (reuses existing Focus components)
+3. Daily focus coach + memory document (unlocks the agentic layer)
+4. Per-project and per-person memory docs (give the coach something to cite)
+5. Structured meeting extraction (feeds the memory docs automatically)
+6. Weekly retrospective, natural-language capture, smart triage (quality-of-life on top)
+7. Semantic search (capstone once there's enough structured content to index)

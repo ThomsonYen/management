@@ -13,6 +13,7 @@ const DEFAULT_HOTKEYS: Record<string, string> = {
   goToPeople: 'meta+5',
   goToMeetings: 'meta+6',
   goToDone: 'meta+7',
+  openCommandPalette: 'meta+k',
   newTodo: 'meta+n',
   newMeetingNote: 'meta+shift+n',
   markDone: 'meta+d',

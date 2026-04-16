@@ -211,6 +211,7 @@ export default function SettingsPage() {
                   <HotkeyInput label="Go to People" description="" bindingKey="goToPeople" />
                   <HotkeyInput label="Go to Meetings" description="" bindingKey="goToMeetings" />
                   <HotkeyInput label="Go to Recently Done" description="" bindingKey="goToDone" />
+                  <HotkeyInput label="Open command palette" description="Global search and actions" bindingKey="openCommandPalette" />
                 </div>
               </div>
 
