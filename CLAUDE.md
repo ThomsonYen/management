@@ -47,6 +47,10 @@ There are no automated tests or linters configured.
 - Soft deletes for meeting notes (`hidden` flag)
 - Many-to-many association tables for meeting attendees, projects, and todos
 
+## Feature ideation
+
+Proposed features and usability improvements are tracked in `claude_readmes/features.md`. When the user brainstorms new ideas or directions, append them there as numbered sections following the existing format (title, description, bullet specifics, **Why:** line) and update the implementation order at the bottom. Treat this file as the living product backlog for this project.
+
 ## Configuration
 
 | File | Purpose |
