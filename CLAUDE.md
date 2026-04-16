@@ -57,4 +57,4 @@ There are no automated tests or linters configured.
 
 ## Database
 
-SQLite with SQLAlchemy 2.0. Core tables: `persons`, `projects`, `todos`, `subtodos`, `todo_blockers`, `must_do_items`, `daily_goals`, `meeting_notes` (plus association tables). Todo statuses: `todo`, `in_progress`, `done`. Importance levels: `low`, `medium`, `high`.
+SQLite with SQLAlchemy 2.0. Core tables: `persons`, `projects`, `todos`, `subtodos`, `todo_blockers`, `must_do_items`, `daily_goals`, `meeting_notes` (plus association tables). Todo statuses: `todo`, `done` (`in_progress` is deprecated; legacy rows are backfilled to `todo` on startup and new writes of that value are rejected). Importance levels: `low`, `medium`, `high`.

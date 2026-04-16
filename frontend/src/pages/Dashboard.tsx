@@ -2,11 +2,11 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { fetchReminders, fetchRecentlyDone, fetchTodos, fetchPersons, updateTodo } from '../api'
 import type { ScheduleStatus, Todo, Person } from '../types'
-import { ListTodo, Loader2, CheckCircle2, ShieldAlert, ExternalLink, type LucideIcon } from 'lucide-react'
+import { ListTodo, CheckCircle2, ShieldAlert, ExternalLink, type LucideIcon } from 'lucide-react'
 import { BlockerTreeNode } from '../components/BlockerTree'
 import DatePicker from '../components/DatePicker'
 
-const STATUS_OPTIONS = ['todo', 'in-progress', 'done', 'blocked']
+const STATUS_OPTIONS = ['todo', 'done', 'blocked']
 const IMPORTANCE_OPTIONS = ['low', 'medium', 'high', 'critical']
 
 const autoOpenSelect = (el: HTMLSelectElement | null) => {
@@ -286,20 +286,16 @@ export default function Dashboard({ onOpenTodo }: { onOpenTodo: (id: number) => 
     queryFn: () => fetchTodos(),
   })
 
+  const sevenDaysAgoIso = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
   const { data: recentlyDone = [] } = useQuery<Todo[]>({
-    queryKey: ['recently-done'],
-    queryFn: () => fetchRecentlyDone(),
+    queryKey: ['recently-done', { since: 'past-7-days' }],
+    queryFn: () => fetchRecentlyDone({ since: sevenDaysAgoIso }),
   })
 
   const { data: persons = [] } = useQuery<Person[]>({
     queryKey: ['persons'],
     queryFn: fetchPersons,
   })
-
-  const statusCounts = todos.reduce<Record<string, number>>((acc, t) => {
-    acc[t.status] = (acc[t.status] || 0) + 1
-    return acc
-  }, {})
 
   const behindCount = reminders.filter((r) => r.status === 'behind').length
   const warningCount = reminders.filter((r) => r.status === 'warning').length
@@ -318,24 +314,14 @@ export default function Dashboard({ onOpenTodo }: { onOpenTodo: (id: number) => 
     return map[imp] || 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-400'
   }
 
-  const statusBadge = (s: string) => {
-    const map: Record<string, string> = {
-      todo: 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-400',
-      'in-progress': 'bg-blue-100 text-blue-700',
-      done: 'bg-green-100 text-green-700',
-    }
-    return map[s] || 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-400'
-  }
-
   return (
     <div className="p-6 max-w-5xl mx-auto">
       <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100 mb-6">Dashboard</h2>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
         <StatCard label="Total Todos" value={todos.length} color="bg-indigo-600" icon={ListTodo} />
-        <StatCard label="In Progress" value={statusCounts['in-progress'] || 0} color="bg-blue-500" icon={Loader2} />
-        <StatCard label="Completed" value={recentlyDone.length} color="bg-green-500" icon={CheckCircle2} />
+        <StatCard label="Completed (past 7 days)" value={recentlyDone.length} color="bg-green-500" icon={CheckCircle2} />
         <StatCard label="Blocked" value={todos.filter((t) => t.is_blocked).length} color="bg-slate-500" icon={ShieldAlert} />
       </div>
 
@@ -396,9 +382,11 @@ export default function Dashboard({ onOpenTodo }: { onOpenTodo: (id: number) => 
                   <span className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize ${importanceBadge(t.importance)}`}>
                     {t.importance}
                   </span>
-                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize ${statusBadge(t.status)}`}>
-                    {t.status}
-                  </span>
+                  {t.status === 'done' && (
+                    <span className="text-xs px-2 py-0.5 rounded-full font-medium capitalize bg-green-100 text-green-700">
+                      {t.status}
+                    </span>
+                  )}
                 </div>
               </button>
             ))}

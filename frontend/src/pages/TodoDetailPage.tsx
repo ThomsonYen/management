@@ -34,16 +34,8 @@ const importanceBadge = (imp: string) => {
   return map[imp] || 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-700 dark:text-slate-400 dark:border-slate-700'
 }
 
-const statusBadge = (s: string) => {
-  const map: Record<string, string> = {
-    todo: 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-700 dark:text-slate-400 dark:border-slate-700',
-    'in-progress': 'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800',
-    done: 'bg-green-100 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800',
-  }
-  return map[s] || 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-700 dark:text-slate-400 dark:border-slate-700'
-}
-
 const BADGE_BASE = 'text-xs font-bold uppercase tracking-wide px-2.5 py-0.5 rounded-full border'
+const DONE_BADGE = 'bg-green-100 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800'
 const ACTION_BASE = 'text-sm font-medium px-3 py-1.5 rounded-lg border transition-colors disabled:opacity-40'
 
 
@@ -406,26 +398,9 @@ export default function TodoDetailPage() {
                   {todo.importance}
                 </span>
               )}
-              {editingField === 'status' ? (
-                <select
-                  ref={autoOpenSelect}
-                  value={todo.status}
-                  onChange={(e) => saveField('status', e.target.value)}
-                  onBlur={() => setEditingField(null)}
-                  onClick={(e) => e.stopPropagation()}
-                  className={`${BADGE_BASE} cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-400 ${statusBadge(todo.status)}`}
-                >
-                  {['todo', 'in-progress', 'done', 'blocked'].map((o) => (
-                    <option key={o} value={o}>{o}</option>
-                  ))}
-                </select>
-              ) : (
-                <span
-                  onClick={(e) => startEdit(e, 'status', todo.status)}
-                  title="Click to change status"
-                  className={`${BADGE_BASE} cursor-pointer hover:ring-2 hover:ring-indigo-300 transition-all ${statusBadge(todo.status)}`}
-                >
-                  {todo.status}
+              {todo.status === 'done' && (
+                <span className={`${BADGE_BASE} ${DONE_BADGE}`}>
+                  done
                 </span>
               )}
               {todo.is_blocked && (

@@ -1,18 +1,8 @@
 import type { Todo } from '../types'
 
-const statusBadge = (s: string) => {
-  const map: Record<string, string> = {
-    todo: 'bg-slate-100 text-slate-600',
-    'in-progress': 'bg-blue-100 text-blue-700',
-    done: 'bg-green-100 text-green-700',
-  }
-  return map[s] || 'bg-slate-100 text-slate-600'
-}
-
 const statusDot = (s: string) => {
   const map: Record<string, string> = {
     todo: 'bg-slate-400',
-    'in-progress': 'bg-blue-500',
     done: 'bg-green-500',
   }
   return map[s] || 'bg-slate-400'
@@ -59,9 +49,11 @@ export function BlockerTreeNode({
             <span className="text-xs text-slate-400 dark:text-slate-500 flex-shrink-0">{todo.assignee_name}</span>
           )}
           <span className="text-xs text-slate-500 dark:text-slate-400 flex-shrink-0 font-medium">{todo.estimated_hours}h</span>
-          <span className={`text-xs px-2 py-0.5 rounded-full capitalize flex-shrink-0 ${statusBadge(todo.status)}`}>
-            {todo.status}
-          </span>
+          {todo.status === 'done' && (
+            <span className="text-xs px-2 py-0.5 rounded-full capitalize flex-shrink-0 bg-green-100 text-green-700">
+              {todo.status}
+            </span>
+          )}
           <span className="text-xs text-slate-400 dark:text-slate-500 flex-shrink-0">→</span>
         </button>
         {onRemove && (
@@ -131,9 +123,11 @@ export function BlockingTreeNode({
             <span className="text-xs text-slate-400 dark:text-slate-500 flex-shrink-0">{todo.assignee_name}</span>
           )}
           <span className="text-xs text-slate-500 dark:text-slate-400 flex-shrink-0 font-medium">{todo.estimated_hours}h</span>
-          <span className={`text-xs px-2 py-0.5 rounded-full capitalize flex-shrink-0 ${statusBadge(todo.status)}`}>
-            {todo.status}
-          </span>
+          {todo.status === 'done' && (
+            <span className="text-xs px-2 py-0.5 rounded-full capitalize flex-shrink-0 bg-green-100 text-green-700">
+              {todo.status}
+            </span>
+          )}
           <span className="text-xs text-slate-400 dark:text-slate-500 flex-shrink-0">→</span>
         </button>
         {onRemove && (

@@ -23,7 +23,7 @@ interface Props {
 }
 
 const IMPORTANCE_OPTIONS = ['low', 'medium', 'high', 'critical']
-const STATUS_OPTIONS = ['todo', 'in-progress', 'done']
+const STATUS_OPTIONS = ['todo', 'done']
 
 export default function TodoModal({ todo, onClose, invalidateKeys, defaultAssigneeId }: Props) {
   const queryClient = useQueryClient()

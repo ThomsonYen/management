@@ -132,8 +132,8 @@ export const updateSubTodo = (
 export const deleteSubTodo = (id: number): Promise<void> =>
   api.delete(`/subtodos/${id}`).then((r) => r.data)
 
-export const fetchRecentlyDone = (limit = 50): Promise<Todo[]> =>
-  api.get('/todos/recently-done', { params: { limit } }).then((r) => r.data)
+export const fetchRecentlyDone = (params: { limit?: number; since?: string } = {}): Promise<Todo[]> =>
+  api.get('/todos/recently-done', { params: { limit: 50, ...params } }).then((r) => r.data)
 
 // ─── Must Do Items ──────────────────────────────────────────────────────────
 

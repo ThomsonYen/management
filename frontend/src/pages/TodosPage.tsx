@@ -10,7 +10,7 @@ import { useTodoDefaults, useTimezone, useHotkeys, resolveAssigneeId } from '../
 import { getTodayString } from '../dateUtils'
 import { useHotkey } from '../hooks/useHotkey'
 
-const STATUS_OPTIONS = ['', 'todo', 'in-progress', 'blocked']
+const STATUS_OPTIONS = ['', 'todo', 'blocked']
 const IMPORTANCE_OPTIONS = ['', 'low', 'medium', 'high', 'critical']
 
 function AddTodoCard({

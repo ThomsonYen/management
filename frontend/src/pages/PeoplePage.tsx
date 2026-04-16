@@ -11,17 +11,15 @@ import TodoCard from '../components/TodoCard'
 import TodoModal from '../components/TodoModal'
 import BulkActionBar from '../components/BulkActionBar'
 
-const STATUS_ORDER = ['todo', 'in-progress', 'blocked']
+const STATUS_ORDER = ['todo', 'blocked']
 
 const statusLabel: Record<string, string> = {
   todo: 'To Do',
-  'in-progress': 'In Progress',
   blocked: 'Blocked',
 }
 
 const statusColor: Record<string, string> = {
   todo: 'text-slate-600',
-  'in-progress': 'text-blue-600',
   blocked: 'text-red-600',
 }
 

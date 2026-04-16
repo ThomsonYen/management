@@ -11,7 +11,6 @@ import { useTimezone } from '../SettingsContext'
 import { isOverdue as checkOverdue, getTodayString } from '../dateUtils'
 
 const IMPORTANCE_OPTIONS = ['low', 'medium', 'high', 'critical']
-const STATUS_OPTIONS = ['todo', 'in-progress', 'done', 'blocked']
 
 const importanceBadge = (imp: string) => {
   const map: Record<string, string> = {
@@ -21,16 +20,6 @@ const importanceBadge = (imp: string) => {
     low: 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700',
   }
   return map[imp] || 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700'
-}
-
-const statusBadge = (s: string) => {
-  const map: Record<string, string> = {
-    todo: 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400',
-    'in-progress': 'bg-blue-100 text-blue-700',
-    done: 'bg-green-100 text-green-700',
-    blocked: 'bg-red-100 text-red-700',
-  }
-  return map[s] || 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400'
 }
 
 interface TodoCardProps {
@@ -327,27 +316,9 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
                 </span>
               )}
 
-              {/* Status badge */}
-              {editingField === 'status' ? (
-                <select
-                  ref={autoOpenSelect}
-                  value={todo.status}
-                  onChange={(e) => saveField('status', e.target.value)}
-                  onBlur={() => setEditingField(null)}
-                  onClick={(e) => e.stopPropagation()}
-                  className={`text-xs font-medium px-2 py-0.5 rounded-full capitalize cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-400 ${statusBadge(todo.status)}`}
-                >
-                  {STATUS_OPTIONS.map((o) => (
-                    <option key={o} value={o}>{o}</option>
-                  ))}
-                </select>
-              ) : (
-                <span
-                  onClick={(e) => startEdit(e, 'status', todo.status)}
-                  title="Click to change status"
-                  className={`text-xs font-medium px-2 py-0.5 rounded-full capitalize cursor-pointer hover:ring-2 hover:ring-indigo-300 transition-all ${statusBadge(todo.status)}`}
-                >
-                  {todo.status}
+              {todo.status === 'done' && (
+                <span className="text-xs font-medium px-2 py-0.5 rounded-full capitalize bg-green-100 text-green-700">
+                  done
                 </span>
               )}
 

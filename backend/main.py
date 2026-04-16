@@ -667,6 +667,11 @@ log = logging.getLogger("management")
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    with SessionLocal() as db:
+        db.query(Todo).filter(Todo.status.in_(["in_progress", "in-progress"])).update(
+            {Todo.status: "todo"}, synchronize_session=False
+        )
+        db.commit()
     task = asyncio.create_task(backup_loop(get_user_timezone))
     try:
         yield
@@ -915,11 +920,16 @@ def list_todos(
 
 
 @app.get("/todos/recently-done", response_model=List[TodoOut])
-def recently_done_todos(limit: int = Query(50), db: Session = Depends(get_db)):
+def recently_done_todos(
+    limit: int = Query(50),
+    since: Optional[datetime] = Query(None),
+    db: Session = Depends(get_db),
+):
+    q = db.query(Todo).filter(Todo.status == "done", Todo.deleted_at == None)
+    if since is not None:
+        q = q.filter(Todo.done_at >= since.isoformat())
     todos = (
-        db.query(Todo)
-        .filter(Todo.status == "done", Todo.deleted_at == None)
-        .order_by(nullslast(Todo.done_at.desc()), Todo.created_at.desc())
+        q.order_by(nullslast(Todo.done_at.desc()), Todo.created_at.desc())
         .limit(limit)
         .all()
     )
@@ -960,8 +970,13 @@ def get_todo(todo_id: int, db: Session = Depends(get_db)):
     return todo_to_out(t)
 
 
+DEPRECATED_STATUSES = {"in_progress", "in-progress"}
+
+
 @app.post("/todos", response_model=TodoOut)
 def create_todo(data: TodoCreate, db: Session = Depends(get_db)):
+    if data.status in DEPRECATED_STATUSES:
+        raise HTTPException(400, "Status 'in-progress' is deprecated; use 'todo'")
     blocked_by_ids = data.blocked_by_ids
     todo_data = data.model_dump(exclude={"blocked_by_ids"})
     t = Todo(**todo_data)
@@ -980,6 +995,8 @@ def update_todo(todo_id: int, data: TodoUpdate, db: Session = Depends(get_db)):
     if not t:
         raise HTTPException(404, "Todo not found")
     update_data = data.model_dump(exclude_unset=True)
+    if update_data.get("status") in DEPRECATED_STATUSES:
+        raise HTTPException(400, "Status 'in-progress' is deprecated; use 'todo'")
     blocked_by_ids = update_data.pop("blocked_by_ids", None)
     old_status = t.status
     for k, v in update_data.items():
