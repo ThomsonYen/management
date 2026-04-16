@@ -47,6 +47,15 @@ export const updateProject = (
 export const deleteProject = (id: number): Promise<void> =>
   api.delete(`/projects/${id}`).then((r) => r.data)
 
+export const restoreProject = (id: number): Promise<void> =>
+  api.post(`/projects/${id}/restore`).then((r) => r.data)
+
+export const purgeProject = (id: number): Promise<void> =>
+  api.delete(`/projects/${id}/purge`).then((r) => r.data)
+
+export const fetchDeletedProjects = (): Promise<Project[]> =>
+  api.get('/projects/deleted').then((r) => r.data)
+
 // ─── Todos ───────────────────────────────────────────────────────────────────
 
 export interface TodoFilters {
@@ -98,6 +107,15 @@ export const reorderFocus = (
 
 export const deleteTodo = (id: number): Promise<void> =>
   api.delete(`/todos/${id}`).then((r) => r.data)
+
+export const restoreTodo = (id: number): Promise<void> =>
+  api.post(`/todos/${id}/restore`).then((r) => r.data)
+
+export const purgeTodo = (id: number): Promise<void> =>
+  api.delete(`/todos/${id}/purge`).then((r) => r.data)
+
+export const fetchDeletedTodos = (): Promise<Todo[]> =>
+  api.get('/todos/deleted').then((r) => r.data)
 
 // ─── SubTodos ────────────────────────────────────────────────────────────────
 

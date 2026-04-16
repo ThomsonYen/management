@@ -5,7 +5,8 @@ import { useHotkey } from '../hooks/useHotkey'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ChevronsLeft, ChevronsRight } from 'lucide-react'
 import EditableMarkdown from '../components/EditableMarkdown'
-import { fetchProjectTree, fetchProjects, fetchTodos, fetchPersons, createProject, createTodo, deleteProject, updateProject } from '../api'
+import { fetchProjectTree, fetchProjects, fetchTodos, fetchPersons, createProject, createTodo, deleteProject, restoreProject, updateProject } from '../api'
+import { useToast } from '../ToastContext'
 import type { ProjectTree, Project, Todo } from '../types'
 import DatePicker from '../components/DatePicker'
 import TodoCard from '../components/TodoCard'
@@ -348,12 +349,28 @@ export default function ProjectsPage({ onOpenTodo }: { onOpenTodo: (id: number) 
     enabled: !!selectedProjectId,
   })
 
+  const { showToast } = useToast()
+  const invalidateProjects = () => {
+    queryClient.invalidateQueries({ queryKey: ['projects'] })
+    queryClient.invalidateQueries({ queryKey: ['projects-tree'] })
+    queryClient.invalidateQueries({ queryKey: ['deleted-projects'] })
+  }
   const deleteMutation = useMutation({
     mutationFn: deleteProject,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['projects'] })
-      queryClient.invalidateQueries({ queryKey: ['projects-tree'] })
+    onSuccess: (_data, projectId) => {
+      const deletedName = projects.find((p) => p.id === projectId)?.name ?? 'Project'
+      invalidateProjects()
       setSelectedProjectId(null)
+      showToast({
+        message: `Deleted project "${deletedName}"`,
+        action: {
+          label: 'Undo',
+          onClick: async () => {
+            await restoreProject(projectId)
+            invalidateProjects()
+          },
+        },
+      })
     },
   })
 
@@ -507,12 +524,9 @@ export default function ProjectsPage({ onOpenTodo }: { onOpenTodo: (id: number) 
                       + Add Todo
                     </button>
                     <button
-                      onClick={() => {
-                        if (window.confirm('Delete this project and all its subprojects?')) {
-                          deleteMutation.mutate(selectedProjectId)
-                        }
-                      }}
-                      className="bg-red-50 text-red-600 border border-red-200 px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-red-100 transition-colors"
+                      onClick={() => deleteMutation.mutate(selectedProjectId)}
+                      disabled={deleteMutation.isPending}
+                      className="bg-red-50 text-red-600 border border-red-200 px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-red-100 transition-colors disabled:opacity-50"
                     >
                       Delete
                     </button>

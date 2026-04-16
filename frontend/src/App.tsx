@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react'
 import { NavLink, Route, Routes, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, CheckSquare, FolderKanban, Users, CheckCircle2, Crosshair, Settings, ChevronsLeft, ChevronsRight, FileText, Target, BarChart3, Square } from 'lucide-react'
+import { LayoutDashboard, CheckSquare, FolderKanban, Users, CheckCircle2, Crosshair, Settings, ChevronsLeft, ChevronsRight, FileText, Target, BarChart3, Square, Trash2 } from 'lucide-react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { updateTodo, createMeetingNote } from './api'
 import { useResizableSidebar } from './hooks/useResizableSidebar'
@@ -14,6 +14,7 @@ import ProjectsPage from './pages/ProjectsPage'
 import PeoplePage from './pages/PeoplePage'
 import TodoDetailPage from './pages/TodoDetailPage'
 import RecentlyDonePage from './pages/RecentlyDonePage'
+import RecentlyDeletedPage from './pages/RecentlyDeletedPage'
 import FocusPage from './pages/FocusPage'
 import SettingsPage from './pages/SettingsPage'
 import MeetingNotesPage from './pages/MeetingNotesPage'
@@ -32,6 +33,7 @@ const navItems = [
   { to: '/weekly-goals', label: 'Weekly Goals', icon: Target, end: false },
   { to: '/progress', label: 'Progress', icon: BarChart3, end: false },
   { to: '/done', label: 'Recently Done', icon: CheckCircle2, end: false },
+  { to: '/deleted', label: 'Recently Deleted', icon: Trash2, end: false },
 ]
 
 export default function App() {
@@ -250,6 +252,7 @@ export default function App() {
           <Route path="/projects" element={<ProjectsPage onOpenTodo={(id) => navigate(`/todos/${id}`)} />} />
           <Route path="/people" element={<PeoplePage onOpenTodo={(id) => navigate(`/todos/${id}`)} />} />
           <Route path="/done" element={<RecentlyDonePage />} />
+          <Route path="/deleted" element={<RecentlyDeletedPage />} />
           <Route path="/meeting-notes" element={<MeetingNotesPage />} />
           <Route path="/meeting-notes/:id" element={<MeetingNoteDetailPage />} />
           <Route path="/weekly-goals" element={<WeeklyGoalsPage />} />

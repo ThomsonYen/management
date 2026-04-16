@@ -11,6 +11,7 @@ export interface Project {
   notes?: string
   parent_id?: number
   deadline?: string
+  deleted_at?: string
 }
 
 export interface ProjectTree extends Project {
@@ -41,6 +42,7 @@ export interface Todo {
   focus_order: number
   created_at: string
   done_at?: string
+  deleted_at?: string
   subtodos: SubTodo[]
   blocked_by_ids: number[]
 }

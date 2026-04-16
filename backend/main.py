@@ -174,6 +174,7 @@ class Project(Base):
     notes = Column(Text, nullable=True)
     parent_id = Column(Integer, ForeignKey("projects.id"), nullable=True)
     deadline = Column(String, nullable=True)
+    deleted_at = Column(String, nullable=True)
     subprojects = relationship(
         "Project", back_populates="parent", cascade="all, delete-orphan"
     )
@@ -196,6 +197,7 @@ class Todo(Base):
     focus_order = Column(Integer, default=0)
     created_at = Column(String, default=lambda: datetime.now(timezone.utc).isoformat())
     done_at = Column(String, nullable=True)
+    deleted_at = Column(String, nullable=True)
     subtodos = relationship(
         "SubTodo",
         back_populates="todo",
@@ -266,6 +268,11 @@ with engine.connect() as _conn:
     if "section" not in _cols:
         _conn.execute(text("ALTER TABLE must_do_items ADD COLUMN section TEXT DEFAULT 'morning'"))
         _conn.commit()
+    for _tbl in ("todos", "projects"):
+        _tbl_cols = [c["name"] for c in _insp.get_columns(_tbl)]
+        if "deleted_at" not in _tbl_cols:
+            _conn.execute(text(f"ALTER TABLE {_tbl} ADD COLUMN deleted_at TEXT"))
+            _conn.commit()
 
 
 def get_db():
@@ -314,6 +321,7 @@ class ProjectOut(BaseModel):
     notes: Optional[str] = None
     parent_id: Optional[int] = None
     deadline: Optional[str] = None
+    deleted_at: Optional[str] = None
     model_config = {"from_attributes": True}
 
 
@@ -395,6 +403,7 @@ class TodoOut(BaseModel):
     focus_order: int
     created_at: str
     done_at: Optional[str] = None
+    deleted_at: Optional[str] = None
     subtodos: List[SubTodoOut] = []
     blocked_by_ids: List[int] = []
     model_config = {"from_attributes": True}
@@ -542,18 +551,19 @@ def todo_to_out(t: Todo) -> TodoOut:
         title=t.title,
         description=t.description,
         project_id=t.project_id,
-        project_name=t.project.name if t.project else None,
+        project_name=t.project.name if t.project and t.project.deleted_at is None else None,
         assignee_id=t.assignee_id,
         assignee_name=t.assignee.name if t.assignee else None,
         deadline=t.deadline,
         importance=t.importance,
         estimated_hours=t.estimated_hours,
         status=t.status,
-        is_blocked=any(b.status != "done" for b in t.blocked_by),
+        is_blocked=any(b.status != "done" and b.deleted_at is None for b in t.blocked_by),
         is_focused=t.is_focused or False,
         focus_order=t.focus_order or 0,
         created_at=t.created_at,
         done_at=t.done_at,
+        deleted_at=t.deleted_at,
         subtodos=[SubTodoOut.model_validate(s) for s in t.subtodos],
         blocked_by_ids=[b.id for b in t.blocked_by],
     )
@@ -567,7 +577,9 @@ def project_to_tree(p: Project) -> ProjectTreeOut:
         notes=p.notes,
         parent_id=p.parent_id,
         deadline=p.deadline,
-        subprojects=[project_to_tree(sp) for sp in p.subprojects],
+        subprojects=[
+            project_to_tree(sp) for sp in p.subprojects if sp.deleted_at is None
+        ],
     )
 
 
@@ -731,6 +743,7 @@ def person_progress(
             Todo.assignee_id != None,
             Todo.done_at != None,
             Todo.done_at >= since,
+            Todo.deleted_at == None,
         )
         .all()
     )
@@ -777,12 +790,16 @@ def person_progress(
 
 @app.get("/projects", response_model=List[ProjectOut])
 def list_projects(db: Session = Depends(get_db)):
-    return db.query(Project).all()
+    return db.query(Project).filter(Project.deleted_at == None).all()
 
 
 @app.get("/projects/tree", response_model=List[ProjectTreeOut])
 def projects_tree(db: Session = Depends(get_db)):
-    roots = db.query(Project).filter(Project.parent_id == None).all()
+    roots = (
+        db.query(Project)
+        .filter(Project.parent_id == None, Project.deleted_at == None)
+        .all()
+    )
     return [project_to_tree(r) for r in roots]
 
 
@@ -807,14 +824,61 @@ def update_project(project_id: int, data: ProjectUpdate, db: Session = Depends(g
     return p
 
 
+def _cascade_soft_delete_project(p: Project, ts: str) -> None:
+    if p.deleted_at is None:
+        p.deleted_at = ts
+    for child in p.subprojects:
+        if child.deleted_at is None:
+            _cascade_soft_delete_project(child, ts)
+
+
+def _cascade_restore_project(p: Project) -> None:
+    p.deleted_at = None
+    for child in p.subprojects:
+        if child.deleted_at is not None:
+            _cascade_restore_project(child)
+
+
 @app.delete("/projects/{project_id}")
 def delete_project(project_id: int, db: Session = Depends(get_db)):
     p = db.query(Project).get(project_id)
     if not p:
         raise HTTPException(404, "Project not found")
+    _cascade_soft_delete_project(p, datetime.now(timezone.utc).isoformat())
+    db.commit()
+    return {"ok": True}
+
+
+@app.post("/projects/{project_id}/restore")
+def restore_project(project_id: int, db: Session = Depends(get_db)):
+    p = db.query(Project).get(project_id)
+    if not p:
+        raise HTTPException(404, "Project not found")
+    _cascade_restore_project(p)
+    db.commit()
+    return {"ok": True}
+
+
+@app.delete("/projects/{project_id}/purge")
+def purge_project(project_id: int, db: Session = Depends(get_db)):
+    p = db.query(Project).get(project_id)
+    if not p:
+        raise HTTPException(404, "Project not found")
+    if p.deleted_at is None:
+        raise HTTPException(400, "Project is not soft-deleted")
     db.delete(p)
     db.commit()
     return {"ok": True}
+
+
+@app.get("/projects/deleted", response_model=List[ProjectOut])
+def list_deleted_projects(db: Session = Depends(get_db)):
+    return (
+        db.query(Project)
+        .filter(Project.deleted_at != None)
+        .order_by(Project.deleted_at.desc())
+        .all()
+    )
 
 
 # ─── Todos ───────────────────────────────────────────────────────────────────
@@ -829,7 +893,7 @@ def list_todos(
     is_focused: Optional[bool] = Query(None),
     db: Session = Depends(get_db),
 ):
-    q = db.query(Todo)
+    q = db.query(Todo).filter(Todo.deleted_at == None)
     if assignee_id is not None:
         q = q.filter(Todo.assignee_id == assignee_id)
     if project_id is not None:
@@ -839,7 +903,10 @@ def list_todos(
     if exclude_done:
         q = q.filter(Todo.status != "done")
     if status == "blocked":
-        todos = [t for t in q.all() if any(b.status != "done" for b in t.blocked_by)]
+        todos = [
+            t for t in q.all()
+            if any(b.status != "done" and b.deleted_at is None for b in t.blocked_by)
+        ]
     else:
         if status is not None:
             q = q.filter(Todo.status == status)
@@ -851,9 +918,20 @@ def list_todos(
 def recently_done_todos(limit: int = Query(50), db: Session = Depends(get_db)):
     todos = (
         db.query(Todo)
-        .filter(Todo.status == "done")
+        .filter(Todo.status == "done", Todo.deleted_at == None)
         .order_by(nullslast(Todo.done_at.desc()), Todo.created_at.desc())
         .limit(limit)
+        .all()
+    )
+    return [todo_to_out(t) for t in todos]
+
+
+@app.get("/todos/deleted", response_model=List[TodoOut])
+def list_deleted_todos(db: Session = Depends(get_db)):
+    todos = (
+        db.query(Todo)
+        .filter(Todo.deleted_at != None)
+        .order_by(Todo.deleted_at.desc())
         .all()
     )
     return [todo_to_out(t) for t in todos]
@@ -925,6 +1003,28 @@ def delete_todo(todo_id: int, db: Session = Depends(get_db)):
     t = db.query(Todo).get(todo_id)
     if not t:
         raise HTTPException(404, "Todo not found")
+    t.deleted_at = datetime.now(timezone.utc).isoformat()
+    db.commit()
+    return {"ok": True}
+
+
+@app.post("/todos/{todo_id}/restore")
+def restore_todo(todo_id: int, db: Session = Depends(get_db)):
+    t = db.query(Todo).get(todo_id)
+    if not t:
+        raise HTTPException(404, "Todo not found")
+    t.deleted_at = None
+    db.commit()
+    return {"ok": True}
+
+
+@app.delete("/todos/{todo_id}/purge")
+def purge_todo(todo_id: int, db: Session = Depends(get_db)):
+    t = db.query(Todo).get(todo_id)
+    if not t:
+        raise HTTPException(404, "Todo not found")
+    if t.deleted_at is None:
+        raise HTTPException(400, "Todo is not soft-deleted")
     db.delete(t)
     db.commit()
     return {"ok": True}
@@ -1091,7 +1191,11 @@ def _chain_hours(todo: Todo, visited: set) -> float:
 @app.get("/schedule/reminders", response_model=List[ScheduleStatus])
 def schedule_reminders(db: Session = Depends(get_db)):
     today = date.today()
-    todos = db.query(Todo).filter(Todo.deadline != None, Todo.status != "done").all()
+    todos = (
+        db.query(Todo)
+        .filter(Todo.deadline != None, Todo.status != "done", Todo.deleted_at == None)
+        .all()
+    )
     results = []
     for t in todos:
         try:

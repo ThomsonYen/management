@@ -2,7 +2,8 @@ import { useState, useEffect, useRef } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
-import { createTodo, createSubTodo, deleteTodo, updateSubTodo, updateTodo, fetchPersons, fetchProjects, fetchTodos } from '../api'
+import { createTodo, createSubTodo, deleteTodo, restoreTodo, updateSubTodo, updateTodo, fetchPersons, fetchProjects, fetchTodos } from '../api'
+import { useToast } from '../ToastContext'
 import DatePicker from './DatePicker'
 import type { Todo, Person, Project } from '../types'
 import { config } from '../config'
@@ -137,6 +138,7 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
   const duplicateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const queryClient = useQueryClient()
   const navigate = useNavigate()
+  const { showToast } = useToast()
 
   useEffect(() => {
     return () => {
@@ -178,7 +180,21 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
 
   const deleteMutation = useMutation({
     mutationFn: () => deleteTodo(todo.id),
-    onSuccess: invalidate,
+    onSuccess: () => {
+      invalidate()
+      queryClient.invalidateQueries({ queryKey: ['deleted-todos'] })
+      showToast({
+        message: `Deleted "${todo.title}"`,
+        action: {
+          label: 'Undo',
+          onClick: async () => {
+            await restoreTodo(todo.id)
+            invalidate()
+            queryClient.invalidateQueries({ queryKey: ['deleted-todos'] })
+          },
+        },
+      })
+    },
   })
 
   const updateMutation = useMutation({
@@ -770,12 +786,9 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
               Duplicate
             </button>
             <button
-              onClick={() => {
-                if (window.confirm('Delete this todo?')) {
-                  deleteMutation.mutate()
-                }
-              }}
-              className="px-3 py-1.5 bg-red-50 text-red-600 text-xs font-medium rounded-lg hover:bg-red-100 transition-colors border border-red-200"
+              onClick={() => deleteMutation.mutate()}
+              disabled={deleteMutation.isPending}
+              className="px-3 py-1.5 bg-red-50 text-red-600 text-xs font-medium rounded-lg hover:bg-red-100 transition-colors border border-red-200 disabled:opacity-50"
             >
               Delete
             </button>

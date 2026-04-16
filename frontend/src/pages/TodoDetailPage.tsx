@@ -11,7 +11,10 @@ import {
   createSubTodo,
   deleteSubTodo,
   createTodo,
+  deleteTodo,
+  restoreTodo,
 } from '../api'
+import { useToast } from '../ToastContext'
 import type { SubTodo, Todo, Person, Project } from '../types'
 import DatePicker from '../components/DatePicker'
 import TodoModal from '../components/TodoModal'
@@ -33,12 +36,15 @@ const importanceBadge = (imp: string) => {
 
 const statusBadge = (s: string) => {
   const map: Record<string, string> = {
-    todo: 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-400',
-    'in-progress': 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
-    done: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+    todo: 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-700 dark:text-slate-400 dark:border-slate-700',
+    'in-progress': 'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800',
+    done: 'bg-green-100 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800',
   }
-  return map[s] || 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-400'
+  return map[s] || 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-700 dark:text-slate-400 dark:border-slate-700'
 }
+
+const BADGE_BASE = 'text-xs font-bold uppercase tracking-wide px-2.5 py-0.5 rounded-full border'
+const ACTION_BASE = 'text-sm font-medium px-3 py-1.5 rounded-lg border transition-colors disabled:opacity-40'
 
 
 function BlockerPicker({
@@ -172,6 +178,28 @@ export default function TodoDetailPage() {
   const updateMutation = useMutation({
     mutationFn: (data: Parameters<typeof updateTodo>[1]) => updateTodo(todoId, data),
     onSuccess: invalidate,
+  })
+
+  const { showToast } = useToast()
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteTodo(todoId),
+    onSuccess: () => {
+      const title = todo?.title ?? 'Todo'
+      invalidate()
+      queryClient.invalidateQueries({ queryKey: ['deleted-todos'] })
+      showToast({
+        message: `Deleted "${title}"`,
+        action: {
+          label: 'Undo',
+          onClick: async () => {
+            await restoreTodo(todoId)
+            invalidate()
+            queryClient.invalidateQueries({ queryKey: ['deleted-todos'] })
+          },
+        },
+      })
+      navigate(-1)
+    },
   })
 
   const handleDoneCheck = (checked: boolean) => {
@@ -363,7 +391,7 @@ export default function TodoDetailPage() {
                   onChange={(e) => saveField('importance', e.target.value)}
                   onBlur={() => setEditingField(null)}
                   onClick={(e) => e.stopPropagation()}
-                  className={`text-xs font-bold px-2.5 py-0.5 rounded-full border uppercase tracking-wide cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-400 ${importanceBadge(todo.importance)}`}
+                  className={`${BADGE_BASE} cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-400 ${importanceBadge(todo.importance)}`}
                 >
                   {['low', 'medium', 'high', 'critical'].map((o) => (
                     <option key={o} value={o}>{o}</option>
@@ -373,7 +401,7 @@ export default function TodoDetailPage() {
                 <span
                   onClick={(e) => startEdit(e, 'importance', todo.importance)}
                   title="Click to change importance"
-                  className={`text-xs font-bold px-2.5 py-0.5 rounded-full border uppercase tracking-wide cursor-pointer hover:ring-2 hover:ring-indigo-300 transition-all ${importanceBadge(todo.importance)}`}
+                  className={`${BADGE_BASE} cursor-pointer hover:ring-2 hover:ring-indigo-300 transition-all ${importanceBadge(todo.importance)}`}
                 >
                   {todo.importance}
                 </span>
@@ -385,7 +413,7 @@ export default function TodoDetailPage() {
                   onChange={(e) => saveField('status', e.target.value)}
                   onBlur={() => setEditingField(null)}
                   onClick={(e) => e.stopPropagation()}
-                  className={`text-xs font-medium px-2.5 py-0.5 rounded-full capitalize cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-400 ${statusBadge(todo.status)}`}
+                  className={`${BADGE_BASE} cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-400 ${statusBadge(todo.status)}`}
                 >
                   {['todo', 'in-progress', 'done', 'blocked'].map((o) => (
                     <option key={o} value={o}>{o}</option>
@@ -395,37 +423,44 @@ export default function TodoDetailPage() {
                 <span
                   onClick={(e) => startEdit(e, 'status', todo.status)}
                   title="Click to change status"
-                  className={`text-xs font-medium px-2.5 py-0.5 rounded-full capitalize cursor-pointer hover:ring-2 hover:ring-indigo-300 transition-all ${statusBadge(todo.status)}`}
+                  className={`${BADGE_BASE} cursor-pointer hover:ring-2 hover:ring-indigo-300 transition-all ${statusBadge(todo.status)}`}
                 >
                   {todo.status}
                 </span>
               )}
               {todo.is_blocked && (
-                <span className="text-xs font-medium px-2.5 py-0.5 rounded-full bg-red-100 text-red-700">
+                <span className={`${BADGE_BASE} bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800`}>
                   blocked
                 </span>
               )}
               {isOverdue && (
-                <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-red-600 text-white">
-                  OVERDUE
+                <span className={`${BADGE_BASE} bg-red-600 text-white border-red-700`}>
+                  overdue
                 </span>
               )}
             </div>
             <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100 leading-tight">{todo.title}</h1>
           </div>
-          <div className="flex-shrink-0 flex items-center gap-3">
-            <label className="flex items-center gap-2 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={isDying || todo.status === 'done'}
-                onChange={(e) => handleDoneCheck(e.target.checked)}
-                className="w-4 h-4 rounded cursor-pointer accent-green-600"
-              />
-              <span className="text-sm text-slate-500 dark:text-slate-400">Done</span>
-            </label>
+          <div className="flex-shrink-0 flex items-center gap-2">
+            {todo.status === 'done' ? (
+              <button
+                onClick={() => handleDoneCheck(false)}
+                className={`${ACTION_BASE} bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 dark:bg-slate-700 dark:text-slate-300 dark:border-slate-600 dark:hover:bg-slate-600`}
+              >
+                ↩ Reopen
+              </button>
+            ) : (
+              <button
+                onClick={() => handleDoneCheck(true)}
+                disabled={isDying}
+                className={`${ACTION_BASE} bg-green-50 text-green-700 border-green-200 hover:bg-green-100 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800 dark:hover:bg-green-800`}
+              >
+                ✓ Mark done
+              </button>
+            )}
             <button
               onClick={() => setShowModal(true)}
-              className="px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 transition-colors"
+              className={`${ACTION_BASE} bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700`}
             >
               Edit
             </button>
@@ -556,9 +591,17 @@ export default function TodoDetailPage() {
           )}
         </div>
 
-        <p className="mt-4 text-xs text-slate-400 dark:text-slate-500">
-          Created {new Date(todo.created_at).toLocaleDateString()}
-        </p>
+        <div className="mt-4 flex items-center justify-between text-xs text-slate-400 dark:text-slate-500">
+          <span>Created {new Date(todo.created_at).toLocaleDateString()}</span>
+          <button
+            onClick={() => deleteMutation.mutate()}
+            disabled={deleteMutation.isPending}
+            title="Soft-delete (recoverable from Recently Deleted)"
+            className="text-slate-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-400 transition-colors disabled:opacity-50"
+          >
+            Delete
+          </button>
+        </div>
       </div>
 
       {/* Subtasks card */}

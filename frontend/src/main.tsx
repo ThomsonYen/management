@@ -6,6 +6,7 @@ import App from './App'
 import { SettingsProvider } from './SettingsContext'
 import { SuggestedNotesProvider } from './SuggestedNotesContext'
 import { RecordingProvider } from './RecordingContext'
+import { ToastProvider } from './ToastContext'
 import './index.css'
 
 const queryClient = new QueryClient({
@@ -22,11 +23,13 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <SettingsProvider>
-          <SuggestedNotesProvider>
-            <RecordingProvider>
-              <App />
-            </RecordingProvider>
-          </SuggestedNotesProvider>
+          <ToastProvider>
+            <SuggestedNotesProvider>
+              <RecordingProvider>
+                <App />
+              </RecordingProvider>
+            </SuggestedNotesProvider>
+          </ToastProvider>
         </SettingsProvider>
       </BrowserRouter>
     </QueryClientProvider>

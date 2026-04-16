@@ -1,9 +1,7 @@
-import { useState, useEffect, useRef } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { updateTodo } from '../api'
+import { useToast } from '../ToastContext'
 import type { Todo } from '../types'
-
-const UNDO_SECONDS = 3
 
 interface Props {
   todo: Todo
@@ -11,15 +9,8 @@ interface Props {
 }
 
 export default function MarkDoneButton({ todo, queryKeys }: Props) {
-  const [undoInfo, setUndoInfo] = useState<{ previousStatus: string; remaining: number } | null>(null)
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const queryClient = useQueryClient()
-
-  useEffect(() => {
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current)
-    }
-  }, [])
+  const { showToast } = useToast()
 
   const invalidate = () => {
     const keys = queryKeys || [['todos']]
@@ -36,37 +27,14 @@ export default function MarkDoneButton({ todo, queryKeys }: Props) {
   const markDone = () => {
     const previousStatus = todo.status
     updateMutation.mutate({ status: 'done' })
-    setUndoInfo({ previousStatus, remaining: UNDO_SECONDS })
-    intervalRef.current = setInterval(() => {
-      setUndoInfo((prev) => {
-        if (!prev) return null
-        if (prev.remaining <= 1) {
-          clearInterval(intervalRef.current!)
-          return null
-        }
-        return { ...prev, remaining: prev.remaining - 1 }
-      })
-    }, 1000)
-  }
-
-  const handleUndo = () => {
-    if (intervalRef.current) clearInterval(intervalRef.current)
-    updateMutation.mutate({ status: undoInfo!.previousStatus })
-    setUndoInfo(null)
-  }
-
-  if (undoInfo) {
-    return (
-      <div className="flex items-center gap-1.5">
-        <span className="text-xs text-green-600 font-medium">✓ Done!</span>
-        <button
-          onClick={handleUndo}
-          className="text-xs px-2 py-1 rounded-lg bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800 hover:bg-amber-100 dark:hover:bg-amber-800 transition-colors font-medium"
-        >
-          Undo ({undoInfo.remaining}s)
-        </button>
-      </div>
-    )
+    showToast({
+      message: `Marked "${todo.title}" done`,
+      tone: 'success',
+      action: {
+        label: 'Undo',
+        onClick: () => updateMutation.mutate({ status: previousStatus }),
+      },
+    })
   }
 
   if (todo.status === 'done') {
