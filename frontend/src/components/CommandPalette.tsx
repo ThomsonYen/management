@@ -61,6 +61,46 @@ const RECENTS_KEY = 'cmdPalette.recent.v1'
 const MAX_RECENTS = 8
 const MAX_RESULTS = 30
 
+type FilterSpec =
+  | { type: 'todo'; status: 'open' | 'done' }
+  | { type: 'project' }
+  | { type: 'person' }
+  | { type: 'meeting'; recentOnly?: boolean }
+  | { type: 'action' }
+
+interface FilterOption {
+  key: string
+  label: string
+  icon: LucideIcon
+  spec: FilterSpec
+}
+
+const FILTER_OPTIONS: FilterOption[] = [
+  { key: 'open-todos', label: 'Open todos', icon: CheckSquare, spec: { type: 'todo', status: 'open' } },
+  { key: 'done-todos', label: 'Done todos', icon: CheckCircle2, spec: { type: 'todo', status: 'done' } },
+  { key: 'projects', label: 'Projects', icon: FolderKanban, spec: { type: 'project' } },
+  { key: 'people', label: 'People', icon: Users, spec: { type: 'person' } },
+  { key: 'meetings', label: 'Meetings', icon: FileText, spec: { type: 'meeting' } },
+  { key: 'recent-meetings', label: 'Recent meetings', icon: FileText, spec: { type: 'meeting', recentOnly: true } },
+  { key: 'actions', label: 'Actions', icon: Crosshair, spec: { type: 'action' } },
+]
+
+const RECENT_MEETING_DAYS = 30
+const MEETING_BOOST_DAYS = 7
+const MEETING_DECAY_DAYS = 90
+
+function daysSince(dateStr: string | undefined): number {
+  if (!dateStr) return Infinity
+  const d = new Date(dateStr)
+  if (isNaN(d.getTime())) return Infinity
+  return (Date.now() - d.getTime()) / (1000 * 60 * 60 * 24)
+}
+
+function placeholderFor(opt: FilterOption): string {
+  if (opt.spec.type === 'action') return 'Run an action…'
+  return `Search ${opt.label.toLowerCase()}…`
+}
+
 function loadRecents(): string[] {
   try {
     const raw = localStorage.getItem(RECENTS_KEY)
@@ -100,6 +140,7 @@ export default function CommandPalette({ onClose, onNewTodo, onNewMeetingNote }:
   const [debouncedQuery, setDebouncedQuery] = useState('')
   const [selected, setSelected] = useState(0)
   const [recentIds, setRecentIds] = useState<string[]>(() => loadRecents())
+  const [filter, setFilter] = useState<FilterOption | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
 
@@ -114,7 +155,8 @@ export default function CommandPalette({ onClose, onNewTodo, onNewMeetingNote }:
 
   useEffect(() => {
     setSelected(0)
-  }, [query])
+  }, [query, filter])
+
 
   const { data: todos = [] } = useQuery({ queryKey: ['todos'], queryFn: () => fetchTodos() })
   const { data: projects = [] } = useQuery({ queryKey: ['projects'], queryFn: fetchProjects })
@@ -124,7 +166,7 @@ export default function CommandPalette({ onClose, onNewTodo, onNewMeetingNote }:
   const { data: meetingContentHits = [] } = useQuery({
     queryKey: ['meeting-notes', 'search', debouncedQuery],
     queryFn: () => searchMeetingNotes(debouncedQuery),
-    enabled: debouncedQuery.length >= 2,
+    enabled: debouncedQuery.length >= 2 && (filter === null || filter.spec.type === 'meeting'),
     staleTime: 15_000,
   })
 
@@ -196,8 +238,65 @@ export default function CommandPalette({ onClose, onNewTodo, onNewMeetingNote }:
     const all: Item[] = [...actions, ...todoItems, ...projectItems, ...personItems, ...meetingItems]
     const byId = new Map(all.map((i) => [i.id, i]))
 
+    const todoStatusById = new Map(todos.map((t) => [`t:${t.id}`, t.status]))
+    const meetingDateById = new Map(meetings.map((m) => [`m:${m.id}`, m.date]))
+
+    const matchesFilter = (item: Item): boolean => {
+      if (!filter) return true
+      const spec = filter.spec
+      if (item.type !== spec.type) return false
+      if (spec.type === 'todo') {
+        const status = todoStatusById.get(item.id)
+        return spec.status === 'done' ? status === 'done' : status !== 'done'
+      }
+      if (spec.type === 'meeting' && spec.recentOnly) {
+        return daysSince(meetingDateById.get(item.id)) <= RECENT_MEETING_DAYS
+      }
+      return true
+    }
+
+    const unfilteredWeight = (item: Item): number => {
+      if (item.type === 'todo' && todoStatusById.get(item.id) === 'done') return 0.4
+      if (item.type === 'meeting') {
+        const age = daysSince(meetingDateById.get(item.id))
+        if (age <= MEETING_BOOST_DAYS) return 1.25
+        if (age > MEETING_DECAY_DAYS) return 0.6
+      }
+      return 1
+    }
+
+    const pool = all.filter(matchesFilter)
+
+    if (!filter && query.startsWith(':')) {
+      const sub = query.slice(1).trim().toLowerCase()
+      const pickerItems: Item[] = FILTER_OPTIONS.filter(
+        (opt) => !sub || opt.label.toLowerCase().includes(sub) || opt.key.toLowerCase().includes(sub),
+      ).map((opt) => ({
+        id: `f:${opt.key}`,
+        type: 'action',
+        title: `Filter: ${opt.label}`,
+        icon: opt.icon,
+        onSelect: () => {
+          setFilter(opt)
+          setQuery('')
+        },
+      }))
+      return pickerItems
+    }
+
     const trimmed = query.trim()
     if (!trimmed) {
+      if (filter) {
+        const recentSet = new Set(recentIds)
+        return [...pool]
+          .sort((a, b) => {
+            const ar = recentSet.has(a.id) ? 0 : 1
+            const br = recentSet.has(b.id) ? 0 : 1
+            if (ar !== br) return ar - br
+            return a.title.localeCompare(b.title)
+          })
+          .slice(0, MAX_RESULTS)
+      }
       const recent = recentIds.map((id) => byId.get(id)).filter((x): x is Item => !!x)
       const recentIdSet = new Set(recent.map((r) => r.id))
       const restActions = actions.filter((a) => !recentIdSet.has(a.id))
@@ -206,13 +305,14 @@ export default function CommandPalette({ onClose, onNewTodo, onNewMeetingNote }:
 
     const contentHitIds = new Set(meetingContentHits.map((h) => `m:${h.id}`))
 
-    const scored = all
+    const scored = pool
       .map((item) => {
         const titleScore = scoreMatch(trimmed, item.title)
         const subtitleScore = item.subtitle ? scoreMatch(trimmed, item.subtitle) * 0.3 : 0
         let score = Math.max(titleScore, subtitleScore)
         if (contentHitIds.has(item.id)) score = Math.max(score, 150)
         if (score > 0 && recentIds.includes(item.id)) score += 5
+        if (!filter && score > 0) score *= unfilteredWeight(item)
         return { item, score }
       })
       .filter((x) => x.score > 0)
@@ -221,7 +321,7 @@ export default function CommandPalette({ onClose, onNewTodo, onNewMeetingNote }:
       .map((x) => x.item)
 
     return scored
-  }, [todos, projects, persons, meetings, meetingContentHits, recentIds, query, navigate, onNewTodo, onNewMeetingNote, theme, setTheme, bindings])
+  }, [todos, projects, persons, meetings, meetingContentHits, recentIds, query, filter, navigate, onNewTodo, onNewMeetingNote, theme, setTheme, bindings])
 
   useEffect(() => {
     if (selected >= items.length) setSelected(0)
@@ -233,20 +333,28 @@ export default function CommandPalette({ onClose, onNewTodo, onNewMeetingNote }:
   }, [selected])
 
   const handleSelect = (item: Item) => {
-    setRecentIds((prev) => {
-      const next = [item.id, ...prev.filter((id) => id !== item.id)].slice(0, MAX_RECENTS)
-      try {
-        localStorage.setItem(RECENTS_KEY, JSON.stringify(next))
-      } catch {
-        /* ignore */
-      }
-      return next
-    })
+    const isFilterPicker = item.id.startsWith('f:')
+    if (!isFilterPicker) {
+      setRecentIds((prev) => {
+        const next = [item.id, ...prev.filter((id) => id !== item.id)].slice(0, MAX_RECENTS)
+        try {
+          localStorage.setItem(RECENTS_KEY, JSON.stringify(next))
+        } catch {
+          /* ignore */
+        }
+        return next
+      })
+    }
     item.onSelect()
-    onClose()
+    if (!isFilterPicker) onClose()
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Backspace' && query === '' && filter) {
+      e.preventDefault()
+      setFilter(null)
+      return
+    }
     if (e.key === 'ArrowDown') {
       e.preventDefault()
       setSelected((i) => (items.length === 0 ? 0 : Math.min(i + 1, items.length - 1)))
@@ -263,7 +371,7 @@ export default function CommandPalette({ onClose, onNewTodo, onNewMeetingNote }:
     }
   }
 
-  const showingRecents = query.trim() === '' && recentIds.length > 0
+  const showingRecents = !filter && query.trim() === '' && recentIds.length > 0
 
   return (
     <div
@@ -276,12 +384,26 @@ export default function CommandPalette({ onClose, onNewTodo, onNewMeetingNote }:
       >
         <div className="flex items-center gap-2.5 px-4 py-3 border-b border-slate-200 dark:border-slate-700">
           <Search size={16} className="text-slate-400 flex-shrink-0" />
+          {filter && (
+            <button
+              type="button"
+              onClick={() => {
+                setFilter(null)
+                inputRef.current?.focus()
+              }}
+              title="Clear filter (Backspace)"
+              className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 flex-shrink-0 hover:bg-indigo-200 dark:hover:bg-indigo-900/70"
+            >
+              {filter.label}
+              <span className="text-indigo-400 dark:text-indigo-500">×</span>
+            </button>
+          )}
           <input
             ref={inputRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Search todos, projects, people, meetings, or run a command…"
+            placeholder={filter ? placeholderFor(filter) : 'Search todos, projects, people, meetings — type : to filter by type'}
             className="flex-1 bg-transparent border-none outline-none text-slate-800 dark:text-slate-100 placeholder:text-slate-400 text-sm"
           />
           <kbd className="hidden sm:inline-block text-[10px] font-medium text-slate-500 dark:text-slate-400 px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700">
