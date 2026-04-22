@@ -163,6 +163,7 @@ class Person(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False)
     email = Column(String, nullable=True)
+    notes = Column(Text, nullable=True)
     todos = relationship("Todo", back_populates="assignee")
 
 
@@ -273,6 +274,10 @@ with engine.connect() as _conn:
         if "deleted_at" not in _tbl_cols:
             _conn.execute(text(f"ALTER TABLE {_tbl} ADD COLUMN deleted_at TEXT"))
             _conn.commit()
+    _person_cols = [c["name"] for c in _insp.get_columns("persons")]
+    if "notes" not in _person_cols:
+        _conn.execute(text("ALTER TABLE persons ADD COLUMN notes TEXT"))
+        _conn.commit()
 
 
 def get_db():
@@ -289,12 +294,20 @@ def get_db():
 class PersonCreate(BaseModel):
     name: str
     email: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class PersonUpdate(BaseModel):
+    name: Optional[str] = None
+    email: Optional[str] = None
+    notes: Optional[str] = None
 
 
 class PersonOut(BaseModel):
     id: int
     name: str
     email: Optional[str] = None
+    notes: Optional[str] = None
     model_config = {"from_attributes": True}
 
 
@@ -706,6 +719,18 @@ def list_persons(db: Session = Depends(get_db)):
 def create_person(data: PersonCreate, db: Session = Depends(get_db)):
     p = Person(**data.model_dump())
     db.add(p)
+    db.commit()
+    db.refresh(p)
+    return p
+
+
+@app.put("/persons/{person_id}", response_model=PersonOut)
+def update_person(person_id: int, data: PersonUpdate, db: Session = Depends(get_db)):
+    p = db.query(Person).get(person_id)
+    if not p:
+        raise HTTPException(404, "Person not found")
+    for k, v in data.model_dump(exclude_unset=True).items():
+        setattr(p, k, v)
     db.commit()
     db.refresh(p)
     return p

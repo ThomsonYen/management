@@ -1,15 +1,16 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useResizableSidebar } from '../hooks/useResizableSidebar'
 import { useHotkeys } from '../SettingsContext'
 import { useHotkey } from '../hooks/useHotkey'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ChevronsLeft, ChevronsRight } from 'lucide-react'
-import { fetchPersons, fetchTodos, fetchReminders, createPerson, createTodo, deletePerson } from '../api'
+import { fetchPersons, fetchTodos, fetchReminders, createPerson, createTodo, deletePerson, updatePerson } from '../api'
 import type { Person, Todo, ScheduleStatus } from '../types'
 import TodoCard from '../components/TodoCard'
 import TodoModal from '../components/TodoModal'
 import BulkActionBar from '../components/BulkActionBar'
+import EditableMarkdown from '../components/EditableMarkdown'
 
 const STATUS_ORDER = ['todo', 'blocked']
 
@@ -72,6 +73,64 @@ function AddPersonModal({ onClose }: { onClose: () => void }) {
           </button>
         </div>
       </div>
+    </div>
+  )
+}
+
+function PersonNotes({ person }: { person: Person }) {
+  const [draft, setDraft] = useState(person.notes || '')
+  const [showRaw, setShowRaw] = useState(false)
+  const draftRef = useRef(draft)
+  draftRef.current = draft
+
+  useEffect(() => {
+    const serverNotes = person.notes || ''
+    if (serverNotes !== draftRef.current) {
+      setDraft(serverNotes)
+    }
+  }, [person.id, person.notes])
+
+  const saveMutation = useMutation({
+    mutationFn: (notes: string) => updatePerson(person.id, { notes: notes || undefined }),
+  })
+
+  const handleChange = useCallback((md: string) => {
+    setDraft(md)
+  }, [])
+
+  const handleSave = useCallback((md: string) => {
+    saveMutation.mutate(md)
+  }, [saveMutation])
+
+  return (
+    <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-5 mb-5">
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Notes</h3>
+        <button
+          onClick={() => setShowRaw(v => !v)}
+          className="text-[10px] font-mono text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+        >
+          {showRaw ? 'Hide raw' : 'Raw'}
+        </button>
+      </div>
+      {draft ? (
+        <EditableMarkdown value={draft} onChange={handleChange} onSave={handleSave} />
+      ) : (
+        <p
+          onClick={() => setDraft(' ')}
+          className="text-sm text-slate-400 dark:text-slate-500 italic cursor-text"
+        >
+          Click to add notes...
+        </p>
+      )}
+      {showRaw && (
+        <textarea
+          value={draft}
+          onChange={(e) => { setDraft(e.target.value); saveMutation.mutate(e.target.value) }}
+          rows={8}
+          className="mt-3 w-full border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-y"
+        />
+      )}
     </div>
   )
 }
@@ -323,6 +382,9 @@ export default function PeoplePage({ onOpenTodo }: { onOpenTodo: (id: number) =>
                 </div>
               </div>
             )}
+
+            {/* Notes */}
+            {selectedPerson && <PersonNotes person={selectedPerson} />}
 
             {/* Schedule alerts for person */}
             {personReminders.length > 0 && (
