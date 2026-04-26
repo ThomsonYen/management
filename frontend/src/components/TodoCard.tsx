@@ -9,6 +9,7 @@ import type { Todo, Person, Project } from '../types'
 import { config } from '../config'
 import { useTimezone } from '../SettingsContext'
 import { isOverdue as checkOverdue, getTodayString } from '../dateUtils'
+import { todoToMarkdown } from '../utils/todoMarkdown'
 
 const IMPORTANCE_OPTIONS = ['low', 'medium', 'high', 'critical']
 
@@ -755,6 +756,22 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
               className="px-3 py-1.5 bg-slate-50 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-medium rounded-lg hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors border border-slate-200 dark:border-slate-600"
             >
               Duplicate
+            </button>
+            <button
+              onClick={async (e) => {
+                e.stopPropagation()
+                const md = todoToMarkdown(todo, allTodos)
+                try {
+                  await navigator.clipboard.writeText(md)
+                  showToast({ message: `Copied "${todo.title}" as markdown`, tone: 'success' })
+                } catch (err) {
+                  showToast({ message: `Copy failed: ${(err as Error).message}`, tone: 'danger' })
+                }
+              }}
+              title="Copy todo as markdown"
+              className="px-3 py-1.5 bg-slate-50 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-medium rounded-lg hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors border border-slate-200 dark:border-slate-600"
+            >
+              Copy md
             </button>
             <button
               onClick={() => deleteMutation.mutate()}

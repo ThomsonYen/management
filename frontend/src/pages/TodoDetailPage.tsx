@@ -23,6 +23,7 @@ import { config } from '../config'
 import { useTimezone, useHotkeys } from '../SettingsContext'
 import { isOverdue as checkOverdue } from '../dateUtils'
 import { useHotkey } from '../hooks/useHotkey'
+import { todoToMarkdown } from '../utils/todoMarkdown'
 
 const importanceBadge = (imp: string) => {
   const map: Record<string, string> = {
@@ -433,6 +434,21 @@ export default function TodoDetailPage() {
                 ✓ Mark done
               </button>
             )}
+            <button
+              onClick={async () => {
+                const md = todoToMarkdown(todo, allTodos)
+                try {
+                  await navigator.clipboard.writeText(md)
+                  showToast({ message: `Copied "${todo.title}" as markdown`, tone: 'success' })
+                } catch (err) {
+                  showToast({ message: `Copy failed: ${(err as Error).message}`, tone: 'danger' })
+                }
+              }}
+              title="Copy todo as markdown"
+              className={`${ACTION_BASE} bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 dark:bg-slate-700 dark:text-slate-300 dark:border-slate-600 dark:hover:bg-slate-600`}
+            >
+              Copy md
+            </button>
             <button
               onClick={() => setShowModal(true)}
               className={`${ACTION_BASE} bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700`}

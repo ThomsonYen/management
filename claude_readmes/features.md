@@ -101,14 +101,29 @@ Embeddings over todos, project notes, meeting notes, and transcripts. A single "
 
 **Why:** No global search exists today. Once memory docs and meeting extracts are in place, semantic retrieval multiplies their value.
 
+## 11. Copy todo as markdown ✅ Implemented
+
+Add a "Copy as markdown" button on every todo so the full record can be pasted into notes, Slack, docs, or another tool in one action.
+
+- Button lives in the TodoCard expanded action row alongside Edit / Duplicate / Delete (slate secondary-button styling, label "Copy md" or icon-only with tooltip to keep the row compact)
+- Also surface on `TodoDetailPage` (full-page view) — same handler, just placed in that page's action bar
+- Markdown payload includes: title (as `##` heading), one-line metadata row (status, importance, project, assignee, deadline, estimated hours, focus flag), blank line, description (verbatim, preserving line breaks), `### Subtasks` checklist using `- [ ]` / `- [x]` ordered by `order`, `### Blocked by` bullet list resolving `blocked_by_ids` against the cached `allTodos` query (skip the section if empty)
+- Skip empty sections cleanly — no "Subtasks" header if there are none, no metadata field if unset
+- Use `navigator.clipboard.writeText()`; on success show a toast (`tone: 'success'`, message `Copied "<title>" as markdown`); on failure show a `tone: 'danger'` toast with the error
+- Pure frontend — no backend changes, no new types, no new endpoints. All required data is already on the `Todo` object the card receives
+- Add a small shared helper `frontend/src/utils/todoMarkdown.ts` exporting `todoToMarkdown(todo, allTodos)` so TodoCard and TodoDetailPage share one formatter
+
+**Why:** Todos are often the unit of communication ("here's what I'm tracking on this") but there's no friction-free way to lift one out of the app. Copying as markdown makes the app a better citizen of the user's broader workflow without coupling to any specific destination.
+
 ## Implementation order
 
 Suggested sequence when picking these up:
 
 1. Inline-edit affordances (small CSS pass across components)
-2. Dashboard "Must Do Today" (reuses existing Focus components)
-3. Daily focus coach + memory document (unlocks the agentic layer)
-4. Per-project and per-person memory docs (give the coach something to cite)
-5. Structured meeting extraction (feeds the memory docs automatically)
-6. Weekly retrospective, natural-language capture, smart triage (quality-of-life on top)
-7. Semantic search (capstone once there's enough structured content to index)
+2. ~~Copy todo as markdown (#11)~~ ✅ Implemented
+3. Dashboard "Must Do Today" (reuses existing Focus components)
+4. Daily focus coach + memory document (unlocks the agentic layer)
+5. Per-project and per-person memory docs (give the coach something to cite)
+6. Structured meeting extraction (feeds the memory docs automatically)
+7. Weekly retrospective, natural-language capture, smart triage (quality-of-life on top)
+8. Semantic search (capstone once there's enough structured content to index)
