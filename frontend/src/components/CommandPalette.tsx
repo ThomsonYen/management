@@ -9,6 +9,7 @@ import {
   FolderKanban,
   Users,
   FileText,
+  NotebookPen,
   Target,
   BarChart3,
   CheckCircle2,
@@ -26,8 +27,8 @@ import {
   fetchTodos,
   fetchProjects,
   fetchPersons,
-  fetchMeetingNotes,
-  searchMeetingNotes,
+  fetchNotes,
+  searchNotes,
 } from '../api'
 import { formatHotkey, useHotkeys, useTheme } from '../SettingsContext'
 
@@ -47,6 +48,7 @@ interface Props {
   onClose: () => void
   onNewTodo: () => void
   onNewMeetingNote: () => void
+  onNewPersonalNote: () => void
 }
 
 const TYPE_LABEL: Record<ItemType, string> = {
@@ -132,7 +134,7 @@ function scoreMatch(query: string, text: string): number {
   return 10
 }
 
-export default function CommandPalette({ onClose, onNewTodo, onNewMeetingNote }: Props) {
+export default function CommandPalette({ onClose, onNewTodo, onNewMeetingNote, onNewPersonalNote }: Props) {
   const navigate = useNavigate()
   const { theme, setTheme } = useTheme()
   const { bindings } = useHotkeys()
@@ -161,11 +163,14 @@ export default function CommandPalette({ onClose, onNewTodo, onNewMeetingNote }:
   const { data: todos = [] } = useQuery({ queryKey: ['todos'], queryFn: () => fetchTodos() })
   const { data: projects = [] } = useQuery({ queryKey: ['projects'], queryFn: fetchProjects })
   const { data: persons = [] } = useQuery({ queryKey: ['persons'], queryFn: fetchPersons })
-  const { data: meetings = [] } = useQuery({ queryKey: ['meeting-notes'], queryFn: () => fetchMeetingNotes() })
+  const { data: meetings = [] } = useQuery({
+    queryKey: ['notes', 'meeting'],
+    queryFn: () => fetchNotes({ kind: 'meeting' }),
+  })
 
   const { data: meetingContentHits = [] } = useQuery({
-    queryKey: ['meeting-notes', 'search', debouncedQuery],
-    queryFn: () => searchMeetingNotes(debouncedQuery),
+    queryKey: ['notes', 'meeting', 'search', debouncedQuery],
+    queryFn: () => searchNotes(debouncedQuery, 'meeting'),
     enabled: debouncedQuery.length >= 2 && (filter === null || filter.spec.type === 'meeting'),
     staleTime: 15_000,
   })
@@ -178,6 +183,7 @@ export default function CommandPalette({ onClose, onNewTodo, onNewMeetingNote }:
       { id: 'a:projects', type: 'action', title: 'Go to Projects', hint: formatHotkey(bindings.goToProjects), icon: FolderKanban, onSelect: () => navigate('/projects') },
       { id: 'a:people', type: 'action', title: 'Go to People', hint: formatHotkey(bindings.goToPeople), icon: Users, onSelect: () => navigate('/people') },
       { id: 'a:meetings', type: 'action', title: 'Go to Meetings', hint: formatHotkey(bindings.goToMeetings), icon: FileText, onSelect: () => navigate('/meeting-notes') },
+      { id: 'a:notes', type: 'action', title: 'Go to Notes', hint: formatHotkey(bindings.goToNotes), icon: NotebookPen, onSelect: () => navigate('/notes') },
       { id: 'a:weekly', type: 'action', title: 'Go to Weekly Goals', icon: Target, onSelect: () => navigate('/weekly-goals') },
       { id: 'a:progress', type: 'action', title: 'Go to Progress', icon: BarChart3, onSelect: () => navigate('/progress') },
       { id: 'a:done', type: 'action', title: 'Go to Recently Done', hint: formatHotkey(bindings.goToDone), icon: CheckCircle2, onSelect: () => navigate('/done') },
@@ -185,6 +191,7 @@ export default function CommandPalette({ onClose, onNewTodo, onNewMeetingNote }:
       { id: 'a:settings', type: 'action', title: 'Go to Settings', icon: SettingsIcon, onSelect: () => navigate('/settings') },
       { id: 'a:new-todo', type: 'action', title: 'New todo', hint: formatHotkey(bindings.newTodo), icon: Plus, onSelect: onNewTodo },
       { id: 'a:new-meeting', type: 'action', title: 'New meeting note', hint: formatHotkey(bindings.newMeetingNote), icon: FileText, onSelect: onNewMeetingNote },
+      { id: 'a:new-note', type: 'action', title: 'New personal note', hint: formatHotkey(bindings.newPersonalNote), icon: NotebookPen, onSelect: onNewPersonalNote },
       {
         id: 'a:theme',
         type: 'action',
@@ -228,8 +235,8 @@ export default function CommandPalette({ onClose, onNewTodo, onNewMeetingNote }:
       id: `m:${m.id}`,
       type: 'meeting',
       title: m.title,
-      subtitle: [m.date, m.attendee_names.join(', '), m.project_names.join(', ')]
-        .filter((s) => s && s.length > 0)
+      subtitle: [m.date ?? '', m.attendee_names.join(', '), m.project_names.join(', ')]
+        .filter((s) => s.length > 0)
         .join(' • ') || undefined,
       icon: FileText,
       onSelect: () => navigate(`/meeting-notes/${m.id}`),
@@ -239,7 +246,7 @@ export default function CommandPalette({ onClose, onNewTodo, onNewMeetingNote }:
     const byId = new Map(all.map((i) => [i.id, i]))
 
     const todoStatusById = new Map(todos.map((t) => [`t:${t.id}`, t.status]))
-    const meetingDateById = new Map(meetings.map((m) => [`m:${m.id}`, m.date]))
+    const meetingDateById = new Map(meetings.map((m) => [`m:${m.id}`, m.date ?? undefined]))
 
     const matchesFilter = (item: Item): boolean => {
       if (!filter) return true
@@ -321,7 +328,7 @@ export default function CommandPalette({ onClose, onNewTodo, onNewMeetingNote }:
       .map((x) => x.item)
 
     return scored
-  }, [todos, projects, persons, meetings, meetingContentHits, recentIds, query, filter, navigate, onNewTodo, onNewMeetingNote, theme, setTheme, bindings])
+  }, [todos, projects, persons, meetings, meetingContentHits, recentIds, query, filter, navigate, onNewTodo, onNewMeetingNote, onNewPersonalNote, theme, setTheme, bindings])
 
   useEffect(() => {
     if (selected >= items.length) setSelected(0)

@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useRef, useCallback, useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { uploadAudio } from './api'
+import { uploadNoteAudio } from './api'
 
 export type RecordingMode = 'mic' | 'mic+system'
 
@@ -66,8 +66,8 @@ export function RecordingProvider({ children }: { children: React.ReactNode }) {
       if (blob.size === 0) return
       setState((s) => ({ ...s, isUploading: true }))
       try {
-        await uploadAudio(targetNoteId, blob)
-        queryClient.invalidateQueries({ queryKey: ['meeting-note', targetNoteId] })
+        await uploadNoteAudio(targetNoteId, blob)
+        queryClient.invalidateQueries({ queryKey: ['note', targetNoteId] })
       } catch (err) {
         console.error('Failed to upload recording:', err)
         setState((s) => ({
@@ -261,7 +261,7 @@ export function RecordingProvider({ children }: { children: React.ReactNode }) {
       if (blob.size > 0) {
         const formData = new FormData()
         formData.append('file', blob, 'recording.webm')
-        navigator.sendBeacon(`/api/meeting-notes/${noteIdRef.current}/audio`, formData)
+        navigator.sendBeacon(`/api/notes/${noteIdRef.current}/audio`, formData)
       }
 
       chunksRef.current = []

@@ -32,11 +32,13 @@ from sqlalchemy import (
     Table,
     Text,
     create_engine,
+    func,
     inspect,
     nullslast,
+    or_,
     text,
 )
-from sqlalchemy.orm import DeclarativeBase, Session, relationship, sessionmaker
+from sqlalchemy.orm import DeclarativeBase, Session, joinedload, relationship, sessionmaker
 
 PROJECT_CONFIG_PATH = Path(__file__).parent.parent / "project_config.yaml"
 with open(PROJECT_CONFIG_PATH, encoding="utf-8") as _f:
@@ -106,10 +108,12 @@ MEETING_NOTES_DIR = Path(__file__).parent / "meeting_notes"
 MEETING_TEMPLATES_DIR = Path(__file__).parent / "meeting_templates"
 MEETING_AUDIO_DIR = Path(__file__).parent / "meeting_audio"
 MEETING_TRANSCRIPTS_DIR = Path(__file__).parent / "meeting_transcripts"
+NOTES_DIR = Path(__file__).parent / "notes"
 MEETING_NOTES_DIR.mkdir(exist_ok=True)
 MEETING_TEMPLATES_DIR.mkdir(exist_ok=True)
 MEETING_AUDIO_DIR.mkdir(exist_ok=True)
 MEETING_TRANSCRIPTS_DIR.mkdir(exist_ok=True)
+NOTES_DIR.mkdir(exist_ok=True)
 
 DATABASE_URL = "sqlite:///./management.db"
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
@@ -260,6 +264,88 @@ class MeetingNote(Base):
     todos = relationship("Todo", secondary=meeting_note_todos)
 
 
+note_tags = Table(
+    "note_tags",
+    Base.metadata,
+    Column("note_id", Integer, ForeignKey("notes.id"), primary_key=True),
+    Column("tag_id", Integer, ForeignKey("tags.id"), primary_key=True),
+)
+
+
+# Associations on Note (any note can carry these, kind='meeting' just makes them
+# visible by default in the UI).
+note_attendees = Table(
+    "note_attendees",
+    Base.metadata,
+    Column("note_id", Integer, ForeignKey("notes.id"), primary_key=True),
+    Column("person_id", Integer, ForeignKey("persons.id"), primary_key=True),
+)
+
+note_projects = Table(
+    "note_projects",
+    Base.metadata,
+    Column("note_id", Integer, ForeignKey("notes.id"), primary_key=True),
+    Column("project_id", Integer, ForeignKey("projects.id"), primary_key=True),
+)
+
+note_todos = Table(
+    "note_todos",
+    Base.metadata,
+    Column("note_id", Integer, ForeignKey("notes.id"), primary_key=True),
+    Column("todo_id", Integer, ForeignKey("todos.id"), primary_key=True),
+)
+
+
+class Vault(Base):
+    __tablename__ = "vaults"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False, unique=True)
+    root_path = Column(String, nullable=False)
+    is_managed = Column(Boolean, default=False)
+    created_at = Column(String, default=lambda: datetime.now(timezone.utc).isoformat())
+    last_scan_at = Column(String, nullable=True)
+
+
+class Note(Base):
+    __tablename__ = "notes"
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String, nullable=False)
+    # filename is legacy (preserved for back-compat); relative_path is authoritative under Phase 4
+    filename = Column(String, nullable=True)
+    vault_id = Column(Integer, ForeignKey("vaults.id"), nullable=True, index=True)
+    relative_path = Column(String, nullable=True)
+    mgmt_id = Column(String, unique=True, nullable=True, index=True)
+    mtime = Column(Float, nullable=True)
+    size = Column(Integer, nullable=True)
+    last_indexed_at = Column(String, nullable=True)
+    kind = Column(String, nullable=False, default="personal", index=True)
+    created_at = Column(String, default=lambda: datetime.now(timezone.utc).isoformat())
+    updated_at = Column(String, default=lambda: datetime.now(timezone.utc).isoformat())
+    hidden = Column(Boolean, default=False)
+    tags = relationship("Tag", secondary=note_tags, backref="notes")
+    attendees = relationship("Person", secondary=note_attendees)
+    projects = relationship("Project", secondary=note_projects)
+    todos = relationship("Todo", secondary=note_todos)
+    meeting_details = relationship(
+        "MeetingDetails", uselist=False, back_populates="note", cascade="all, delete-orphan"
+    )
+    vault = relationship("Vault")
+
+
+class MeetingDetails(Base):
+    __tablename__ = "meeting_details"
+    note_id = Column(Integer, ForeignKey("notes.id"), primary_key=True)
+    date = Column(String, nullable=False)  # YYYY-MM-DD
+    note = relationship("Note", back_populates="meeting_details")
+
+
+class Tag(Base):
+    __tablename__ = "tags"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False, unique=True, index=True)
+    created_at = Column(String, default=lambda: datetime.now(timezone.utc).isoformat())
+
+
 Base.metadata.create_all(bind=engine)
 
 # Migrate: add section column to must_do_items if missing
@@ -277,6 +363,23 @@ with engine.connect() as _conn:
     _person_cols = [c["name"] for c in _insp.get_columns("persons")]
     if "notes" not in _person_cols:
         _conn.execute(text("ALTER TABLE persons ADD COLUMN notes TEXT"))
+        _conn.commit()
+    # Phase 4: vault metadata on notes
+    _note_cols = [c["name"] for c in _insp.get_columns("notes")]
+    for _col, _ddl in (
+        ("vault_id", "ALTER TABLE notes ADD COLUMN vault_id INTEGER REFERENCES vaults(id)"),
+        ("relative_path", "ALTER TABLE notes ADD COLUMN relative_path TEXT"),
+        ("mgmt_id", "ALTER TABLE notes ADD COLUMN mgmt_id TEXT"),
+        ("mtime", "ALTER TABLE notes ADD COLUMN mtime REAL"),
+        ("size", "ALTER TABLE notes ADD COLUMN size INTEGER"),
+        ("last_indexed_at", "ALTER TABLE notes ADD COLUMN last_indexed_at TEXT"),
+    ):
+        if _col not in _note_cols:
+            _conn.execute(text(_ddl))
+            _conn.commit()
+    if "mgmt_id" not in _note_cols:
+        _conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_notes_mgmt_id ON notes(mgmt_id)"))
+        _conn.execute(text("CREATE INDEX IF NOT EXISTS ix_notes_vault_id ON notes(vault_id)"))
         _conn.commit()
 
 
@@ -486,40 +589,44 @@ class PersonProgress(BaseModel):
     total_hours: float
 
 
-class MeetingNoteCreate(BaseModel):
-    title: str
-    date: str
-    content: str = ""
-    attendee_ids: List[int] = []
-    project_ids: List[int] = []
-    todo_ids: List[int] = []
-    template: Optional[str] = None
-
-
-class MeetingNoteUpdate(BaseModel):
-    title: Optional[str] = None
-    date: Optional[str] = None
-    content: Optional[str] = None
-    attendee_ids: Optional[List[int]] = None
-    project_ids: Optional[List[int]] = None
-    todo_ids: Optional[List[int]] = None
-    transcript: Optional[str] = None
-
 
 class AudioFileInfo(BaseModel):
     filename: str
     size_bytes: int
     created_at: str
 
+class NoteCreate(BaseModel):
+    title: str
+    content: str = ""
+    kind: str = "personal"
+    date: Optional[str] = None  # required when kind='meeting'
+    attendee_ids: List[int] = []
+    project_ids: List[int] = []
+    todo_ids: List[int] = []
+    template: Optional[str] = None
+    vault_id: Optional[int] = None  # defaults to managed vault
 
-class MeetingNoteOut(BaseModel):
+
+class NoteUpdate(BaseModel):
+    title: Optional[str] = None
+    content: Optional[str] = None
+    date: Optional[str] = None
+    attendee_ids: Optional[List[int]] = None
+    project_ids: Optional[List[int]] = None
+    todo_ids: Optional[List[int]] = None
+    transcript: Optional[str] = None
+
+
+class NoteOut(BaseModel):
     id: int
     title: str
-    date: str
-    filename: str
+    filename: Optional[str] = None
+    kind: str
     content: str
     created_at: str
     updated_at: str
+    tags: List[str] = []
+    date: Optional[str] = None
     attendee_ids: List[int] = []
     attendee_names: List[str] = []
     project_ids: List[int] = []
@@ -528,31 +635,54 @@ class MeetingNoteOut(BaseModel):
     todo_titles: List[str] = []
     transcript: Optional[str] = None
     audio_files: List[AudioFileInfo] = []
+    vault_id: Optional[int] = None
+    vault_name: Optional[str] = None
+    vault_root_path: Optional[str] = None
+    relative_path: Optional[str] = None
     model_config = {"from_attributes": True}
 
 
-class MeetingNoteSummary(BaseModel):
+class NoteSummary(BaseModel):
     id: int
     title: str
-    date: str
+    kind: str
     created_at: str
     updated_at: str
+    tags: List[str] = []
+    date: Optional[str] = None
     attendee_names: List[str] = []
     project_names: List[str] = []
     todo_count: int = 0
     model_config = {"from_attributes": True}
 
 
-class MeetingTemplateOut(BaseModel):
-    name: str
-    content: str
-
-
-class MeetingNoteSearchResult(BaseModel):
+class NoteSearchResult(BaseModel):
     id: int
     title: str
-    date: str
+    kind: str
     snippet: str
+    date: Optional[str] = None
+
+
+class TagOut(BaseModel):
+    name: str
+    note_count: int
+
+
+class VaultCreate(BaseModel):
+    name: str
+    root_path: str
+
+
+class VaultOut(BaseModel):
+    id: int
+    name: str
+    root_path: str
+    is_managed: bool
+    created_at: str
+    last_scan_at: Optional[str] = None
+    note_count: int = 0
+    model_config = {"from_attributes": True}
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -596,18 +726,6 @@ def project_to_tree(p: Project) -> ProjectTreeOut:
     )
 
 
-def _read_note_content(filename: str) -> str:
-    path = MEETING_NOTES_DIR / filename
-    if path.exists():
-        return path.read_text(encoding="utf-8")
-    return ""
-
-
-def _write_note_content(filename: str, content: str) -> None:
-    path = MEETING_NOTES_DIR / filename
-    path.write_text(content, encoding="utf-8")
-
-
 def _read_transcript(note_id: int) -> Optional[str]:
     path = MEETING_TRANSCRIPTS_DIR / f"{note_id}.txt"
     if path.exists():
@@ -640,33 +758,214 @@ def _list_audio_files(note_id: int) -> List[AudioFileInfo]:
     return files
 
 
-def meeting_note_to_out(n: MeetingNote) -> MeetingNoteOut:
-    return MeetingNoteOut(
+# ─── Frontmatter helpers (Phase 4) ─────────────────────────────────────────
+#
+# Notes carry YAML frontmatter when they live in a vault. The app reserves the
+# `mgmt_*` key prefix (currently mgmt_id, mgmt_status, mgmt_trashed_at) and
+# never touches user-authored keys.
+
+
+def _parse_frontmatter(content: str) -> tuple[dict, str]:
+    """Return (frontmatter_dict, body). Empty dict if no/invalid frontmatter."""
+    if not content.startswith("---"):
+        return {}, content
+    lines = content.split("\n")
+    if lines[0].strip() != "---":
+        return {}, content
+    end_idx = None
+    for i in range(1, len(lines)):
+        if lines[i].strip() == "---":
+            end_idx = i
+            break
+    if end_idx is None:
+        return {}, content
+    try:
+        fm = yaml.safe_load("\n".join(lines[1:end_idx]))
+    except yaml.YAMLError:
+        return {}, content
+    if not isinstance(fm, dict):
+        return {}, content
+    body = "\n".join(lines[end_idx + 1:])
+    return fm, body
+
+
+def _serialize_with_frontmatter(fm: dict, body: str) -> str:
+    if not fm:
+        return body
+    yaml_text = yaml.safe_dump(fm, sort_keys=False, allow_unicode=True)
+    if not yaml_text.endswith("\n"):
+        yaml_text += "\n"
+    return f"---\n{yaml_text}---\n{body}"
+
+
+def _note_path(note: "Note") -> Path:
+    """Resolve absolute disk path for a Note via its vault + relative_path."""
+    if note.vault is None or not note.relative_path:
+        # Legacy fallback: pre-Phase-4 notes live in NOTES_DIR keyed by filename.
+        return NOTES_DIR / (note.filename or "")
+    return Path(note.vault.root_path) / note.relative_path
+
+
+def _read_note_body(note: "Note") -> str:
+    """Return note body (stripping frontmatter). Empty if file missing."""
+    path = _note_path(note)
+    if not path.exists():
+        return ""
+    content = path.read_text(encoding="utf-8")
+    _, body = _parse_frontmatter(content)
+    return body
+
+
+def _write_note_body(note: "Note", body: str) -> None:
+    """Replace body of the note's file, preserving its frontmatter on disk."""
+    path = _note_path(note)
+    fm: dict = {}
+    if path.exists():
+        existing = path.read_text(encoding="utf-8")
+        fm, _ = _parse_frontmatter(existing)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(_serialize_with_frontmatter(fm, body), encoding="utf-8")
+
+
+def _slugify_title_for_filename(title: str, max_len: int = 100) -> str:
+    """Convert a note title to a safe filename stem (no `.md`, no path separators).
+
+    Strips control chars, path separators, and chars that are illegal on common
+    filesystems (Windows + macOS). Collapses whitespace runs. Returns "" if the
+    input has nothing usable.
+    """
+    if not title:
+        return ""
+    t = _re.sub(r"[\\/:\*\?\"<>\|\x00-\x1f]", " ", title)
+    t = _re.sub(r"\s+", " ", t).strip()
+    t = t.lstrip(".").strip()
+    return t[:max_len].rstrip()
+
+
+def _resolve_unique_filename(
+    vault_root: Path,
+    directory: str,
+    stem: str,
+    current_rel_path: Optional[str],
+) -> str:
+    """Return a vault-relative path of the form `<directory>/<stem>.md` or
+    `<directory>/<stem>_N.md` that does not collide with an existing file.
+
+    The current note's own path is considered free, so renaming to the same
+    name is a no-op rather than appending `_1`.
+    """
+    def candidate(suffix: str) -> str:
+        name = f"{stem}{suffix}.md"
+        return str(Path(directory) / name) if directory else name
+
+    def is_free(rel: str) -> bool:
+        if current_rel_path and str(Path(rel)) == str(Path(current_rel_path)):
+            return True
+        return not (vault_root / rel).exists()
+
+    if is_free(candidate("")):
+        return candidate("")
+    for i in range(1, 10000):
+        c = candidate(f"_{i}")
+        if is_free(c):
+            return c
+    raise RuntimeError(f"Could not find a free filename for {stem!r}")
+
+
+def _update_note_frontmatter(note: "Note", patch: dict, remove_keys: Optional[set] = None) -> None:
+    """Patch frontmatter keys on disk. `patch` upserts, `remove_keys` clears."""
+    path = _note_path(note)
+    fm: dict = {}
+    body = ""
+    if path.exists():
+        content = path.read_text(encoding="utf-8")
+        fm, body = _parse_frontmatter(content)
+    if remove_keys:
+        for k in remove_keys:
+            fm.pop(k, None)
+    fm.update(patch)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(_serialize_with_frontmatter(fm, body), encoding="utf-8")
+
+
+import re as _re
+
+_TAG_REGEX = _re.compile(
+    r"(?<![A-Za-z0-9_/])#([A-Za-z][A-Za-z0-9_]*(?:/[A-Za-z][A-Za-z0-9_]*)*)\b"
+)
+
+
+def _strip_for_tag_extraction(body: str) -> str:
+    body = _re.sub(r"```.*?```", " ", body, flags=_re.DOTALL)
+    body = _re.sub(r"`[^`\n]+`", " ", body)
+    body = _re.sub(r"<!--.*?-->", " ", body, flags=_re.DOTALL)
+    body = _re.sub(r"\b(?:https?|ftp|mailto):[^\s<>\"'`]+", " ", body)
+    return body
+
+
+def extract_tags(body: str) -> set:
+    """Return the set of lowercased tag names found in the markdown body."""
+    if not body:
+        return set()
+    stripped = _strip_for_tag_extraction(body)
+    return {m.group(1).lower() for m in _TAG_REGEX.finditer(stripped)}
+
+
+def sync_tags_for_note(db: Session, note: Note, body: str) -> None:
+    """Reconcile note.tags with the tags found in the body. Idempotent."""
+    extracted = extract_tags(body)
+    if not extracted:
+        note.tags = []
+        return
+    existing = {t.name: t for t in db.query(Tag).filter(Tag.name.in_(extracted)).all()}
+    next_tags = []
+    for name in extracted:
+        t = existing.get(name)
+        if t is None:
+            t = Tag(name=name)
+            db.add(t)
+        next_tags.append(t)
+    note.tags = next_tags
+
+
+def note_to_out(n: Note) -> NoteOut:
+    md = n.meeting_details
+    is_meeting = n.kind == "meeting" or md is not None
+    return NoteOut(
         id=n.id,
         title=n.title,
-        date=n.date,
         filename=n.filename,
-        content=_read_note_content(n.filename),
+        kind=n.kind,
+        content=_read_note_body(n),
         created_at=n.created_at,
         updated_at=n.updated_at,
+        tags=sorted(t.name for t in n.tags),
+        date=md.date if md else None,
         attendee_ids=[p.id for p in n.attendees],
         attendee_names=[p.name for p in n.attendees],
         project_ids=[p.id for p in n.projects],
         project_names=[p.name for p in n.projects],
         todo_ids=[t.id for t in n.todos],
         todo_titles=[t.title for t in n.todos],
-        transcript=_read_transcript(n.id),
-        audio_files=_list_audio_files(n.id),
+        transcript=_read_transcript(n.id) if is_meeting else None,
+        audio_files=_list_audio_files(n.id) if is_meeting else [],
+        vault_id=n.vault_id,
+        vault_name=n.vault.name if n.vault else None,
+        vault_root_path=n.vault.root_path if n.vault else None,
+        relative_path=n.relative_path,
     )
 
 
-def meeting_note_to_summary(n: MeetingNote) -> MeetingNoteSummary:
-    return MeetingNoteSummary(
+def note_to_summary(n: Note) -> NoteSummary:
+    md = n.meeting_details
+    return NoteSummary(
         id=n.id,
         title=n.title,
-        date=n.date,
+        kind=n.kind,
         created_at=n.created_at,
         updated_at=n.updated_at,
+        tags=sorted(t.name for t in n.tags),
+        date=md.date if md else None,
         attendee_names=[p.name for p in n.attendees],
         project_names=[p.name for p in n.projects],
         todo_count=len(n.todos),
@@ -678,6 +977,265 @@ def meeting_note_to_summary(n: MeetingNote) -> MeetingNoteSummary:
 log = logging.getLogger("management")
 
 
+def _migrate_meeting_notes_to_unified_notes(db: Session) -> None:
+    """One-time migration: meeting_notes rows → notes + meeting_details + associations.
+
+    Idempotent: bails early if any meeting-kind note already exists.
+    Robust to id conflicts: if a notes.id is already taken, the meeting note
+    gets a fresh id and its sidecar dirs (audio + transcript) are renamed to match.
+    Leaves the old meeting_notes table intact as a backup (per Phase 3 plan).
+    """
+    if db.query(Note).filter(Note.kind == "meeting").first() is not None:
+        return  # already migrated
+
+    legacy = db.query(MeetingNote).all()
+    if not legacy:
+        return  # nothing to migrate
+
+    existing_ids = {nid for (nid,) in db.query(Note.id).all()}
+    next_free = max(existing_ids, default=0) + 1
+
+    for mn in legacy:
+        target_id = mn.id
+        if target_id in existing_ids:
+            target_id = next_free
+            next_free += 1
+        existing_ids.add(target_id)
+
+        # Copy the markdown file from meeting_notes/ → notes/. Filename preserved.
+        src_md = MEETING_NOTES_DIR / mn.filename
+        dst_md = NOTES_DIR / mn.filename
+        body = ""
+        if src_md.exists():
+            body = src_md.read_text(encoding="utf-8")
+            if not dst_md.exists():
+                shutil.copy2(src_md, dst_md)
+
+        # Sidecars (audio + transcript) are keyed by note id. If we remap, copy.
+        if target_id != mn.id:
+            old_audio = MEETING_AUDIO_DIR / str(mn.id)
+            new_audio = MEETING_AUDIO_DIR / str(target_id)
+            if old_audio.exists() and not new_audio.exists():
+                shutil.copytree(old_audio, new_audio)
+            old_tx = MEETING_TRANSCRIPTS_DIR / f"{mn.id}.txt"
+            new_tx = MEETING_TRANSCRIPTS_DIR / f"{target_id}.txt"
+            if old_tx.exists() and not new_tx.exists():
+                shutil.copy2(old_tx, new_tx)
+
+        n = Note(
+            id=target_id,
+            title=mn.title,
+            filename=mn.filename,
+            kind="meeting",
+            created_at=mn.created_at,
+            updated_at=mn.updated_at,
+            hidden=mn.hidden,
+        )
+        db.add(n)
+        db.flush()
+
+        db.add(MeetingDetails(note_id=target_id, date=mn.date))
+
+        # Re-point associations
+        if mn.attendees:
+            n.attendees = list(mn.attendees)
+        if mn.projects:
+            n.projects = list(mn.projects)
+        if mn.todos:
+            n.todos = list(mn.todos)
+
+        # Index tags from the body
+        sync_tags_for_note(db, n, body)
+
+    db.commit()
+    log.info("Migrated %d meeting notes onto the unified Note model", len(legacy))
+
+
+MANAGED_VAULT_NAME = "default"
+
+
+def _get_or_create_managed_vault(db: Session) -> Vault:
+    v = db.query(Vault).filter(Vault.is_managed == True).first()
+    if v is not None:
+        return v
+    v = Vault(
+        name=MANAGED_VAULT_NAME,
+        root_path=str(NOTES_DIR.resolve()),
+        is_managed=True,
+    )
+    db.add(v)
+    db.commit()
+    db.refresh(v)
+    log.info("Created managed vault id=%d at %s", v.id, v.root_path)
+    return v
+
+
+def _backfill_vault_metadata(db: Session, managed: Vault) -> None:
+    """For every Note lacking vault_id / mgmt_id, populate them and stamp frontmatter.
+
+    Idempotent: only touches notes missing vault_id (the Phase 4 marker).
+    Also propagates the DB `hidden` flag into frontmatter `mgmt_status: trashed`
+    so external tools (Obsidian) can see/restore the soft-deleted state.
+    """
+    notes = db.query(Note).filter(Note.vault_id.is_(None)).all()
+    if not notes:
+        return
+
+    for n in notes:
+        n.vault_id = managed.id
+        n.relative_path = n.filename  # managed-vault notes live at root, filename == rel path
+
+        # Read existing on-disk content (no frontmatter yet for legacy notes)
+        path = NOTES_DIR / n.filename
+        existing_content = path.read_text(encoding="utf-8") if path.exists() else ""
+        fm, body = _parse_frontmatter(existing_content)
+
+        # Stamp mgmt_id if missing
+        if "mgmt_id" not in fm:
+            fm["mgmt_id"] = str(uuid.uuid4())
+        n.mgmt_id = fm["mgmt_id"]
+
+        # Mirror DB.hidden → frontmatter
+        if n.hidden:
+            fm["mgmt_status"] = "trashed"
+            fm.setdefault("mgmt_trashed_at", datetime.now(timezone.utc).isoformat())
+        else:
+            fm.pop("mgmt_status", None)
+            fm.pop("mgmt_trashed_at", None)
+
+        # Write back (path may be brand-new for stale rows whose file was purged)
+        if path.exists() or body:
+            path.write_text(_serialize_with_frontmatter(fm, body), encoding="utf-8")
+            stat = path.stat()
+            n.mtime = stat.st_mtime
+            n.size = stat.st_size
+        n.last_indexed_at = datetime.now(timezone.utc).isoformat()
+
+    db.commit()
+    log.info("Backfilled vault metadata + mgmt_id for %d notes", len(notes))
+
+
+# ─── Vault scanner ─────────────────────────────────────────────────────────
+
+
+RESCAN_THROTTLE_SECONDS = int(
+    (PROJECT_CONFIG.get("vaults") or {}).get("rescan_throttle_seconds", 30)
+)
+
+VAULT_SKIP_DIRS = {".obsidian", ".git", ".trash", "node_modules"}
+
+
+def _scan_vault(db: Session, vault: Vault) -> dict:
+    """Walk vault root, sync DB with disk. Returns a small stats dict."""
+    root = Path(vault.root_path)
+    if not root.exists() or not root.is_dir():
+        return {"error": f"vault root not accessible: {vault.root_path}"}
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    # Map existing rows for this vault by mgmt_id
+    existing = {
+        n.mgmt_id: n
+        for n in db.query(Note).filter(Note.vault_id == vault.id).all()
+        if n.mgmt_id
+    }
+    seen: set = set()
+    stats = {"created": 0, "updated": 0, "moved": 0, "trashed_changed": 0, "missing": 0}
+
+    for path in sorted(root.rglob("*.md")):
+        rel = path.relative_to(root)
+        # Skip if any parent segment is a dot/Obsidian/system dir
+        if any(part.startswith(".") or part in VAULT_SKIP_DIRS for part in rel.parts[:-1]):
+            continue
+        if rel.name.startswith("."):
+            continue
+
+        rel_str = str(rel)
+        st = path.stat()
+        content = path.read_text(encoding="utf-8")
+        fm, body = _parse_frontmatter(content)
+        mgmt_id = fm.get("mgmt_id")
+        trashed = fm.get("mgmt_status") == "trashed"
+
+        # Stamp mgmt_id on first encounter
+        if not mgmt_id:
+            mgmt_id = str(uuid.uuid4())
+            fm["mgmt_id"] = mgmt_id
+            path.write_text(_serialize_with_frontmatter(fm, body), encoding="utf-8")
+            st = path.stat()  # refresh after write
+
+        n = existing.get(mgmt_id)
+        if n is None:
+            n = Note(
+                title=path.stem,
+                filename=path.name,
+                vault_id=vault.id,
+                relative_path=rel_str,
+                mgmt_id=mgmt_id,
+                mtime=st.st_mtime,
+                size=st.st_size,
+                last_indexed_at=now_iso,
+                kind="personal",
+                hidden=trashed,
+            )
+            db.add(n)
+            db.flush()
+            sync_tags_for_note(db, n, body)
+            stats["created"] += 1
+        else:
+            if n.relative_path != rel_str:
+                n.relative_path = rel_str
+                n.filename = path.name
+                stats["moved"] += 1
+            if n.mtime != st.st_mtime or n.size != st.st_size:
+                n.mtime = st.st_mtime
+                n.size = st.st_size
+                sync_tags_for_note(db, n, body)
+                n.updated_at = now_iso
+                stats["updated"] += 1
+            if n.hidden != trashed:
+                n.hidden = trashed
+                stats["trashed_changed"] += 1
+            n.last_indexed_at = now_iso
+
+        seen.add(mgmt_id)
+
+    # Rows in DB but not on disk → mark hidden so they vanish from the active list.
+    for mid, n in existing.items():
+        if mid in seen:
+            continue
+        if not n.hidden:
+            n.hidden = True
+            stats["missing"] += 1
+
+    vault.last_scan_at = now_iso
+    db.commit()
+    return stats
+
+
+def _scan_vault_if_stale(db: Session, vault: Vault) -> None:
+    """Run a scan only if the last scan was older than RESCAN_THROTTLE_SECONDS."""
+    if not vault.last_scan_at:
+        _scan_vault(db, vault)
+        return
+    try:
+        last = datetime.fromisoformat(vault.last_scan_at)
+    except ValueError:
+        _scan_vault(db, vault)
+        return
+    age = (datetime.now(timezone.utc) - last).total_seconds()
+    if age >= RESCAN_THROTTLE_SECONDS:
+        _scan_vault(db, vault)
+
+
+def _scan_all_vaults_if_stale(db: Session) -> None:
+    for v in db.query(Vault).all():
+        try:
+            _scan_vault_if_stale(db, v)
+        except Exception:
+            log.exception("scan failed for vault id=%s", v.id)
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     with SessionLocal() as db:
@@ -685,6 +1243,15 @@ async def lifespan(_app: FastAPI):
             {Todo.status: "todo"}, synchronize_session=False
         )
         db.commit()
+        _migrate_meeting_notes_to_unified_notes(db)
+        managed_vault = _get_or_create_managed_vault(db)
+        _backfill_vault_metadata(db, managed_vault)
+        # Full scan of every vault on startup; picks up out-of-band edits.
+        for v in db.query(Vault).all():
+            try:
+                _scan_vault(db, v)
+            except Exception:
+                log.exception("startup scan failed for vault id=%s", v.id)
     task = asyncio.create_task(backup_loop(get_user_timezone))
     try:
         yield
@@ -1269,185 +1836,423 @@ def schedule_reminders(db: Session = Depends(get_db)):
     return results
 
 
-# ─── Meeting Notes ──────────────────────────────────────────────────────────
+
+# ─── Vaults (Phase 4) ──────────────────────────────────────────────────────
 
 
-@app.get("/meeting-notes/search", response_model=List[MeetingNoteSearchResult])
-def search_meeting_notes(
-    q: str = Query(..., min_length=1), db: Session = Depends(get_db)
-):
-    q_lower = q.lower()
-    results = []
-    notes = (
-        db.query(MeetingNote)
-        .filter(MeetingNote.hidden == False)
-        .order_by(MeetingNote.date.desc())
-        .all()
+def _vault_to_out(v: Vault, db: Session) -> VaultOut:
+    count = db.query(Note).filter(Note.vault_id == v.id, Note.hidden == False).count()
+    return VaultOut(
+        id=v.id,
+        name=v.name,
+        root_path=v.root_path,
+        is_managed=v.is_managed,
+        created_at=v.created_at,
+        last_scan_at=v.last_scan_at,
+        note_count=count,
     )
+
+
+@app.get("/vaults", response_model=List[VaultOut])
+def list_vaults(db: Session = Depends(get_db)):
+    return [_vault_to_out(v, db) for v in db.query(Vault).order_by(Vault.is_managed.desc(), Vault.name).all()]
+
+
+@app.post("/vaults", response_model=VaultOut)
+def create_vault(data: VaultCreate, db: Session = Depends(get_db)):
+    name = data.name.strip()
+    if not name:
+        raise HTTPException(400, "Vault name is required")
+    path = Path(data.root_path).expanduser().resolve()
+    if not path.exists() or not path.is_dir():
+        raise HTTPException(400, f"Path does not exist or is not a directory: {path}")
+    if db.query(Vault).filter(Vault.name == name).first():
+        raise HTTPException(400, f"Vault name '{name}' already exists")
+    if db.query(Vault).filter(Vault.root_path == str(path)).first():
+        raise HTTPException(400, f"A vault already points at {path}")
+    v = Vault(name=name, root_path=str(path), is_managed=False)
+    db.add(v)
+    db.commit()
+    db.refresh(v)
+    _scan_vault(db, v)
+    return _vault_to_out(v, db)
+
+
+@app.delete("/vaults/{vault_id}")
+def delete_vault(vault_id: int, db: Session = Depends(get_db)):
+    v = db.query(Vault).get(vault_id)
+    if not v:
+        raise HTTPException(404, "Vault not found")
+    if v.is_managed:
+        raise HTTPException(400, "Cannot delete the managed vault")
+    # Drop the index rows; files on disk are not touched.
+    db.query(Note).filter(Note.vault_id == v.id).delete(synchronize_session=False)
+    db.delete(v)
+    db.commit()
+    return {"ok": True}
+
+
+@app.post("/vaults/{vault_id}/rescan", response_model=VaultOut)
+def rescan_vault(vault_id: int, db: Session = Depends(get_db)):
+    v = db.query(Vault).get(vault_id)
+    if not v:
+        raise HTTPException(404, "Vault not found")
+    stats = _scan_vault(db, v)
+    db.refresh(v)
+    out = _vault_to_out(v, db)
+    log.info("Manual rescan vault id=%d stats=%s", vault_id, stats)
+    return out
+
+
+# ─── Notes (unified personal + meeting note model) ──────────────────────────
+
+
+def _search_notes(db: Session, q: str, kind: Optional[str], hidden: bool) -> List[NoteSearchResult]:
+    q_lower = q.lower()
+    query = (
+        db.query(Note)
+        .options(joinedload(Note.meeting_details))
+        .filter(Note.hidden == hidden)
+    )
+    if kind is not None:
+        query = query.filter(Note.kind == kind)
+    notes = query.order_by(Note.updated_at.desc()).all()
+    results: List[NoteSearchResult] = []
     for n in notes:
-        content = _read_note_content(n.filename)
-        lines = content.splitlines()
-        for i, line in enumerate(lines):
+        date = n.meeting_details.date if n.meeting_details else None
+        content = _read_note_body(n)
+        matched = False
+        for i, line in enumerate(content.splitlines()):
             if q_lower in line.lower():
+                lines = content.splitlines()
                 start = max(0, i - 1)
                 end = min(len(lines), i + 2)
                 snippet = "\n".join(lines[start:end])
-                results.append(
-                    MeetingNoteSearchResult(
-                        id=n.id, title=n.title, date=n.date, snippet=snippet
-                    )
-                )
-                break  # one match per note
-        # also match title
-        if q_lower in n.title.lower() and not any(r.id == n.id for r in results):
-            results.append(
-                MeetingNoteSearchResult(id=n.id, title=n.title, date=n.date, snippet="")
-            )
+                results.append(NoteSearchResult(id=n.id, title=n.title, kind=n.kind, snippet=snippet, date=date))
+                matched = True
+                break
+        if not matched and q_lower in n.title.lower():
+            results.append(NoteSearchResult(id=n.id, title=n.title, kind=n.kind, snippet="", date=date))
     return results
 
 
-@app.get("/meeting-notes", response_model=List[MeetingNoteSummary])
-def list_meeting_notes(
+@app.get("/notes/search", response_model=List[NoteSearchResult])
+def search_notes(
+    q: str = Query(..., min_length=1),
+    kind: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    return _search_notes(db, q, kind, hidden=False)
+
+
+@app.get("/notes-hidden", response_model=List[NoteSummary])
+def list_hidden_notes(
+    kind: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    _scan_all_vaults_if_stale(db)
+    q = db.query(Note).options(joinedload(Note.tags)).filter(Note.hidden == True)
+    if kind is not None:
+        q = q.filter(Note.kind == kind)
+    return [note_to_summary(n) for n in q.order_by(Note.updated_at.desc()).all()]
+
+
+@app.get("/notes-hidden/search", response_model=List[NoteSearchResult])
+def search_hidden_notes(
+    q: str = Query(..., min_length=1),
+    kind: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    return _search_notes(db, q, kind, hidden=True)
+
+
+@app.get("/notes", response_model=List[NoteSummary])
+def list_notes(
+    kind: Optional[str] = Query(None),
+    tag: Optional[str] = Query(None),
     person_id: Optional[int] = Query(None),
     project_id: Optional[int] = Query(None),
     todo_id: Optional[int] = Query(None),
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
+    vault_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
 ):
-    q = db.query(MeetingNote).filter(MeetingNote.hidden == False)
+    _scan_all_vaults_if_stale(db)
+    q = (
+        db.query(Note)
+        .options(
+            joinedload(Note.tags),
+            joinedload(Note.attendees),
+            joinedload(Note.projects),
+            joinedload(Note.todos),
+            joinedload(Note.meeting_details),
+        )
+        .filter(Note.hidden == False)
+    )
+    if kind is not None:
+        q = q.filter(Note.kind == kind)
+    if tag is not None:
+        tag_lower = tag.lower()
+        q = q.filter(
+            Note.tags.any(or_(Tag.name == tag_lower, Tag.name.like(tag_lower + "/%")))
+        )
     if person_id is not None:
-        q = q.filter(MeetingNote.attendees.any(Person.id == person_id))
+        q = q.filter(Note.attendees.any(Person.id == person_id))
     if project_id is not None:
-        q = q.filter(MeetingNote.projects.any(Project.id == project_id))
+        q = q.filter(Note.projects.any(Project.id == project_id))
     if todo_id is not None:
-        q = q.filter(MeetingNote.todos.any(Todo.id == todo_id))
+        q = q.filter(Note.todos.any(Todo.id == todo_id))
     if date_from is not None:
-        q = q.filter(MeetingNote.date >= date_from)
+        q = q.filter(Note.meeting_details.has(MeetingDetails.date >= date_from))
     if date_to is not None:
-        q = q.filter(MeetingNote.date <= date_to)
-    notes = q.order_by(MeetingNote.date.desc()).all()
-    return [meeting_note_to_summary(n) for n in notes]
+        q = q.filter(Note.meeting_details.has(MeetingDetails.date <= date_to))
+    if vault_id is not None:
+        q = q.filter(Note.vault_id == vault_id)
+    # Meeting notes sort by meeting date (desc) when filtering kind=meeting; otherwise by updated_at desc.
+    if kind == "meeting":
+        notes = q.outerjoin(Note.meeting_details).order_by(
+            nullslast(MeetingDetails.date.desc()), Note.updated_at.desc()
+        ).all()
+    else:
+        notes = q.order_by(Note.updated_at.desc()).all()
+    return [note_to_summary(n) for n in notes]
 
 
-@app.get("/meeting-notes/{note_id}", response_model=MeetingNoteOut)
-def get_meeting_note(note_id: int, db: Session = Depends(get_db)):
-    n = db.query(MeetingNote).get(note_id)
+# ─── Tags ───────────────────────────────────────────────────────────────────
+
+
+@app.get("/tags", response_model=List[TagOut])
+def list_tags(
+    kind: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    _scan_all_vaults_if_stale(db)
+    q = (
+        db.query(Tag.name, func.count(func.distinct(Note.id)))
+        .join(note_tags, Tag.id == note_tags.c.tag_id)
+        .join(Note, Note.id == note_tags.c.note_id)
+        .filter(Note.hidden == False)
+    )
+    if kind is not None:
+        q = q.filter(Note.kind == kind)
+    rows = q.group_by(Tag.name).order_by(Tag.name).all()
+    return [TagOut(name=name, note_count=count) for name, count in rows]
+
+
+@app.get("/notes/{note_id}", response_model=NoteOut)
+def get_note(note_id: int, db: Session = Depends(get_db)):
+    n = db.query(Note).get(note_id)
     if not n:
-        raise HTTPException(404, "Meeting note not found")
-    return meeting_note_to_out(n)
+        raise HTTPException(404, "Note not found")
+    return note_to_out(n)
 
 
-@app.post("/meeting-notes", response_model=MeetingNoteOut)
-def create_meeting_note(data: MeetingNoteCreate, db: Session = Depends(get_db)):
-    # Determine initial content
-    content = data.content
-    if not content and data.template:
+@app.post("/notes", response_model=NoteOut)
+def create_note(data: NoteCreate, db: Session = Depends(get_db)):
+    if data.kind == "meeting" and not data.date:
+        raise HTTPException(400, "Meeting notes require a 'date'")
+
+    # Resolve target vault (defaults to managed vault).
+    if data.vault_id is not None:
+        vault = db.query(Vault).get(data.vault_id)
+        if not vault:
+            raise HTTPException(404, f"Vault {data.vault_id} not found")
+    else:
+        vault = db.query(Vault).filter(Vault.is_managed == True).first()
+        if not vault:
+            raise HTTPException(500, "Managed vault missing (lifespan should create it)")
+
+    # Body: explicit content wins; otherwise pull from template (meeting kind only)
+    body = data.content or ""
+    if not body and data.template:
         tmpl_path = MEETING_TEMPLATES_DIR / f"{data.template}.md"
         if tmpl_path.exists():
-            content = tmpl_path.read_text(encoding="utf-8")
+            body = tmpl_path.read_text(encoding="utf-8")
 
-    # Create DB record with placeholder filename
-    n = MeetingNote(
+    n = Note(
         title=data.title,
-        date=data.date,
-        filename="__placeholder__",
+        kind=data.kind,
+        vault_id=vault.id,
+        filename=f"__placeholder_{uuid.uuid4().hex}__",
     )
+    db.add(n)
+    db.flush()
+    # Human-readable filename derived from the title, with collision fallback.
+    stem = _slugify_title_for_filename(data.title) or f"Untitled-{n.id}"
+    new_rel = _resolve_unique_filename(Path(vault.root_path), "", stem, None)
+    n.filename = Path(new_rel).name
+    n.relative_path = new_rel
+    n.mgmt_id = str(uuid.uuid4())
+
+    # Write file with mgmt_id frontmatter stamped.
+    path = _note_path(n)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        _serialize_with_frontmatter({"mgmt_id": n.mgmt_id}, body),
+        encoding="utf-8",
+    )
+    st = path.stat()
+    n.mtime = st.st_mtime
+    n.size = st.st_size
+    n.last_indexed_at = datetime.now(timezone.utc).isoformat()
+
+    sync_tags_for_note(db, n, body)
+
+    if data.kind == "meeting" and data.date:
+        db.add(MeetingDetails(note_id=n.id, date=data.date))
     if data.attendee_ids:
         n.attendees = db.query(Person).filter(Person.id.in_(data.attendee_ids)).all()
     if data.project_ids:
         n.projects = db.query(Project).filter(Project.id.in_(data.project_ids)).all()
     if data.todo_ids:
         n.todos = db.query(Todo).filter(Todo.id.in_(data.todo_ids)).all()
-    db.add(n)
-    db.flush()  # get the id
 
-    # Generate unique filename: {id:08d}_{date}-{H:M:S}-{tz}_{uuid12}.md
-    now = datetime.now(timezone.utc)
-    time_part = now.strftime("%H:%M:%S")
-    uid = uuid.uuid4().hex[:12]
-    n.filename = f"{n.id:08d}_{data.date}-{time_part}-UTC_{uid}.md"
-    _write_note_content(n.filename, content or "")
     db.commit()
     db.refresh(n)
-    return meeting_note_to_out(n)
+    return note_to_out(n)
 
 
-@app.put("/meeting-notes/{note_id}", response_model=MeetingNoteOut)
-def update_meeting_note(
-    note_id: int, data: MeetingNoteUpdate, db: Session = Depends(get_db)
-):
-    n = db.query(MeetingNote).get(note_id)
+@app.put("/notes/{note_id}", response_model=NoteOut)
+def update_note(note_id: int, data: NoteUpdate, db: Session = Depends(get_db)):
+    n = db.query(Note).get(note_id)
     if not n:
-        raise HTTPException(404, "Meeting note not found")
+        raise HTTPException(404, "Note not found")
     update_data = data.model_dump(exclude_unset=True)
     content = update_data.pop("content", None)
+    new_date = update_data.pop("date", None)
     attendee_ids = update_data.pop("attendee_ids", None)
     project_ids = update_data.pop("project_ids", None)
     todo_ids = update_data.pop("todo_ids", None)
     transcript = update_data.pop("transcript", None)
 
+    title_changed = "title" in update_data and isinstance(update_data["title"], str)
     for k, v in update_data.items():
         setattr(n, k, v)
+    if content is not None:
+        _write_note_body(n, content)
+        sync_tags_for_note(db, n, content)
+    if new_date is not None:
+        if n.meeting_details is None:
+            db.add(MeetingDetails(note_id=n.id, date=new_date))
+        else:
+            n.meeting_details.date = new_date
     if attendee_ids is not None:
         n.attendees = db.query(Person).filter(Person.id.in_(attendee_ids)).all()
     if project_ids is not None:
         n.projects = db.query(Project).filter(Project.id.in_(project_ids)).all()
     if todo_ids is not None:
         n.todos = db.query(Todo).filter(Todo.id.in_(todo_ids)).all()
-    if content is not None:
-        _write_note_content(n.filename, content)
     if transcript is not None:
         _write_transcript(n.id, transcript)
+
+    # Rename the on-disk file to match the new title.
+    # Preserves the current subdirectory; only the basename changes.
+    if title_changed and n.vault and n.relative_path:
+        stem = _slugify_title_for_filename(n.title)
+        if stem:
+            vault_root = Path(n.vault.root_path)
+            current_dir = str(Path(n.relative_path).parent)
+            if current_dir == ".":
+                current_dir = ""
+            new_rel = _resolve_unique_filename(vault_root, current_dir, stem, n.relative_path)
+            if new_rel != n.relative_path:
+                old_full = vault_root / n.relative_path
+                new_full = vault_root / new_rel
+                new_full.parent.mkdir(parents=True, exist_ok=True)
+                if old_full.exists():
+                    old_full.rename(new_full)
+                n.relative_path = new_rel
+                n.filename = Path(new_rel).name
+                if new_full.exists():
+                    st = new_full.stat()
+                    n.mtime = st.st_mtime
+                    n.size = st.st_size
 
     n.updated_at = datetime.now(timezone.utc).isoformat()
     db.commit()
     db.refresh(n)
-    return meeting_note_to_out(n)
+    return note_to_out(n)
 
 
-@app.delete("/meeting-notes/{note_id}")
-def delete_meeting_note(note_id: int, db: Session = Depends(get_db)):
-    n = db.query(MeetingNote).get(note_id)
+@app.delete("/notes/{note_id}")
+def delete_note(note_id: int, db: Session = Depends(get_db)):
+    n = db.query(Note).get(note_id)
     if not n:
-        raise HTTPException(404, "Meeting note not found")
+        raise HTTPException(404, "Note not found")
     n.hidden = True
     n.updated_at = datetime.now(timezone.utc).isoformat()
+    try:
+        _update_note_frontmatter(
+            n,
+            patch={
+                "mgmt_status": "trashed",
+                "mgmt_trashed_at": datetime.now(timezone.utc).isoformat(),
+            },
+        )
+        st = _note_path(n).stat()
+        n.mtime = st.st_mtime
+        n.size = st.st_size
+    except FileNotFoundError:
+        pass  # file was already gone; DB flag suffices
     db.commit()
     return {"ok": True}
 
 
-@app.post("/meeting-notes/{note_id}/restore")
-def restore_meeting_note(note_id: int, db: Session = Depends(get_db)):
-    n = db.query(MeetingNote).get(note_id)
+@app.post("/notes/{note_id}/restore")
+def restore_note(note_id: int, db: Session = Depends(get_db)):
+    n = db.query(Note).get(note_id)
     if not n:
-        raise HTTPException(404, "Meeting note not found")
+        raise HTTPException(404, "Note not found")
     n.hidden = False
     n.updated_at = datetime.now(timezone.utc).isoformat()
+    try:
+        _update_note_frontmatter(n, patch={}, remove_keys={"mgmt_status", "mgmt_trashed_at"})
+        st = _note_path(n).stat()
+        n.mtime = st.st_mtime
+        n.size = st.st_size
+    except FileNotFoundError:
+        pass
     db.commit()
     return {"ok": True}
 
 
-# ─── Meeting Note Audio ────────────────────────────────────────────────────
-
-
-@app.post("/meeting-notes/{note_id}/audio")
-async def upload_audio(
-    note_id: int, file: UploadFile, db: Session = Depends(get_db)
-):
-    n = db.query(MeetingNote).get(note_id)
+@app.delete("/notes/{note_id}/purge")
+def purge_note(note_id: int, db: Session = Depends(get_db)):
+    n = db.query(Note).get(note_id)
     if not n:
-        raise HTTPException(404, "Meeting note not found")
+        raise HTTPException(404, "Note not found")
+    if not n.hidden:
+        raise HTTPException(400, "Note is not soft-deleted")
+    path = _note_path(n)
+    # Defensive: only unlink inside the vault root, never outside it
+    if n.vault and path.exists():
+        try:
+            path.resolve().relative_to(Path(n.vault.root_path).resolve())
+            path.unlink()
+        except ValueError:
+            pass  # path escapes vault root; leave file alone
+    db.delete(n)
+    db.commit()
+    return {"ok": True}
+
+
+# Audio + transcribe + suggest-todos (rehomed from /meeting-notes/{id}/...)
+
+
+@app.post("/notes/{note_id}/audio")
+async def upload_note_audio(note_id: int, file: UploadFile, db: Session = Depends(get_db)):
+    n = db.query(Note).get(note_id)
+    if not n:
+        raise HTTPException(404, "Note not found")
     audio_dir = MEETING_AUDIO_DIR / str(note_id)
     audio_dir.mkdir(exist_ok=True)
-    # Save uploaded file to a temp location first
     tmp_name = f"{uuid.uuid4().hex}_raw"
     raw_ext = Path(file.filename or "recording.webm").suffix or ".webm"
     raw_dest = audio_dir / f"{tmp_name}{raw_ext}"
     with open(raw_dest, "wb") as f:
         while chunk := await file.read(1024 * 1024):
             f.write(chunk)
-    # Convert to MP3 for universal compatibility
     dest = audio_dir / f"{uuid.uuid4().hex}.mp3"
     try:
         from pydub import AudioSegment
@@ -1463,21 +2268,19 @@ async def upload_audio(
     )
 
 
-@app.get(
-    "/meeting-notes/{note_id}/audio", response_model=List[AudioFileInfo]
-)
-def list_audio(note_id: int, db: Session = Depends(get_db)):
-    n = db.query(MeetingNote).get(note_id)
+@app.get("/notes/{note_id}/audio", response_model=List[AudioFileInfo])
+def list_note_audio(note_id: int, db: Session = Depends(get_db)):
+    n = db.query(Note).get(note_id)
     if not n:
-        raise HTTPException(404, "Meeting note not found")
+        raise HTTPException(404, "Note not found")
     return _list_audio_files(note_id)
 
 
-@app.delete("/meeting-notes/{note_id}/audio/{filename}")
-def delete_audio(note_id: int, filename: str, db: Session = Depends(get_db)):
-    n = db.query(MeetingNote).get(note_id)
+@app.delete("/notes/{note_id}/audio/{filename}")
+def delete_note_audio(note_id: int, filename: str, db: Session = Depends(get_db)):
+    n = db.query(Note).get(note_id)
     if not n:
-        raise HTTPException(404, "Meeting note not found")
+        raise HTTPException(404, "Note not found")
     path = MEETING_AUDIO_DIR / str(note_id) / filename
     if (
         not path.exists()
@@ -1485,20 +2288,17 @@ def delete_audio(note_id: int, filename: str, db: Session = Depends(get_db)):
     ):
         raise HTTPException(404, "Audio file not found")
     path.unlink()
-    # Clean up empty directory
     parent = path.parent
     if parent.exists() and not any(parent.iterdir()):
         parent.rmdir()
     return {"ok": True}
 
 
-@app.get("/meeting-notes/{note_id}/audio/{filename}/download")
-def download_audio(
-    note_id: int, filename: str, db: Session = Depends(get_db)
-):
-    n = db.query(MeetingNote).get(note_id)
+@app.get("/notes/{note_id}/audio/{filename}/download")
+def download_note_audio(note_id: int, filename: str, db: Session = Depends(get_db)):
+    n = db.query(Note).get(note_id)
     if not n:
-        raise HTTPException(404, "Meeting note not found")
+        raise HTTPException(404, "Note not found")
     path = MEETING_AUDIO_DIR / str(note_id) / filename
     if (
         not path.exists()
@@ -1509,27 +2309,8 @@ def download_audio(
     return FileResponse(path, media_type=media_type)
 
 
-def _transcribe_chunked(audio_path: Path, chunk_duration_ms: int = 10 * 60 * 1000) -> list[str]:
-    """Split an audio file into chunks and transcribe each one."""
-    from pydub import AudioSegment
-
-    audio = AudioSegment.from_file(audio_path)
-    chunks = [audio[i:i + chunk_duration_ms] for i in range(0, len(audio), chunk_duration_ms)]
-    results = []
-    for chunk in chunks:
-        with tempfile.NamedTemporaryFile(suffix=".mp3", delete=True) as tmp:
-            chunk.export(tmp.name, format="mp3")
-            with open(tmp.name, "rb") as f:
-                result = openai_client.audio.transcriptions.create(
-                    model="whisper-1",
-                    file=f,
-                )
-            results.append(result.text)
-    return results
-
-
-@app.post("/meeting-notes/{note_id}/transcribe")
-async def transcribe_meeting_note(
+@app.post("/notes/{note_id}/transcribe")
+async def transcribe_note(
     note_id: int,
     filename: Optional[str] = Query(None),
     db: Session = Depends(get_db),
@@ -1539,11 +2320,10 @@ async def transcribe_meeting_note(
             503,
             "OpenAI API key not configured. Set keys.openai_key in project_config.yaml.",
         )
-    n = db.query(MeetingNote).get(note_id)
+    n = db.query(Note).get(note_id)
     if not n:
-        raise HTTPException(404, "Meeting note not found")
+        raise HTTPException(404, "Note not found")
 
-    # Collect audio files to transcribe
     audio_dir = MEETING_AUDIO_DIR / str(note_id)
     if filename:
         target = audio_dir / filename
@@ -1555,19 +2335,16 @@ async def transcribe_meeting_note(
         audio_paths = [target]
     else:
         if not audio_dir.exists():
-            raise HTTPException(404, "No audio files for this meeting note")
-        audio_paths = sorted(
-            f for f in audio_dir.iterdir() if f.is_file()
-        )
+            raise HTTPException(404, "No audio files for this note")
+        audio_paths = sorted(f for f in audio_dir.iterdir() if f.is_file())
         if not audio_paths:
-            raise HTTPException(404, "No audio files for this meeting note")
+            raise HTTPException(404, "No audio files for this note")
 
-    # Transcribe each file and concatenate
     segments = []
     try:
         for audio_path in audio_paths:
             file_size = audio_path.stat().st_size
-            if file_size > 25 * 1024 * 1024:  # 25MB Whisper limit
+            if file_size > 25 * 1024 * 1024:
                 segments.extend(_transcribe_chunked(audio_path))
             else:
                 with open(audio_path, "rb") as af:
@@ -1583,35 +2360,28 @@ async def transcribe_meeting_note(
 
     transcript = "\n\n".join(segments)
     _write_transcript(note_id, transcript)
-
     n.updated_at = datetime.now(timezone.utc).isoformat()
     db.commit()
-
     return {"transcript": transcript}
 
 
-class SuggestedTodo(BaseModel):
-    title: str
-    description: str = ""
-
-
-@app.post("/meeting-notes/{note_id}/suggest-todos")
-async def suggest_todos(note_id: int, db: Session = Depends(get_db)):
+@app.post("/notes/{note_id}/suggest-todos")
+async def suggest_note_todos(note_id: int, db: Session = Depends(get_db)):
     if not openai_client:
         raise HTTPException(
             503,
             "OpenAI API key not configured. Set keys.openai_key in project_config.yaml.",
         )
-    n = db.query(MeetingNote).get(note_id)
+    n = db.query(Note).get(note_id)
     if not n:
-        raise HTTPException(404, "Meeting note not found")
+        raise HTTPException(404, "Note not found")
 
-    content = _read_note_content(n.filename)
+    content = _read_note_body(n)
     transcript = _read_transcript(n.id)
 
     parts = []
     if content.strip():
-        parts.append(f"## Meeting Notes\n{content}")
+        parts.append(f"## Note\n{content}")
     if transcript and transcript.strip():
         parts.append(f"## Transcript\n{transcript}")
     if not parts:
@@ -1626,7 +2396,7 @@ async def suggest_todos(note_id: int, db: Session = Depends(get_db)):
             {
                 "role": "system",
                 "content": (
-                    "You are a helpful assistant that extracts actionable todo items from meeting notes and transcripts. "
+                    "You are a helpful assistant that extracts actionable todo items from notes and transcripts. "
                     "Return a JSON array of objects with 'title' (short actionable task title) and 'description' (brief context). "
                     "Only return concrete, actionable items. Return at most 10 items. "
                     "Return ONLY the JSON array, no other text."
@@ -1634,17 +2404,13 @@ async def suggest_todos(note_id: int, db: Session = Depends(get_db)):
             },
             {
                 "role": "user",
-                "content": f"Extract actionable todo items from the following meeting content:\n\n{combined}",
+                "content": f"Extract actionable todo items from the following content:\n\n{combined}",
             },
         ],
         temperature=0.3,
     )
 
-    import json
-
-    raw = response.choices[0].message.content or "[]"
-    # Strip markdown code fences if present
-    raw = raw.strip()
+    raw = (response.choices[0].message.content or "[]").strip()
     if raw.startswith("```"):
         raw = raw.split("\n", 1)[1] if "\n" in raw else raw[3:]
         if raw.endswith("```"):
@@ -1657,71 +2423,6 @@ async def suggest_todos(note_id: int, db: Session = Depends(get_db)):
         suggestions = []
 
     return {"suggestions": suggestions}
-
-
-@app.get("/meeting-notes-hidden", response_model=List[MeetingNoteSummary])
-def list_hidden_meeting_notes(db: Session = Depends(get_db)):
-    notes = (
-        db.query(MeetingNote)
-        .filter(MeetingNote.hidden == True)
-        .order_by(MeetingNote.date.desc())
-        .all()
-    )
-    return [meeting_note_to_summary(n) for n in notes]
-
-
-@app.get("/meeting-notes-hidden/search", response_model=List[MeetingNoteSearchResult])
-def search_hidden_meeting_notes(
-    q: str = Query(..., min_length=1), db: Session = Depends(get_db)
-):
-    q_lower = q.lower()
-    results = []
-    notes = (
-        db.query(MeetingNote)
-        .filter(MeetingNote.hidden == True)
-        .order_by(MeetingNote.date.desc())
-        .all()
-    )
-    for n in notes:
-        content = _read_note_content(n.filename)
-        lines = content.splitlines()
-        for i, line in enumerate(lines):
-            if q_lower in line.lower():
-                start = max(0, i - 1)
-                end = min(len(lines), i + 2)
-                snippet = "\n".join(lines[start:end])
-                results.append(
-                    MeetingNoteSearchResult(
-                        id=n.id, title=n.title, date=n.date, snippet=snippet
-                    )
-                )
-                break
-        if q_lower in n.title.lower() and not any(r.id == n.id for r in results):
-            results.append(
-                MeetingNoteSearchResult(id=n.id, title=n.title, date=n.date, snippet="")
-            )
-    return results
-
-
-# ─── Meeting Templates ─────────────────────────────────────────────────────
-
-
-@app.get("/meeting-templates", response_model=List[MeetingTemplateOut])
-def list_meeting_templates():
-    templates = []
-    for f in sorted(MEETING_TEMPLATES_DIR.glob("*.md")):
-        templates.append(
-            MeetingTemplateOut(name=f.stem, content=f.read_text(encoding="utf-8"))
-        )
-    return templates
-
-
-@app.get("/meeting-templates/{name}", response_model=MeetingTemplateOut)
-def get_meeting_template(name: str):
-    path = MEETING_TEMPLATES_DIR / f"{name}.md"
-    if not path.exists():
-        raise HTTPException(404, "Template not found")
-    return MeetingTemplateOut(name=name, content=path.read_text(encoding="utf-8"))
 
 
 # ─── Config (user settings shared with frontend) ─────────────────────────────

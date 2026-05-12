@@ -1,8 +1,8 @@
 import { useState, useCallback } from 'react'
 import { NavLink, Route, Routes, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, CheckSquare, FolderKanban, Users, CheckCircle2, Crosshair, Settings, ChevronsLeft, ChevronsRight, FileText, Target, BarChart3, Square, Trash2 } from 'lucide-react'
+import { LayoutDashboard, CheckSquare, FolderKanban, Users, CheckCircle2, Crosshair, Settings, ChevronsLeft, ChevronsRight, FileText, Target, BarChart3, Square, Trash2, NotebookPen } from 'lucide-react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { updateTodo, createMeetingNote } from './api'
+import { updateTodo, createNote } from './api'
 import { useResizableSidebar } from './hooks/useResizableSidebar'
 import { useHotkeys, useTheme, useTimezone } from './SettingsContext'
 import { useHotkey } from './hooks/useHotkey'
@@ -18,7 +18,8 @@ import RecentlyDeletedPage from './pages/RecentlyDeletedPage'
 import FocusPage from './pages/FocusPage'
 import SettingsPage from './pages/SettingsPage'
 import MeetingNotesPage from './pages/MeetingNotesPage'
-import MeetingNoteDetailPage from './pages/MeetingNoteDetailPage'
+import PersonalNotesPage from './pages/PersonalNotesPage'
+import NoteDetailPage from './pages/NoteDetailPage'
 import WeeklyGoalsPage from './pages/WeeklyGoalsPage'
 import ProgressPage from './pages/ProgressPage'
 import TodoModal from './components/TodoModal'
@@ -31,6 +32,7 @@ const navItems = [
   { to: '/projects', label: 'Projects', icon: FolderKanban, end: false },
   { to: '/people', label: 'People', icon: Users, end: false },
   { to: '/meeting-notes', label: 'Meetings', icon: FileText, end: false },
+  { to: '/notes', label: 'Notes', icon: NotebookPen, end: false },
   { to: '/weekly-goals', label: 'Weekly Goals', icon: Target, end: false },
   { to: '/progress', label: 'Progress', icon: BarChart3, end: false },
   { to: '/done', label: 'Recently Done', icon: CheckCircle2, end: false },
@@ -60,6 +62,7 @@ export default function App() {
   useHotkey(bindings.goToProjects, useCallback(() => navigate('/projects'), [navigate]))
   useHotkey(bindings.goToPeople, useCallback(() => navigate('/people'), [navigate]))
   useHotkey(bindings.goToMeetings, useCallback(() => navigate('/meeting-notes'), [navigate]))
+  useHotkey(bindings.goToNotes, useCallback(() => navigate('/notes'), [navigate]))
   useHotkey(bindings.goToDone, useCallback(() => navigate('/done'), [navigate]))
 
   // Theme toggle
@@ -75,17 +78,30 @@ export default function App() {
 
   // New meeting note (global)
   const newMeetingNoteMutation = useMutation({
-    mutationFn: createMeetingNote,
+    mutationFn: createNote,
     onSuccess: (note) => {
-      queryClient.invalidateQueries({ queryKey: ['meeting-notes'] })
+      queryClient.invalidateQueries({ queryKey: ['notes'] })
       navigate(`/meeting-notes/${note.id}`)
     },
   })
   useHotkey(bindings.newMeetingNote, useCallback(() => {
     if (newMeetingNoteMutation.isPending) return
     const todayStr = getTodayString(timezone)
-    newMeetingNoteMutation.mutate({ title: `Untitled-Meeting`, date: todayStr, template: 'default_meeting' })
+    newMeetingNoteMutation.mutate({ title: `Untitled-Meeting`, kind: 'meeting', date: todayStr, template: 'default_meeting' })
   }, [newMeetingNoteMutation, timezone]))
+
+  const newPersonalNoteMutation = useMutation({
+    mutationFn: createNote,
+    onSuccess: (note) => {
+      queryClient.invalidateQueries({ queryKey: ['notes'] })
+      navigate(`/notes/${note.id}`)
+    },
+  })
+  const startNewPersonalNote = useCallback(() => {
+    if (newPersonalNoteMutation.isPending) return
+    newPersonalNoteMutation.mutate({ title: 'Untitled', kind: 'personal' })
+  }, [newPersonalNoteMutation])
+  useHotkey(bindings.newPersonalNote, startNewPersonalNote)
 
   const focusMutation = useMutation({
     mutationFn: (todoId: number) => updateTodo(todoId, { is_focused: true }),
@@ -259,7 +275,9 @@ export default function App() {
           <Route path="/done" element={<RecentlyDonePage />} />
           <Route path="/deleted" element={<RecentlyDeletedPage />} />
           <Route path="/meeting-notes" element={<MeetingNotesPage />} />
-          <Route path="/meeting-notes/:id" element={<MeetingNoteDetailPage />} />
+          <Route path="/meeting-notes/:id" element={<NoteDetailPage />} />
+          <Route path="/notes" element={<PersonalNotesPage />} />
+          <Route path="/notes/:id" element={<NoteDetailPage />} />
           <Route path="/weekly-goals" element={<WeeklyGoalsPage />} />
           <Route path="/progress" element={<ProgressPage />} />
           <Route path="/settings" element={<SettingsPage />} />
@@ -283,8 +301,9 @@ export default function App() {
           onNewMeetingNote={() => {
             if (newMeetingNoteMutation.isPending) return
             const todayStr = getTodayString(timezone)
-            newMeetingNoteMutation.mutate({ title: `Untitled-Meeting`, date: todayStr, template: 'default_meeting' })
+            newMeetingNoteMutation.mutate({ title: `Untitled-Meeting`, kind: 'meeting', date: todayStr, template: 'default_meeting' })
           }}
+          onNewPersonalNote={startNewPersonalNote}
         />
       )}
     </div>

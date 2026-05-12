@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
-import { Moon, Sun } from 'lucide-react'
-import { useQuery } from '@tanstack/react-query'
+import { Moon, Sun, FolderOpen, Plus, RefreshCw, Trash2, Loader2 } from 'lucide-react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   useTheme,
   useTodoDefaults,
@@ -12,7 +12,7 @@ import {
   type MeetingNoteSortField,
   type HotkeyBindings,
 } from '../SettingsContext'
-import { fetchPersons } from '../api'
+import { fetchPersons, fetchVaults, createVault, deleteVault, rescanVault } from '../api'
 
 function HotkeyInput({ label, description, bindingKey }: { label: string; description: string; bindingKey: keyof HotkeyBindings }) {
   const { bindings, setBinding } = useHotkeys()
@@ -63,6 +63,166 @@ function HotkeyInput({ label, description, bindingKey }: { label: string; descri
     </div>
   )
 }
+
+function VaultsSection() {
+  const queryClient = useQueryClient()
+  const { data: vaults = [], isLoading } = useQuery({ queryKey: ['vaults'], queryFn: fetchVaults })
+  const [showAdd, setShowAdd] = useState(false)
+  const [name, setName] = useState('')
+  const [path, setPath] = useState('')
+  const [error, setError] = useState<string | null>(null)
+
+  const invalidateAll = () => {
+    queryClient.invalidateQueries({ queryKey: ['vaults'] })
+    queryClient.invalidateQueries({ queryKey: ['notes'] })
+    queryClient.invalidateQueries({ queryKey: ['tags'] })
+  }
+
+  const createMutation = useMutation({
+    mutationFn: createVault,
+    onSuccess: () => {
+      setShowAdd(false)
+      setName('')
+      setPath('')
+      setError(null)
+      invalidateAll()
+    },
+    onError: (e: any) => setError(e?.response?.data?.detail ?? e.message ?? 'Failed to add vault'),
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteVault,
+    onSuccess: invalidateAll,
+  })
+
+  const rescanMutation = useMutation({
+    mutationFn: rescanVault,
+    onSuccess: invalidateAll,
+  })
+
+  return (
+    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+      <div className="px-6 py-5">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+              <FolderOpen size={16} /> Vaults
+            </h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+              Point the app at folders on disk (e.g. an Obsidian vault) to index their <code className="font-mono text-xs">.md</code> files.
+            </p>
+          </div>
+          {!showAdd && (
+            <button
+              onClick={() => setShowAdd(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+            >
+              <Plus size={14} /> Add vault
+            </button>
+          )}
+        </div>
+
+        {showAdd && (
+          <div className="mb-4 p-4 border border-slate-200 dark:border-slate-700 rounded-lg space-y-3 bg-slate-50 dark:bg-slate-900/30">
+            <div>
+              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Name</label>
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="my-obsidian"
+                className="w-full px-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Absolute path</label>
+              <input
+                value={path}
+                onChange={(e) => setPath(e.target.value)}
+                placeholder="/Users/me/Documents/Obsidian"
+                className="w-full px-3 py-2 text-sm font-mono border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+              />
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                The app will scan this folder, stamp a <code className="font-mono">mgmt_id</code> into each note's YAML frontmatter, and index tags. Your other frontmatter keys are preserved.
+              </p>
+            </div>
+            {error && (
+              <div className="text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded px-3 py-2">{error}</div>
+            )}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => createMutation.mutate({ name: name.trim(), root_path: path.trim() })}
+                disabled={!name.trim() || !path.trim() || createMutation.isPending}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+              >
+                {createMutation.isPending ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
+                {createMutation.isPending ? 'Scanning…' : 'Add & scan'}
+              </button>
+              <button
+                onClick={() => { setShowAdd(false); setError(null) }}
+                className="px-3 py-1.5 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {isLoading ? (
+          <p className="text-xs text-slate-400">Loading…</p>
+        ) : vaults.length === 0 ? (
+          <p className="text-xs text-slate-400">No vaults yet.</p>
+        ) : (
+          <ul className="space-y-2">
+            {vaults.map((v) => (
+              <li
+                key={v.id}
+                className="flex items-center justify-between gap-3 px-4 py-3 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-900/30"
+              >
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-slate-800 dark:text-slate-100">{v.name}</span>
+                    {v.is_managed && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 uppercase tracking-wider">Managed</span>
+                    )}
+                    <span className="text-xs text-slate-400">{v.note_count} note{v.note_count !== 1 ? 's' : ''}</span>
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 font-mono truncate">{v.root_path}</p>
+                  {v.last_scan_at && (
+                    <p className="text-[10px] text-slate-400 mt-0.5">Last scan: {new Date(v.last_scan_at).toLocaleString()}</p>
+                  )}
+                </div>
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  <button
+                    onClick={() => rescanMutation.mutate(v.id)}
+                    disabled={rescanMutation.isPending && rescanMutation.variables === v.id}
+                    className="p-1.5 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded transition-colors"
+                    title="Rescan now"
+                  >
+                    {rescanMutation.isPending && rescanMutation.variables === v.id ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                  </button>
+                  {!v.is_managed && (
+                    <button
+                      onClick={() => {
+                        if (confirm(`Stop watching "${v.name}"? Files on disk won't be touched.`)) {
+                          deleteMutation.mutate(v.id)
+                        }
+                      }}
+                      className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
+                      title="Remove vault (files stay on disk)"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  )
+}
+
 
 function getAvailableTimezones(): string[] {
   try {
@@ -161,6 +321,8 @@ export default function SettingsPage() {
             </select>
           </div>
         </div>
+
+        <VaultsSection />
 
         {/* Meeting Notes */}
         <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">

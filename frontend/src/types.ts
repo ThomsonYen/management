@@ -65,45 +65,66 @@ export interface AudioFileInfo {
   created_at: string
 }
 
-export interface MeetingNote {
+export type NoteKind = 'personal' | 'meeting'
+
+export interface Note {
   id: number
   title: string
-  date: string
-  filename: string
+  filename?: string | null
+  kind: NoteKind
   content: string
   created_at: string
   updated_at: string
+  tags: string[]
+  date?: string | null
   attendee_ids: number[]
   attendee_names: string[]
   project_ids: number[]
   project_names: string[]
   todo_ids: number[]
   todo_titles: string[]
-  transcript: string | null
+  transcript?: string | null
   audio_files: AudioFileInfo[]
+  vault_id?: number | null
+  vault_name?: string | null
+  vault_root_path?: string | null
+  relative_path?: string | null
 }
 
-export interface MeetingNoteSummary {
+export interface NoteSummary {
   id: number
   title: string
-  date: string
+  kind: NoteKind
   created_at: string
   updated_at: string
+  tags: string[]
+  date?: string | null
   attendee_names: string[]
   project_names: string[]
   todo_count: number
 }
 
-export interface MeetingTemplate {
-  name: string
-  content: string
-}
-
-export interface MeetingNoteSearchResult {
+export interface NoteSearchResult {
   id: number
   title: string
-  date: string
+  kind: NoteKind
   snippet: string
+  date?: string | null
+}
+
+export interface TagOut {
+  name: string
+  note_count: number
+}
+
+export interface Vault {
+  id: number
+  name: string
+  root_path: string
+  is_managed: boolean
+  created_at: string
+  last_scan_at?: string | null
+  note_count: number
 }
 
 export interface PersonProgressBucket {

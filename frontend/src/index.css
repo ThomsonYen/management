@@ -65,3 +65,32 @@ html.dark body {
   80% { opacity: 1; }
   100% { opacity: 0; }
 }
+
+/* Inline `#tag` pills rendered by remarkHashtag inside MDEditor preview. */
+.wmde-markdown a.md-hashtag {
+  display: inline-block;
+  padding: 0 6px;
+  margin: 0 1px;
+  font-size: 0.875em;
+  font-weight: 500;
+  color: #4f46e5;
+  background-color: #eef2ff;
+  border-radius: 9999px;
+  text-decoration: none;
+  border: 1px solid #c7d2fe;
+}
+.wmde-markdown a.md-hashtag:hover {
+  background-color: #e0e7ff;
+  border-color: #a5b4fc;
+}
+.dark .wmde-markdown a.md-hashtag,
+html.dark .wmde-markdown a.md-hashtag {
+  color: #c7d2fe;
+  background-color: rgba(79, 70, 229, 0.15);
+  border-color: rgba(99, 102, 241, 0.4);
+}
+.dark .wmde-markdown a.md-hashtag:hover,
+html.dark .wmde-markdown a.md-hashtag:hover {
+  background-color: rgba(79, 70, 229, 0.25);
+  border-color: rgba(99, 102, 241, 0.6);
+}

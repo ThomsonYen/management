@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Trash2 } from 'lucide-react'
 import type { AudioFileInfo } from '../types'
-import { deleteAudio, getAudioDownloadUrl } from '../api'
+import { deleteNoteAudio, getNoteAudioDownloadUrl } from '../api'
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
@@ -13,9 +13,9 @@ export default function AudioFileList({ noteId, files }: { noteId: number; files
   const queryClient = useQueryClient()
 
   const deleteMutation = useMutation({
-    mutationFn: (filename: string) => deleteAudio(noteId, filename),
+    mutationFn: (filename: string) => deleteNoteAudio(noteId, filename),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['meeting-note', noteId] })
+      queryClient.invalidateQueries({ queryKey: ['note', noteId] })
     },
   })
 
@@ -32,7 +32,7 @@ export default function AudioFileList({ noteId, files }: { noteId: number; files
             <audio
               controls
               preload="none"
-              src={getAudioDownloadUrl(noteId, f.filename)}
+              src={getNoteAudioDownloadUrl(noteId, f.filename)}
               className="w-full h-8 [&::-webkit-media-controls-panel]:bg-transparent"
             />
             <p className="text-xs text-slate-400 mt-0.5 truncate">{formatSize(f.size_bytes)}</p>

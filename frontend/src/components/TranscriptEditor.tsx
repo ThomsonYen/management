@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { ChevronDown, ChevronRight, FileText, Loader2, Sparkles } from 'lucide-react'
-import { transcribeMeetingNote } from '../api'
+import { transcribeNote } from '../api'
 
 interface TranscriptEditorProps {
   noteId: number
@@ -48,12 +48,12 @@ export default function TranscriptEditor({ noteId, transcript, hasAudio, onSave 
   }
 
   const transcribeMutation = useMutation({
-    mutationFn: () => transcribeMeetingNote(noteId),
+    mutationFn: () => transcribeNote(noteId),
     onSuccess: (data) => {
       setValue(data.transcript)
       latestValueRef.current = data.transcript
       setExpanded(true)
-      queryClient.invalidateQueries({ queryKey: ['meeting-note', noteId] })
+      queryClient.invalidateQueries({ queryKey: ['note', noteId] })
     },
   })
 

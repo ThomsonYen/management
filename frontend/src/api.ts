@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { Person, PersonProgress, Project, ProjectTree, Todo, SubTodo, ScheduleStatus, MeetingNote, MeetingNoteSummary, MeetingTemplate, MeetingNoteSearchResult, AudioFileInfo } from './types'
+import type { Person, PersonProgress, Project, ProjectTree, Todo, SubTodo, ScheduleStatus, AudioFileInfo, Note, NoteKind, NoteSummary, NoteSearchResult, TagOut, Vault } from './types'
 
 const api = axios.create({
   baseURL: '/api',
@@ -173,9 +173,11 @@ export const deleteMustDoItem = (id: number): Promise<void> =>
 export const fetchReminders = (): Promise<ScheduleStatus[]> =>
   api.get('/schedule/reminders').then((r) => r.data)
 
-// ─── Meeting Notes ──────────────────────────────────────────────────────────
+// ─── Notes (unified personal + meeting note model) ─────────────────────────
 
-export interface MeetingNoteFilters {
+export interface NoteFilters {
+  kind?: NoteKind
+  tag?: string
   person_id?: number
   project_id?: number
   todo_id?: number
@@ -183,52 +185,88 @@ export interface MeetingNoteFilters {
   date_to?: string
 }
 
-export const fetchMeetingNotes = (filters?: MeetingNoteFilters): Promise<MeetingNoteSummary[]> =>
-  api.get('/meeting-notes', { params: filters }).then((r) => r.data)
+export const fetchNotes = (filters?: NoteFilters): Promise<NoteSummary[]> =>
+  api.get('/notes', { params: filters }).then((r) => r.data)
 
-export const fetchMeetingNote = (id: number): Promise<MeetingNote> =>
-  api.get(`/meeting-notes/${id}`).then((r) => r.data)
+export const fetchTags = (kind?: NoteKind): Promise<TagOut[]> =>
+  api.get('/tags', { params: kind ? { kind } : undefined }).then((r) => r.data)
 
-export const createMeetingNote = (data: {
+export const fetchNote = (id: number): Promise<Note> =>
+  api.get(`/notes/${id}`).then((r) => r.data)
+
+export const createNote = (data: {
   title: string
-  date: string
   content?: string
+  kind?: NoteKind
+  date?: string
   attendee_ids?: number[]
   project_ids?: number[]
   todo_ids?: number[]
   template?: string
-}): Promise<MeetingNote> => api.post('/meeting-notes', data).then((r) => r.data)
+}): Promise<Note> => api.post('/notes', data).then((r) => r.data)
 
-export const updateMeetingNote = (
+export const updateNote = (
   id: number,
   data: {
     title?: string
-    date?: string
     content?: string
+    date?: string
     attendee_ids?: number[]
     project_ids?: number[]
     todo_ids?: number[]
     transcript?: string
   },
-): Promise<MeetingNote> => api.put(`/meeting-notes/${id}`, data).then((r) => r.data)
+): Promise<Note> => api.put(`/notes/${id}`, data).then((r) => r.data)
 
-export const deleteMeetingNote = (id: number): Promise<void> =>
-  api.delete(`/meeting-notes/${id}`).then((r) => r.data)
+export const uploadNoteAudio = (noteId: number, file: Blob, filename?: string): Promise<AudioFileInfo> => {
+  const formData = new FormData()
+  formData.append('file', file, filename || 'recording.webm')
+  return api.post(`/notes/${noteId}/audio`, formData).then((r) => r.data)
+}
 
-export const restoreMeetingNote = (id: number): Promise<void> =>
-  api.post(`/meeting-notes/${id}/restore`).then((r) => r.data)
+export const deleteNoteAudio = (noteId: number, filename: string): Promise<void> =>
+  api.delete(`/notes/${noteId}/audio/${filename}`).then((r) => r.data)
 
-export const fetchHiddenMeetingNotes = (): Promise<MeetingNoteSummary[]> =>
-  api.get('/meeting-notes-hidden').then((r) => r.data)
+export const getNoteAudioDownloadUrl = (noteId: number, filename: string): string =>
+  `/api/notes/${noteId}/audio/${filename}/download`
 
-export const searchHiddenMeetingNotes = (q: string): Promise<MeetingNoteSearchResult[]> =>
-  api.get('/meeting-notes-hidden/search', { params: { q } }).then((r) => r.data)
+export const transcribeNote = (noteId: number): Promise<{ transcript: string }> =>
+  api.post(`/notes/${noteId}/transcribe`).then((r) => r.data)
 
-export const searchMeetingNotes = (q: string): Promise<MeetingNoteSearchResult[]> =>
-  api.get('/meeting-notes/search', { params: { q } }).then((r) => r.data)
+export const suggestNoteTodos = (noteId: number): Promise<{ suggestions: { title: string; description: string }[] }> =>
+  api.post(`/notes/${noteId}/suggest-todos`).then((r) => r.data)
 
-export const fetchMeetingTemplates = (): Promise<MeetingTemplate[]> =>
-  api.get('/meeting-templates').then((r) => r.data)
+export const deleteNote = (id: number): Promise<void> =>
+  api.delete(`/notes/${id}`).then((r) => r.data)
+
+export const restoreNote = (id: number): Promise<void> =>
+  api.post(`/notes/${id}/restore`).then((r) => r.data)
+
+export const purgeNote = (id: number): Promise<void> =>
+  api.delete(`/notes/${id}/purge`).then((r) => r.data)
+
+export const searchNotes = (q: string, kind?: NoteKind): Promise<NoteSearchResult[]> =>
+  api.get('/notes/search', { params: { q, ...(kind ? { kind } : {}) } }).then((r) => r.data)
+
+export const fetchHiddenNotes = (kind?: NoteKind): Promise<NoteSummary[]> =>
+  api.get('/notes-hidden', { params: kind ? { kind } : undefined }).then((r) => r.data)
+
+export const searchHiddenNotes = (q: string, kind?: NoteKind): Promise<NoteSearchResult[]> =>
+  api.get('/notes-hidden/search', { params: { q, ...(kind ? { kind } : {}) } }).then((r) => r.data)
+
+// ─── Vaults (Phase 4 — connect external Obsidian folders) ──────────────────
+
+export const fetchVaults = (): Promise<Vault[]> =>
+  api.get('/vaults').then((r) => r.data)
+
+export const createVault = (data: { name: string; root_path: string }): Promise<Vault> =>
+  api.post('/vaults', data).then((r) => r.data)
+
+export const deleteVault = (id: number): Promise<void> =>
+  api.delete(`/vaults/${id}`).then((r) => r.data)
+
+export const rescanVault = (id: number): Promise<Vault> =>
+  api.post(`/vaults/${id}/rescan`).then((r) => r.data)
 
 // ─── Meeting Note Audio ────────────────────────────────────────────────────
 
