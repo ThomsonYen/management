@@ -6,11 +6,8 @@ import { fetchDailyGoals, upsertDailyGoal } from '../api'
 import type { DailyGoal } from '../api'
 import { useTimezone, useTheme, useHotkeys } from '../SettingsContext'
 import { getTodayString } from '../dateUtils'
-import {
-  parseContentBlocks, toggleCheckboxLine, editLineText, splitLineAt,
-  deleteLine, indentLine, unindentLine, mergeLineUp, pasteMultiLine,
-  ContentBlockList, type ContentBlock, type FocusRequest, type BlockEditHandlers,
-} from '../components/MarkdownRenderer'
+import MarkdownEditor from '../components/MarkdownEditor'
+import SaveIndicator, { type SaveState } from '../components/SaveIndicator'
 import { config } from '../config'
 import { createMdEditorKeyHandler } from '../utils/mdEditorKeyHandler'
 
@@ -34,7 +31,6 @@ function formatDateFull(dateStr: string): string {
   return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
 }
 
-/** Build array of dates from `from` to `to` inclusive */
 function dateRange(from: string, to: string): string[] {
   const dates: string[] = []
   let cur = from
@@ -47,7 +43,6 @@ function dateRange(from: string, to: string): string[] {
 
 // ─── Per-day content assembly / disassembly ─────────────────────────────────
 
-/** Assemble per-day records into a single markdown string with ## headers */
 function assembleMarkdown(dates: string[], goalMap: Map<string, string>): string {
   return dates
     .map((date) => {
@@ -58,7 +53,6 @@ function assembleMarkdown(dates: string[], goalMap: Map<string, string>): string
     .join('\n\n')
 }
 
-/** Build a lookup map from various date string forms -> YYYY-MM-DD */
 function buildDateLookup(dates: string[]): Map<string, string> {
   const lookup = new Map<string, string>()
   for (const date of dates) {
@@ -66,7 +60,6 @@ function buildDateLookup(dates: string[]): Map<string, string> {
     lookup.set(date, date)
     lookup.set(formatDate(date).toLowerCase(), date)
     lookup.set(d.toLocaleDateString('en-US', { month: 'long', day: 'numeric' }).toLowerCase(), date)
-    // Day names can collide when range spans 7+ days, so they're low priority
     if (!lookup.has(d.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase())) {
       lookup.set(d.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase(), date)
     }
@@ -77,36 +70,22 @@ function buildDateLookup(dates: string[]): Map<string, string> {
   return lookup
 }
 
-/**
- * Match a ## header like "Saturday (Apr 4)" against the date lookup.
- * Tries the parenthetical content first (most specific), then the part
- * before the parenthetical, then the full text without parens stripped.
- */
 function matchHeader(headerText: string, lookup: Map<string, string>): string | undefined {
-  // 1. Try the parenthetical content: "Apr 4" from "Saturday (Apr 4)"
   const parenMatch = headerText.match(/\((.+?)\)/)
   if (parenMatch) {
     const inner = parenMatch[1].trim().toLowerCase()
     const found = lookup.get(inner)
     if (found) return found
   }
-
-  // 2. Try the part before parenthetical: "Saturday" from "Saturday (Apr 4)"
   const beforeParen = headerText.replace(/\(.*?\)/, '').trim().toLowerCase()
   if (beforeParen) {
     const found = lookup.get(beforeParen)
     if (found) return found
   }
-
-  // 3. Try the full text as-is
   return lookup.get(headerText.trim().toLowerCase())
 }
 
-/** Split editor markdown back into per-day content chunks */
-function disassembleMarkdown(
-  markdown: string,
-  dates: string[]
-): Map<string, string> {
+function disassembleMarkdown(markdown: string, dates: string[]): Map<string, string> {
   const result = new Map<string, string>()
   const lookup = buildDateLookup(dates)
 
@@ -133,55 +112,26 @@ function disassembleMarkdown(
         continue
       }
     }
-    if (currentDate) {
-      currentLines.push(line)
-    }
+    if (currentDate) currentLines.push(line)
   }
   flush()
 
   return result
 }
 
-// ─── Parsing for rendered view ──────────────────────────────────────────────
+// ─── Per-day todo counting (for header badges) ───────────────────────────────
 
-interface ParsedDay {
-  date: string
-  dayName: string
-  blocks: ContentBlock[]
-}
-
-function parseAssembled(markdown: string, dates: string[]): ParsedDay[] {
-  const lines = markdown.split('\n')
-  const lookup = buildDateLookup(dates)
-
-  const dayContent = new Map<string, { startLine: number; lines: string[] }>()
-  let currentDate: string | null = null
-
-  for (let i = 0; i < lines.length; i++) {
-    const h2 = lines[i].match(/^##\s+(.+)/)
-    if (h2) {
-      const matched = matchHeader(h2[1], lookup)
-      if (matched) {
-        currentDate = matched
-        if (!dayContent.has(matched)) {
-          dayContent.set(matched, { startLine: i + 1, lines: [] })
-        }
-        continue
-      }
-    }
-    if (currentDate) {
-      dayContent.get(currentDate)!.lines.push(lines[i])
+function countTodos(content: string): { done: number; total: number } {
+  let done = 0
+  let total = 0
+  for (const line of content.split('\n')) {
+    const m = line.match(/^\s*-\s+\[([ xX])\]/)
+    if (m) {
+      total++
+      if (m[1] !== ' ') done++
     }
   }
-
-  return dates.map((date) => {
-    const entry = dayContent.get(date)
-    return {
-      date,
-      dayName: getDayName(date),
-      blocks: entry ? parseContentBlocks(entry.lines.join('\n'), entry.startLine) : [],
-    }
-  })
+  return { done, total }
 }
 
 // ─── Colors ─────────────────────────────────────────────────────────────────
@@ -232,7 +182,6 @@ export default function WeeklyGoalsPage() {
     return saved ? parseInt(saved) : 6
   })
 
-  // Persist prefs
   useEffect(() => { localStorage.setItem('goalShowEditor', String(showEditor)) }, [showEditor])
   useEffect(() => { localStorage.setItem('goalDaysBefore', String(daysBefore)) }, [daysBefore])
   useEffect(() => { localStorage.setItem('goalDaysAfter', String(daysAfter)) }, [daysAfter])
@@ -241,40 +190,39 @@ export default function WeeklyGoalsPage() {
   const rangeTo = useMemo(() => addDays(anchor, daysAfter), [anchor, daysAfter])
   const dates = useMemo(() => dateRange(rangeFrom, rangeTo), [rangeFrom, rangeTo])
 
-  const [localMarkdown, setLocalMarkdown] = useState('')
-  const localMarkdownRef = useRef('')
+  // Source of truth: per-day content map.
+  const [dayContent, setDayContent] = useState<Map<string, string>>(() => new Map())
+  const dayContentRef = useRef(dayContent)
+  dayContentRef.current = dayContent
   const lastServerGoals = useRef<Map<string, string>>(new Map())
   const datesRef = useRef(dates)
   datesRef.current = dates
   const [dirty, setDirty] = useState(false)
 
-  // Fetch all daily goals in range
   const { data: goals } = useQuery({
     queryKey: ['daily-goals', rangeFrom, rangeTo],
     queryFn: () => fetchDailyGoals(rangeFrom, rangeTo),
   })
 
-  // Build goalMap from server data and assemble into editor markdown
+  // Build dayContent from server data
   useEffect(() => {
     if (!goals) return
-    const goalMap = new Map<string, string>()
+    const m = new Map<string, string>()
     for (const g of goals) {
-      if (g.content) goalMap.set(g.date, g.content)
+      if (g.content) m.set(g.date, g.content)
     }
-    lastServerGoals.current = goalMap
-    const md = assembleMarkdown(dates, goalMap)
-    setLocalMarkdown(md)
-    localMarkdownRef.current = md
+    lastServerGoals.current = m
+    setDayContent(m)
     setDirty(false)
   }, [goals, dates])
 
-  // Save changed days
+  // Save mutation: diff each day against last known server value.
   const saveMutation = useMutation({
-    mutationFn: async (markdown: string) => {
-      const newMap = disassembleMarkdown(markdown, datesRef.current)
+    mutationFn: async () => {
       const promises: Promise<DailyGoal>[] = []
+      const cur = dayContentRef.current
       for (const date of datesRef.current) {
-        const newContent = newMap.get(date) || ''
+        const newContent = cur.get(date) || ''
         const oldContent = lastServerGoals.current.get(date) || ''
         if (newContent !== oldContent) {
           promises.push(upsertDailyGoal(date, newContent))
@@ -288,103 +236,49 @@ export default function WeeklyGoalsPage() {
     },
   })
 
-  const save = useCallback(() => {
-    saveMutation.mutate(localMarkdownRef.current)
-  }, [saveMutation])
+  const save = useCallback(() => saveMutation.mutate(), [saveMutation])
 
-  const handleContentChange = useCallback(
-    (markdown: string) => {
-      setLocalMarkdown(markdown)
-      localMarkdownRef.current = markdown
-      setDirty(true)
-    },
-    []
-  )
-
-  const handleToggle = useCallback(
-    (lineIndex: number) => {
-      const newMarkdown = toggleCheckboxLine(localMarkdown, lineIndex)
-      setLocalMarkdown(newMarkdown)
-      localMarkdownRef.current = newMarkdown
-      saveMutation.mutate(newMarkdown)
-    },
-    [localMarkdown, saveMutation]
-  )
-
-  const [focusRequest, setFocusRequest] = useState<FocusRequest | null>(null)
-
-  // Clear focusRequest after it's been consumed
-  useEffect(() => {
-    if (focusRequest != null) {
-      const id = requestAnimationFrame(() => setFocusRequest(null))
-      return () => cancelAnimationFrame(id)
-    }
-  }, [focusRequest])
-
-  const updateMarkdown = useCallback((newMd: string) => {
-    setLocalMarkdown(newMd)
-    localMarkdownRef.current = newMd
+  // Update a single day; called by per-day MarkdownEditor onChange/onSave.
+  const updateDay = useCallback((date: string, content: string) => {
+    setDayContent((prev) => {
+      if ((prev.get(date) || '') === content) return prev
+      const next = new Map(prev)
+      if (content) next.set(date, content)
+      else next.delete(date)
+      return next
+    })
+    setDirty(true)
   }, [])
 
-  const editHandlers = useMemo((): BlockEditHandlers => ({
-    onEdit: (lineIndex, newText) => {
-      const newMd = editLineText(localMarkdownRef.current, lineIndex, newText)
-      updateMarkdown(newMd)
-      saveMutation.mutate(newMd)
-    },
-    onSplitLine: (lineIndex, textBefore, textAfter) => {
-      const result = splitLineAt(localMarkdownRef.current, lineIndex, textBefore, textAfter)
-      updateMarkdown(result.content)
-      setFocusRequest({ lineIndex: result.newLineIndex })
-    },
-    onDeleteLine: (lineIndex) => {
-      // Find previous block to focus
-      const pd = parseAssembled(localMarkdownRef.current, datesRef.current)
-      const allBlocks = pd.flatMap(d => d.blocks)
-      const prevBlock = allBlocks.filter(b => b.lineIndex < lineIndex).pop()
-      const newMd = deleteLine(localMarkdownRef.current, lineIndex)
-      updateMarkdown(newMd)
-      saveMutation.mutate(newMd)
-      if (prevBlock) {
-        setFocusRequest({ lineIndex: prevBlock.lineIndex, caretOffset: prevBlock.text.length })
+  const saveDay = useCallback((date: string, content: string) => {
+    setDayContent((prev) => {
+      if ((prev.get(date) || '') === content) {
+        saveMutation.mutate()
+        return prev
       }
-    },
-    onIndent: (lineIndex) => {
-      const newMd = indentLine(localMarkdownRef.current, lineIndex)
-      updateMarkdown(newMd)
-      setFocusRequest({ lineIndex })
-    },
-    onUnindent: (lineIndex) => {
-      const newMd = unindentLine(localMarkdownRef.current, lineIndex)
-      updateMarkdown(newMd)
-      setFocusRequest({ lineIndex })
-    },
-    onMergeUp: (lineIndex) => {
-      const result = mergeLineUp(localMarkdownRef.current, lineIndex)
-      if (!result) return
-      updateMarkdown(result.content)
-      saveMutation.mutate(result.content)
-      setFocusRequest({ lineIndex: result.targetLineIndex, caretOffset: result.caretOffset })
-    },
-    onNavigate: (fromLineIndex, direction, caretOffset) => {
-      const pd = parseAssembled(localMarkdownRef.current, datesRef.current)
-      const allLineIndexes = pd.flatMap(d => d.blocks.map(b => b.lineIndex))
-      const currentIdx = allLineIndexes.indexOf(fromLineIndex)
-      if (currentIdx < 0) return
-      const targetIdx = direction === 'up' ? currentIdx - 1 : currentIdx + 1
-      if (targetIdx < 0 || targetIdx >= allLineIndexes.length) return
-      // Preserve caret offset, clamped to target block's text length
-      const targetBlock = pd.flatMap(d => d.blocks).find(b => b.lineIndex === allLineIndexes[targetIdx])
-      const clampedOffset = targetBlock ? Math.min(caretOffset, targetBlock.text.length) : caretOffset
-      setFocusRequest({ lineIndex: allLineIndexes[targetIdx], caretOffset: clampedOffset })
-    },
-    onPasteMultiLine: (lineIndex, textBefore, textAfter, lines) => {
-      const result = pasteMultiLine(localMarkdownRef.current, lineIndex, textBefore, textAfter, lines)
-      updateMarkdown(result.content)
-      saveMutation.mutate(result.content)
-      setFocusRequest({ lineIndex: result.focusLineIndex, caretOffset: result.caretOffset })
-    },
-  }), [updateMarkdown, saveMutation])
+      const next = new Map(prev)
+      if (content) next.set(date, content)
+      else next.delete(date)
+      // Update ref immediately so saveMutation reads the new value
+      dayContentRef.current = next
+      saveMutation.mutate()
+      return next
+    })
+  }, [saveMutation])
+
+  // Assembled markdown for the left-side MDEditor.
+  const assembledMd = useMemo(() => assembleMarkdown(dates, dayContent), [dates, dayContent])
+
+  const handleEditorChange = useCallback((markdown: string) => {
+    const newMap = disassembleMarkdown(markdown, datesRef.current)
+    setDayContent(newMap)
+    setDirty(true)
+  }, [])
+
+  const handleInsertTemplate = useCallback(() => {
+    const template = assembleMarkdown(dates, new Map())
+    handleEditorChange(template)
+  }, [dates, handleEditorChange])
 
   // Save on Cmd+S
   useEffect(() => {
@@ -401,38 +295,31 @@ export default function WeeklyGoalsPage() {
   // Save on unmount (navigating away)
   useEffect(() => {
     return () => {
-      const md = localMarkdownRef.current
+      const cur = dayContentRef.current
       const currentDates = datesRef.current
-      const newMap = disassembleMarkdown(md, currentDates)
       const promises: Promise<DailyGoal>[] = []
       for (const date of currentDates) {
-        const newContent = newMap.get(date) || ''
+        const newContent = cur.get(date) || ''
         const oldContent = lastServerGoals.current.get(date) || ''
-        if (newContent !== oldContent) {
-          promises.push(upsertDailyGoal(date, newContent))
-        }
+        if (newContent !== oldContent) promises.push(upsertDailyGoal(date, newContent))
       }
       if (promises.length > 0) Promise.all(promises)
     }
   }, [])
 
-  // Navigation
   const shiftAnchor = useCallback((days: number) => setAnchor((a) => addDays(a, days)), [])
   const goToToday = useCallback(() => setAnchor(todayStr), [todayStr])
 
-  // Parsed view
-  const parsedDays = useMemo(() => parseAssembled(localMarkdown, dates), [localMarkdown, dates])
-
-  const handleInsertTemplate = useCallback(() => {
-    const template = assembleMarkdown(dates, new Map())
-    handleContentChange(template)
-  }, [dates, handleContentChange])
-
   const isAnchorToday = anchor === todayStr
+
+  const saveState: SaveState =
+    saveMutation.isPending ? 'saving' :
+    dirty ? 'unsaved' :
+    saveMutation.isSuccess ? 'saved' :
+    'idle'
 
   return (
     <div className="p-6 max-w-[1400px] mx-auto">
-      {/* Header */}
       <div className="flex items-center justify-between mb-5">
         <div>
           <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Goals</h2>
@@ -445,7 +332,6 @@ export default function WeeklyGoalsPage() {
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Navigation: text buttons */}
           <div className="flex items-center gap-1">
             <button onClick={() => shiftAnchor(-7)} className="px-2 py-1 rounded-md text-xs font-medium hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors">
               -1w
@@ -474,7 +360,6 @@ export default function WeeklyGoalsPage() {
 
           <div className="w-px h-5 bg-slate-300 dark:bg-slate-700" />
 
-          {/* Range: days before / after */}
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-1">
               <span className="text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-500 mr-0.5">Before</span>
@@ -515,32 +400,27 @@ export default function WeeklyGoalsPage() {
             {showEditor ? 'Hide editor' : 'Show editor'}
           </button>
 
-          {/* Save status */}
           <div className="min-w-[70px] text-right">
-            {saveMutation.isPending && <span className="text-xs text-slate-400">Saving...</span>}
-            {!saveMutation.isPending && dirty && <span className="text-xs text-amber-500">Unsaved</span>}
-            {!saveMutation.isPending && !dirty && saveMutation.isSuccess && <span className="text-xs text-green-500">Saved</span>}
+            <SaveIndicator state={saveState} />
           </div>
         </div>
       </div>
 
-      {/* Side-by-side: Editor + Viewer */}
       <div className="flex gap-5 items-start">
-        {/* Left: Markdown Editor */}
         {showEditor && (
           <div className="w-1/2 flex-shrink-0 sticky top-6">
             <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col max-h-[calc(100vh-140px)]" data-color-mode={theme} onKeyDownCapture={editorKeyDown}>
               <div className="flex items-center justify-between px-4 py-2 border-b border-slate-200 dark:border-slate-700 flex-shrink-0">
                 <span className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">Editor</span>
-                {!localMarkdown.trim() && (
+                {!assembledMd.trim() && (
                   <button onClick={handleInsertTemplate} className="text-xs text-indigo-500 hover:text-indigo-700 dark:hover:text-indigo-300 font-medium">
                     Insert template
                   </button>
                 )}
               </div>
               <MDEditor
-                value={localMarkdown}
-                onChange={(val) => handleContentChange(val ?? '')}
+                value={assembledMd}
+                onChange={(val) => handleEditorChange(val ?? '')}
                 preview="edit"
                 visibleDragbar={false}
                 height={500}
@@ -549,30 +429,25 @@ export default function WeeklyGoalsPage() {
           </div>
         )}
 
-        {/* Right: Rendered View */}
         <div className={`${showEditor ? 'w-1/2' : 'w-full'} min-w-0 space-y-3`}>
-          {parsedDays.map((day, idx) => {
-            const isAnchor = day.date === anchor
-            const isPast = day.date < anchor
-            const isCollapsed = collapsed.has(day.date)
-            const isExpanded = expanded.has(day.date)
-            const hasContent = day.blocks.length > 0
-            const todos = day.blocks.filter((b): b is ContentBlock & { type: 'todo' } => b.type === 'todo')
-            const doneCount = todos.filter((t) => t.done).length
-            const totalCount = todos.length
+          {dates.map((date, idx) => {
+            const isAnchor = date === anchor
+            const isCollapsed = collapsed.has(date)
+            const isExpanded = expanded.has(date)
+            const content = dayContent.get(date) || ''
+            const { done: doneCount, total: totalCount } = countTodos(content)
 
             return (
               <div
-                key={day.date}
+                key={date}
                 className={`rounded-xl border-2 shadow-sm transition-all ${
                   isAnchor
                     ? 'border-indigo-400 dark:border-indigo-500 ring-2 ring-indigo-200 dark:ring-indigo-800'
                     : CARD_COLORS[idx % CARD_COLORS.length]
                 } ${!isAnchor ? 'opacity-50' : ''}`}
               >
-                {/* Day Header */}
                 <div
-                  onClick={() => setAnchor(day.date)}
+                  onClick={() => setAnchor(date)}
                   className={`px-4 py-2.5 ${isCollapsed ? 'rounded-[10px]' : 'rounded-t-[10px]'} flex items-center justify-between cursor-pointer select-none ${
                     isAnchor
                       ? 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300'
@@ -585,7 +460,7 @@ export default function WeeklyGoalsPage() {
                         e.stopPropagation()
                         setCollapsed(prev => {
                           const next = new Set(prev)
-                          next.has(day.date) ? next.delete(day.date) : next.add(day.date)
+                          if (next.has(date)) next.delete(date); else next.add(date)
                           return next
                         })
                       }}
@@ -593,8 +468,8 @@ export default function WeeklyGoalsPage() {
                     >
                       {isCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
                     </button>
-                    <span className="text-sm font-bold">{day.dayName}</span>
-                    <span className="text-xs opacity-70">{formatDate(day.date)}</span>
+                    <span className="text-sm font-bold">{getDayName(date)}</span>
+                    <span className="text-xs opacity-70">{formatDate(date)}</span>
                     {isAnchor && (
                       <span className="text-[10px] font-bold uppercase tracking-wider bg-indigo-500 text-white px-1.5 py-0.5 rounded">Anchor</span>
                     )}
@@ -610,7 +485,7 @@ export default function WeeklyGoalsPage() {
                         e.stopPropagation()
                         setExpanded(prev => {
                           const next = new Set(prev)
-                          next.has(day.date) ? next.delete(day.date) : next.add(day.date)
+                          if (next.has(date)) next.delete(date); else next.add(date)
                           return next
                         })
                       }}
@@ -622,30 +497,28 @@ export default function WeeklyGoalsPage() {
                   </div>
                 </div>
 
-                {/* Day Content */}
                 {!isCollapsed && (
                   <div className="relative bg-white dark:bg-slate-900 rounded-b-[10px]">
                     <div
                       className="px-4 py-3 min-h-[40px] overflow-y-auto"
-                      style={isExpanded ? undefined : { maxHeight: dayHeights.get(day.date) ?? config.goal_day_box_height_px }}
+                      style={isExpanded ? undefined : { maxHeight: dayHeights.get(date) ?? config.goal_day_box_height_px }}
                     >
-                      {!hasContent ? (
-                        <p className="text-xs text-slate-400 dark:text-slate-600 italic">No goals</p>
-                      ) : (
-                        <ContentBlockList blocks={day.blocks} onToggle={handleToggle} editHandlers={editHandlers} focusRequest={focusRequest} />
-                      )}
+                      <MarkdownEditor
+                        value={content}
+                        onChange={(md) => updateDay(date, md)}
+                        onSave={(md) => saveDay(date, md)}
+                      />
                     </div>
-                    {/* Drag handle */}
                     {!isExpanded && (
                       <div
                         className="h-1.5 cursor-row-resize flex items-center justify-center hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors rounded-b-[10px]"
                         onMouseDown={(e) => {
                           e.preventDefault()
                           const startY = e.clientY
-                          const startH = dayHeights.get(day.date) ?? config.goal_day_box_height_px
+                          const startH = dayHeights.get(date) ?? config.goal_day_box_height_px
                           const onMove = (ev: MouseEvent) => {
                             const newH = Math.max(60, startH + ev.clientY - startY)
-                            setDayHeights(prev => new Map(prev).set(day.date, newH))
+                            setDayHeights(prev => new Map(prev).set(date, newH))
                           }
                           const onUp = () => {
                             window.removeEventListener('mousemove', onMove)
@@ -668,4 +541,3 @@ export default function WeeklyGoalsPage() {
     </div>
   )
 }
-
