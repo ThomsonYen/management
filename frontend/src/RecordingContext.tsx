@@ -2,10 +2,34 @@ import { createContext, useContext, useState, useRef, useCallback, useEffect } f
 import { useQueryClient } from '@tanstack/react-query'
 import { uploadNoteAudio } from './api'
 
-export type RecordingMode = 'mic' | 'mic+system'
+export type RecordingMode = 'mic' | 'mic+system' | 'mic+device'
 
 export const supportsSystemAudio =
   typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getDisplayMedia
+
+const LS_SYSTEM_AUDIO_DEVICE = 'recording.systemAudioDevice.v1'
+
+export interface SystemAudioDevice {
+  deviceId: string
+  label: string
+}
+
+export function getSystemAudioDevice(): SystemAudioDevice | null {
+  try {
+    const raw = localStorage.getItem(LS_SYSTEM_AUDIO_DEVICE)
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    if (parsed?.deviceId && parsed?.label) return parsed
+  } catch { /* ignore */ }
+  return null
+}
+
+export function setSystemAudioDevice(device: SystemAudioDevice | null) {
+  try {
+    if (device) localStorage.setItem(LS_SYSTEM_AUDIO_DEVICE, JSON.stringify(device))
+    else localStorage.removeItem(LS_SYSTEM_AUDIO_DEVICE)
+  } catch { /* ignore */ }
+}
 
 interface RecordingState {
   /** The meeting note ID currently being recorded */
@@ -167,6 +191,43 @@ export function RecordingProvider({ children }: { children: React.ReactNode }) {
               }
             })
           })
+        } else if (mode === 'mic+device') {
+          const device = getSystemAudioDevice()
+          if (!device) {
+            stopStreams()
+            setState((s) => ({
+              ...s,
+              noteId: null,
+              error: 'No system audio device configured. Set one in Settings → Recording.',
+            }))
+            return
+          }
+          let systemStream: MediaStream
+          try {
+            systemStream = await navigator.mediaDevices.getUserMedia({
+              audio: {
+                deviceId: { exact: device.deviceId },
+                echoCancellation: false,
+                noiseSuppression: false,
+                autoGainControl: false,
+              },
+            })
+          } catch (err) {
+            stopStreams()
+            setState((s) => ({
+              ...s,
+              noteId: null,
+              error: `Couldn't open "${device.label}". It may have been unplugged or renamed — pick a new device in Settings → Recording.`,
+            }))
+            return
+          }
+          streamsRef.current.push(systemStream)
+
+          const ctx = new AudioContext()
+          const dest = ctx.createMediaStreamDestination()
+          ctx.createMediaStreamSource(micStream).connect(dest)
+          ctx.createMediaStreamSource(systemStream).connect(dest)
+          recordStream = dest.stream
         } else {
           recordStream = micStream
         }

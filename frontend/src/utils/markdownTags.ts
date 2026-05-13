@@ -1,6 +1,6 @@
 // Shared with backend (regex must stay in sync with backend/main.py:_TAG_REGEX).
-// Tag names: ASCII letter + alphanumeric/underscore, with optional `/`-separated nesting.
-export const TAG_REGEX = /(?<![A-Za-z0-9_/])#([A-Za-z][A-Za-z0-9_]*(?:\/[A-Za-z][A-Za-z0-9_]*)*)\b/g
+// Tag names: ASCII letter + alphanumeric/underscore/hyphen, with optional `/`-separated nesting.
+export const TAG_REGEX = /(?<![A-Za-z0-9_/-])#([A-Za-z][A-Za-z0-9_-]*(?:\/[A-Za-z][A-Za-z0-9_-]*)*)/g
 
 export function stripCodeAndLinks(body: string): string {
   let s = body.replace(/```[\s\S]*?```/g, ' ')

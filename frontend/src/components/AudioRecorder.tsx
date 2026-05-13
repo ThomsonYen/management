@@ -1,6 +1,11 @@
 import { useState } from 'react'
 import { Mic, Square, Monitor, Loader2 } from 'lucide-react'
-import { useRecording, supportsSystemAudio, type RecordingMode } from '../RecordingContext'
+import {
+  useRecording,
+  supportsSystemAudio,
+  getSystemAudioDevice,
+  type RecordingMode,
+} from '../RecordingContext'
 
 function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60)
@@ -11,7 +16,10 @@ function formatDuration(seconds: number): string {
 export default function AudioRecorder({ noteId }: { noteId: number }) {
   const { isRecording, noteId: recordingNoteId, duration, error, isUploading, start, stop } =
     useRecording()
-  const [mode, setMode] = useState<RecordingMode>('mic')
+  const configuredDevice = getSystemAudioDevice()
+  const systemAudioMode: RecordingMode = configuredDevice ? 'mic+device' : 'mic+system'
+  const [includeSystem, setIncludeSystem] = useState(false)
+  const mode: RecordingMode = includeSystem ? systemAudioMode : 'mic'
 
   const isThisNote = recordingNoteId === noteId
   const isOtherNote = isRecording && !isThisNote
@@ -41,11 +49,14 @@ export default function AudioRecorder({ noteId }: { noteId: number }) {
               )}
             </button>
             {supportsSystemAudio && (
-              <label className="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400 cursor-pointer">
+              <label
+                className="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400 cursor-pointer"
+                title={configuredDevice ? `Captures via "${configuredDevice.label}"` : undefined}
+              >
                 <input
                   type="checkbox"
-                  checked={mode === 'mic+system'}
-                  onChange={(e) => setMode(e.target.checked ? 'mic+system' : 'mic')}
+                  checked={includeSystem}
+                  onChange={(e) => setIncludeSystem(e.target.checked)}
                   className="rounded border-slate-300 dark:border-slate-600 text-indigo-600 focus:ring-indigo-500 h-3 w-3"
                 />
                 <Monitor size={10} />
@@ -53,10 +64,15 @@ export default function AudioRecorder({ noteId }: { noteId: number }) {
               </label>
             )}
           </div>
-          {mode === 'mic+system' && (
+          {includeSystem && mode === 'mic+system' && (
             <p className="text-xs text-slate-400 dark:text-slate-500 leading-tight">
               Your browser will ask you to share a screen. Check "Share audio" to capture meeting
-              audio.
+              audio. (Tip: configure a loopback device in Settings → Recording to skip this prompt.)
+            </p>
+          )}
+          {includeSystem && mode === 'mic+device' && configuredDevice && (
+            <p className="text-xs text-slate-400 dark:text-slate-500 leading-tight">
+              Capturing from <span className="font-mono">{configuredDevice.label}</span>.
             </p>
           )}
           {isOtherNote && (

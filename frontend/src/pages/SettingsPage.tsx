@@ -1,6 +1,11 @@
 import { useState, useEffect, useRef } from 'react'
-import { Moon, Sun, FolderOpen, Plus, RefreshCw, Trash2, Loader2 } from 'lucide-react'
+import { Moon, Sun, FolderOpen, Plus, RefreshCw, Trash2, Loader2, Mic } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import {
+  getSystemAudioDevice,
+  setSystemAudioDevice,
+  type SystemAudioDevice,
+} from '../RecordingContext'
 import {
   useTheme,
   useTodoDefaults,
@@ -60,6 +65,146 @@ function HotkeyInput({ label, description, bindingKey }: { label: string; descri
       >
         {recording ? 'Press keys...' : formatHotkey(bindings[bindingKey])}
       </button>
+    </div>
+  )
+}
+
+function RecordingSection() {
+  const [devices, setDevices] = useState<MediaDeviceInfo[]>([])
+  const [selected, setSelected] = useState<SystemAudioDevice | null>(getSystemAudioDevice())
+  const [permission, setPermission] = useState<'unknown' | 'granted' | 'denied'>('unknown')
+  const [loading, setLoading] = useState(false)
+
+  const loadDevices = async () => {
+    setLoading(true)
+    try {
+      const all = await navigator.mediaDevices.enumerateDevices()
+      const inputs = all.filter((d) => d.kind === 'audioinput')
+      setDevices(inputs)
+      // Labels are empty until mic permission is granted at least once.
+      if (inputs.some((d) => d.label)) setPermission('granted')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadDevices()
+    const handler = () => loadDevices()
+    navigator.mediaDevices?.addEventListener?.('devicechange', handler)
+    return () => navigator.mediaDevices?.removeEventListener?.('devicechange', handler)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const requestPermission = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      stream.getTracks().forEach((t) => t.stop())
+      setPermission('granted')
+      await loadDevices()
+    } catch {
+      setPermission('denied')
+    }
+  }
+
+  const choose = (deviceId: string) => {
+    if (!deviceId) {
+      setSystemAudioDevice(null)
+      setSelected(null)
+      return
+    }
+    const dev = devices.find((d) => d.deviceId === deviceId)
+    if (!dev) return
+    const next = { deviceId: dev.deviceId, label: dev.label || 'Unnamed device' }
+    setSystemAudioDevice(next)
+    setSelected(next)
+  }
+
+  const labelsHidden = devices.length > 0 && !devices.some((d) => d.label)
+
+  return (
+    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+      <div className="px-6 py-5">
+        <div className="flex items-center justify-between mb-2">
+          <div>
+            <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+              <Mic size={16} /> Recording
+            </h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+              Pick a virtual loopback device to capture system audio without the screen-share prompt.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-4 space-y-3">
+          {permission !== 'granted' && labelsHidden && (
+            <div className="flex items-center justify-between gap-3 p-3 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20">
+              <p className="text-xs text-amber-800 dark:text-amber-300 leading-tight">
+                Grant microphone permission once to see your input devices by name.
+              </p>
+              <button
+                onClick={requestPermission}
+                className="text-xs font-medium px-3 py-1.5 bg-amber-600 text-white rounded-md hover:bg-amber-700 transition-colors flex-shrink-0"
+              >
+                Grant access
+              </button>
+            </div>
+          )}
+
+          <div className="flex items-center justify-between gap-4">
+            <label className="text-sm text-slate-700 dark:text-slate-300 shrink-0">
+              System audio device
+            </label>
+            <select
+              value={selected?.deviceId ?? ''}
+              onChange={(e) => choose(e.target.value)}
+              disabled={loading}
+              className="w-72 border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+              <option value="">None — use screen-share prompt</option>
+              {devices.map((d) => (
+                <option key={d.deviceId} value={d.deviceId}>
+                  {d.label || `Input (${d.deviceId.slice(0, 6)}…)`}
+                </option>
+              ))}
+              {selected && !devices.some((d) => d.deviceId === selected.deviceId) && (
+                <option value={selected.deviceId}>{selected.label} (not connected)</option>
+              )}
+            </select>
+          </div>
+
+          <details className="text-xs text-slate-500 dark:text-slate-400">
+            <summary className="cursor-pointer hover:text-slate-700 dark:hover:text-slate-300">
+              How to set up loopback on macOS
+            </summary>
+            <ol className="list-decimal list-inside mt-2 space-y-1 leading-relaxed pl-1">
+              <li>
+                Install{' '}
+                <a
+                  href="https://github.com/ExistentialAudio/BlackHole"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-indigo-600 dark:text-indigo-400 hover:underline"
+                >
+                  BlackHole 2ch
+                </a>{' '}
+                (free virtual audio driver).
+              </li>
+              <li>
+                Open <span className="font-mono">Audio MIDI Setup</span> → create a{' '}
+                <em>Multi-Output Device</em> that includes your speakers/headphones <em>and</em>{' '}
+                BlackHole. Set this as your Mac's output so audio is both audible and piped to
+                BlackHole.
+              </li>
+              <li>Pick "BlackHole 2ch" in the selector above.</li>
+              <li>
+                Recording with "System audio" checked will now capture mic + system audio with zero
+                extra prompts.
+              </li>
+            </ol>
+          </details>
+        </div>
+      </div>
     </div>
   )
 }
@@ -321,6 +466,8 @@ export default function SettingsPage() {
             </select>
           </div>
         </div>
+
+        <RecordingSection />
 
         <VaultsSection />
 

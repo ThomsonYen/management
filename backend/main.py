@@ -891,7 +891,7 @@ def _update_note_frontmatter(note: "Note", patch: dict, remove_keys: Optional[se
 import re as _re
 
 _TAG_REGEX = _re.compile(
-    r"(?<![A-Za-z0-9_/])#([A-Za-z][A-Za-z0-9_]*(?:/[A-Za-z][A-Za-z0-9_]*)*)\b"
+    r"(?<![A-Za-z0-9_/-])#([A-Za-z][A-Za-z0-9_-]*(?:/[A-Za-z][A-Za-z0-9_-]*)*)"
 )
 
 
@@ -919,13 +919,55 @@ def sync_tags_for_note(db: Session, note: Note, body: str) -> None:
         return
     existing = {t.name: t for t in db.query(Tag).filter(Tag.name.in_(extracted)).all()}
     next_tags = []
+    new_added = False
     for name in extracted:
         t = existing.get(name)
         if t is None:
             t = Tag(name=name)
             db.add(t)
+            new_added = True
         next_tags.append(t)
+    # autoflush is off, so flush new Tag inserts immediately. Otherwise a
+    # subsequent call in the same transaction wouldn't see them and would
+    # attempt to re-insert, tripping the UNIQUE constraint on tags.name.
+    if new_added:
+        db.flush()
     note.tags = next_tags
+
+
+def _backfill_meeting_notes_tag(db: Session) -> None:
+    """Ensure every meeting note has #meeting-notes in body, and re-sync tags.
+
+    Tag re-sync runs for every note (not just freshly-edited ones) so prior
+    regex-rule changes (e.g. hyphen support) are reflected without requiring a
+    body edit.
+    """
+    notes = db.query(Note).filter(Note.kind == "meeting").all()
+    for n in notes:
+        path = _note_path(n)
+        if not path.exists():
+            continue
+        content = path.read_text(encoding="utf-8")
+        fm, body = _parse_frontmatter(content)
+        if "meeting-notes" not in extract_tags(body):
+            body = "#meeting-notes\n\n" + body.lstrip("\n")
+            path.write_text(_serialize_with_frontmatter(fm, body), encoding="utf-8")
+            st = path.stat()
+            n.mtime = st.st_mtime
+            n.size = st.st_size
+        sync_tags_for_note(db, n, body)
+        db.flush()
+
+
+def _resync_all_note_tags(db: Session) -> None:
+    """Re-extract tags for every note. Cheap; rectifies stale rows after regex changes."""
+    for n in db.query(Note).all():
+        path = _note_path(n)
+        if not path.exists():
+            continue
+        _, body = _parse_frontmatter(path.read_text(encoding="utf-8"))
+        sync_tags_for_note(db, n, body)
+        db.flush()
 
 
 def note_to_out(n: Note) -> NoteOut:
@@ -1252,6 +1294,9 @@ async def lifespan(_app: FastAPI):
                 _scan_vault(db, v)
             except Exception:
                 log.exception("startup scan failed for vault id=%s", v.id)
+        _backfill_meeting_notes_tag(db)
+        _resync_all_note_tags(db)
+        db.commit()
     task = asyncio.create_task(backup_loop(get_user_timezone))
     try:
         yield
