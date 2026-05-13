@@ -10,16 +10,29 @@ const api = axios.create({
 export const fetchPersons = (): Promise<Person[]> =>
   api.get('/persons').then((r) => r.data)
 
-export const createPerson = (data: { name: string; email?: string; notes?: string }): Promise<Person> =>
+export const createPerson = (data: { name: string; email?: string; notes?: string; project_ids?: number[] }): Promise<Person> =>
   api.post('/persons', data).then((r) => r.data)
 
 export const updatePerson = (
   id: number,
-  data: { name?: string; email?: string; notes?: string },
+  data: { name?: string; email?: string; notes?: string; project_ids?: number[] },
 ): Promise<Person> => api.put(`/persons/${id}`, data).then((r) => r.data)
 
 export const deletePerson = (id: number): Promise<void> =>
   api.delete(`/persons/${id}`).then((r) => r.data)
+
+export const restorePerson = (id: number): Promise<void> =>
+  api.post(`/persons/${id}/restore`).then((r) => r.data)
+
+export const purgePerson = (id: number): Promise<void> =>
+  api.delete(`/persons/${id}/purge`).then((r) => r.data)
+
+export const fetchArchivedPersons = (): Promise<Person[]> =>
+  api.get('/persons/deleted').then((r) => r.data)
+
+export const reorderPersons = (
+  items: { id: number; display_order: number }[],
+): Promise<void> => api.put('/persons/reorder', items).then((r) => r.data)
 
 export const fetchPersonProgress = (
   granularity: 'day' | 'week' | 'month' = 'week',

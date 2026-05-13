@@ -133,6 +133,16 @@ todo_blockers = Table(
 )
 
 
+# Many-to-many: persons ↔ projects (display_order preserves user-chosen ordering)
+person_projects = Table(
+    "person_projects",
+    Base.metadata,
+    Column("person_id", Integer, ForeignKey("persons.id"), primary_key=True),
+    Column("project_id", Integer, ForeignKey("projects.id"), primary_key=True),
+    Column("display_order", Integer, default=0, nullable=False),
+)
+
+
 # Many-to-many: meeting notes associations
 meeting_note_attendees = Table(
     "meeting_note_attendees",
@@ -168,7 +178,14 @@ class Person(Base):
     name = Column(String, nullable=False)
     email = Column(String, nullable=True)
     notes = Column(Text, nullable=True)
+    display_order = Column(Integer, default=0, nullable=False)
+    deleted_at = Column(String, nullable=True)
     todos = relationship("Todo", back_populates="assignee")
+    projects = relationship(
+        "Project",
+        secondary=person_projects,
+        order_by=person_projects.c.display_order,
+    )
 
 
 class Project(Base):
@@ -364,6 +381,16 @@ with engine.connect() as _conn:
     if "notes" not in _person_cols:
         _conn.execute(text("ALTER TABLE persons ADD COLUMN notes TEXT"))
         _conn.commit()
+    if "deleted_at" not in _person_cols:
+        _conn.execute(text("ALTER TABLE persons ADD COLUMN deleted_at TEXT"))
+        _conn.commit()
+    if "display_order" not in _person_cols:
+        _conn.execute(text("ALTER TABLE persons ADD COLUMN display_order INTEGER NOT NULL DEFAULT 0"))
+        # Seed sensible initial ordering: existing rows in id order.
+        _conn.execute(text(
+            "UPDATE persons SET display_order = id WHERE display_order = 0"
+        ))
+        _conn.commit()
     # Phase 4: vault metadata on notes
     _note_cols = [c["name"] for c in _insp.get_columns("notes")]
     for _col, _ddl in (
@@ -398,12 +425,14 @@ class PersonCreate(BaseModel):
     name: str
     email: Optional[str] = None
     notes: Optional[str] = None
+    project_ids: Optional[List[int]] = None
 
 
 class PersonUpdate(BaseModel):
     name: Optional[str] = None
     email: Optional[str] = None
     notes: Optional[str] = None
+    project_ids: Optional[List[int]] = None
 
 
 class PersonOut(BaseModel):
@@ -411,7 +440,45 @@ class PersonOut(BaseModel):
     name: str
     email: Optional[str] = None
     notes: Optional[str] = None
+    display_order: int = 0
+    deleted_at: Optional[str] = None
+    project_ids: List[int] = []
+    project_names: List[str] = []
     model_config = {"from_attributes": True}
+
+
+class PersonOrderItem(BaseModel):
+    id: int
+    display_order: int
+
+
+def person_to_out(p: Person) -> PersonOut:
+    active_projects = [pr for pr in p.projects if pr.deleted_at is None]
+    return PersonOut(
+        id=p.id,
+        name=p.name,
+        email=p.email,
+        notes=p.notes,
+        display_order=p.display_order,
+        deleted_at=p.deleted_at,
+        project_ids=[pr.id for pr in active_projects],
+        project_names=[pr.name for pr in active_projects],
+    )
+
+
+def _set_person_projects(db: Session, person_id: int, project_ids: List[int]) -> None:
+    db.execute(person_projects.delete().where(person_projects.c.person_id == person_id))
+    seen: set[int] = set()
+    for i, pid in enumerate(project_ids):
+        if pid in seen:
+            continue
+        seen.add(pid)
+        proj = db.query(Project).get(pid)
+        if proj is None or proj.deleted_at is not None:
+            continue
+        db.execute(person_projects.insert().values(
+            person_id=person_id, project_id=pid, display_order=i,
+        ))
 
 
 class ProjectCreate(BaseModel):
@@ -1324,16 +1391,54 @@ app.add_middleware(
 
 @app.get("/persons", response_model=List[PersonOut])
 def list_persons(db: Session = Depends(get_db)):
-    return db.query(Person).all()
+    rows = (
+        db.query(Person)
+        .filter(Person.deleted_at == None)
+        .order_by(Person.display_order, Person.id)
+        .all()
+    )
+    return [person_to_out(p) for p in rows]
+
+
+@app.get("/persons/deleted", response_model=List[PersonOut])
+def list_deleted_persons(db: Session = Depends(get_db)):
+    rows = (
+        db.query(Person)
+        .filter(Person.deleted_at != None)
+        .order_by(Person.deleted_at.desc())
+        .all()
+    )
+    return [person_to_out(p) for p in rows]
 
 
 @app.post("/persons", response_model=PersonOut)
 def create_person(data: PersonCreate, db: Session = Depends(get_db)):
-    p = Person(**data.model_dump())
+    max_order = (
+        db.query(Person.display_order)
+        .filter(Person.deleted_at == None)
+        .order_by(Person.display_order.desc())
+        .limit(1)
+        .scalar()
+    ) or 0
+    payload = data.model_dump(exclude={"project_ids"})
+    p = Person(**payload, display_order=max_order + 1)
     db.add(p)
+    db.flush()
+    if data.project_ids is not None:
+        _set_person_projects(db, p.id, data.project_ids)
     db.commit()
     db.refresh(p)
-    return p
+    return person_to_out(p)
+
+
+@app.put("/persons/reorder")
+def reorder_persons(items: List[PersonOrderItem], db: Session = Depends(get_db)):
+    for item in items:
+        p = db.query(Person).get(item.id)
+        if p:
+            p.display_order = item.display_order
+    db.commit()
+    return {"ok": True}
 
 
 @app.put("/persons/{person_id}", response_model=PersonOut)
@@ -1341,11 +1446,15 @@ def update_person(person_id: int, data: PersonUpdate, db: Session = Depends(get_
     p = db.query(Person).get(person_id)
     if not p:
         raise HTTPException(404, "Person not found")
-    for k, v in data.model_dump(exclude_unset=True).items():
+    payload = data.model_dump(exclude_unset=True)
+    project_ids = payload.pop("project_ids", None)
+    for k, v in payload.items():
         setattr(p, k, v)
+    if project_ids is not None:
+        _set_person_projects(db, person_id, project_ids)
     db.commit()
     db.refresh(p)
-    return p
+    return person_to_out(p)
 
 
 @app.delete("/persons/{person_id}")
@@ -1353,6 +1462,29 @@ def delete_person(person_id: int, db: Session = Depends(get_db)):
     p = db.query(Person).get(person_id)
     if not p:
         raise HTTPException(404, "Person not found")
+    if p.deleted_at is None:
+        p.deleted_at = datetime.now(timezone.utc).isoformat()
+    db.commit()
+    return {"ok": True}
+
+
+@app.post("/persons/{person_id}/restore")
+def restore_person(person_id: int, db: Session = Depends(get_db)):
+    p = db.query(Person).get(person_id)
+    if not p:
+        raise HTTPException(404, "Person not found")
+    p.deleted_at = None
+    db.commit()
+    return {"ok": True}
+
+
+@app.delete("/persons/{person_id}/purge")
+def purge_person(person_id: int, db: Session = Depends(get_db)):
+    p = db.query(Person).get(person_id)
+    if not p:
+        raise HTTPException(404, "Person not found")
+    if p.deleted_at is None:
+        raise HTTPException(400, "Person is not archived")
     db.delete(p)
     db.commit()
     return {"ok": True}

@@ -3,6 +3,10 @@ export interface Person {
   name: string
   email?: string
   notes?: string
+  display_order?: number
+  deleted_at?: string
+  project_ids: number[]
+  project_names: string[]
 }
 
 export interface Project {
