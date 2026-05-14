@@ -4,7 +4,7 @@ import { useResizableSidebar } from '../hooks/useResizableSidebar'
 import { useHotkeys } from '../SettingsContext'
 import { useHotkey } from '../hooks/useHotkey'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Archive, ChevronsLeft, ChevronsRight, ChevronDown, ChevronRight, Maximize2, Minimize2, Plus, RotateCcw, Trash2, X } from 'lucide-react'
+import { Archive, ChevronsLeft, ChevronsRight, ChevronDown, ChevronRight, LayoutGrid, List, Maximize2, Minimize2, Plus, RotateCcw, Trash2, X } from 'lucide-react'
 import {
   fetchPersons,
   fetchProjects,
@@ -24,6 +24,7 @@ import TodoCard from '../components/TodoCard'
 import TodoModal from '../components/TodoModal'
 import BulkActionBar from '../components/BulkActionBar'
 import MarkdownEditor from '../components/MarkdownEditor'
+import PersonProjectBoard from '../components/PersonProjectBoard'
 import SaveIndicator, { type SaveState } from '../components/SaveIndicator'
 import { useDebouncedFn } from '../hooks/useDebouncedFn'
 import { useToast } from '../ToastContext'
@@ -376,6 +377,10 @@ export default function PeoplePage({ onOpenTodo }: { onOpenTodo: (id: number) =>
   const { width: panelWidth, collapsed: panelCollapsed, startResize: startPanelResize, toggleCollapsed: togglePanel } = useResizableSidebar('peoplePanelWidth', 256)
   const [panelExpanded, setPanelExpanded] = useState(() => localStorage.getItem('peoplePanelExpanded') === 'true')
   useEffect(() => { localStorage.setItem('peoplePanelExpanded', String(panelExpanded)) }, [panelExpanded])
+  const [viewMode, setViewMode] = useState<'list' | 'board'>(() =>
+    localStorage.getItem('peopleViewMode') === 'board' ? 'board' : 'list',
+  )
+  useEffect(() => { localStorage.setItem('peopleViewMode', viewMode) }, [viewMode])
   const togglePanelExpanded = useCallback(() => setPanelExpanded((v) => !v), [])
   const renderedPanelWidth = panelExpanded ? Math.max(panelWidth, 380) : panelWidth
   const { bindings } = useHotkeys()
@@ -695,7 +700,37 @@ export default function PeoplePage({ onOpenTodo }: { onOpenTodo: (id: number) =>
       </div>
 
       {/* Right panel */}
-      <div className="flex-1 overflow-y-auto p-5">
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="px-4 py-2 border-b border-slate-200 dark:border-slate-800 flex items-center justify-end gap-1 bg-white dark:bg-slate-900">
+          <div className="inline-flex rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
+            <button
+              onClick={() => setViewMode('list')}
+              title="List view"
+              className={`flex items-center gap-1 px-2 py-1 text-xs font-medium transition-colors ${
+                viewMode === 'list'
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+              }`}
+            >
+              <List size={12} /> List
+            </button>
+            <button
+              onClick={() => setViewMode('board')}
+              title="Board view — drag and drop people into projects"
+              className={`flex items-center gap-1 px-2 py-1 text-xs font-medium transition-colors ${
+                viewMode === 'board'
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+              }`}
+            >
+              <LayoutGrid size={12} /> Board
+            </button>
+          </div>
+        </div>
+        {viewMode === 'board' ? (
+          <PersonProjectBoard dragPersonId={dragId} />
+        ) : (
+        <div className="flex-1 overflow-y-auto p-5">
         {!selectedPersonId ? (
           <div className="flex items-center justify-center h-64 text-slate-400 dark:text-slate-500 text-sm">
             Select a person to view their todos
@@ -872,6 +907,8 @@ export default function PeoplePage({ onOpenTodo }: { onOpenTodo: (id: number) =>
               </>
             )}
           </>
+        )}
+        </div>
         )}
         <BulkActionBar
           selectedIds={selectedIds}
