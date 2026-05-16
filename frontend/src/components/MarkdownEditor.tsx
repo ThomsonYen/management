@@ -409,6 +409,70 @@ function isPrintableKey(e: React.KeyboardEvent): boolean {
   return !e.metaKey && !e.ctrlKey && !e.altKey && e.key.length === 1
 }
 
+// ─── Inline prefix shortcuts (e.g. typing "- " turns a paragraph into a bullet)
+
+function replaceLinePreservingCaret(
+  oldLine: HTMLDivElement,
+  next: ParsedLine,
+  caretOffset: number,
+): void {
+  const replacement = buildLineEl(next)
+  oldLine.replaceWith(replacement)
+  const t = findTextEl(replacement)
+  if (t) setCaretIn(t, caretOffset)
+}
+
+function tryConvertLinePrefix(host: HTMLDivElement): boolean {
+  const info = getCaretInfo(host)
+  if (!info) return false
+  const type = info.lineEl.getAttribute('data-type')
+  const indent = parseInt(info.lineEl.getAttribute('data-indent') ?? '0') || 0
+  const text = getLineText(info.textEl)
+
+  if (type === 'paragraph') {
+    // "- [ ] x" or "- [x] x" → todo (check before list so the combined form works)
+    const todo = text.match(/^([-*])\s+\[([ xX])\]\s+(.*)/)
+    if (todo) {
+      const remainder = todo[3]
+      const prefixLen = todo[0].length - remainder.length
+      replaceLinePreservingCaret(
+        info.lineEl,
+        { type: 'todo', indent, text: remainder, done: todo[2] !== ' ' },
+        Math.max(0, info.offset - prefixLen),
+      )
+      return true
+    }
+    // "- x" or "* x" (also matches "- " with empty trailing text) → list
+    const list = text.match(/^([-*])\s+(.*)/)
+    if (list) {
+      const remainder = list[2]
+      const prefixLen = list[0].length - remainder.length
+      replaceLinePreservingCaret(
+        info.lineEl,
+        { type: 'list', indent, text: remainder },
+        Math.max(0, info.offset - prefixLen),
+      )
+      return true
+    }
+  } else if (type === 'list') {
+    // Inside a bullet, "[ ] x" or "[x] x" promotes to todo — so users who type
+    // "- [ ] foo" end up with a todo even though "- " converted to a bullet first.
+    const todo = text.match(/^\[([ xX])\]\s+(.*)/)
+    if (todo) {
+      const remainder = todo[2]
+      const prefixLen = todo[0].length - remainder.length
+      replaceLinePreservingCaret(
+        info.lineEl,
+        { type: 'todo', indent, text: remainder, done: todo[1] !== ' ' },
+        Math.max(0, info.offset - prefixLen),
+      )
+      return true
+    }
+  }
+
+  return false
+}
+
 // ─── Undo/redo snapshots ───────────────────────────────────────────────────
 
 interface Snapshot {
@@ -568,6 +632,7 @@ export default function MarkdownEditor({
     const host = hostRef.current
     if (!host) return
     normalizeAllLines(host)
+    tryConvertLinePrefix(host)
     syncFromDOM({ kind: 'typing' })
   }, [syncFromDOM])
 
