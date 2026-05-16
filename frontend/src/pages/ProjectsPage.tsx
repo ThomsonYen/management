@@ -1,13 +1,11 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useResizableSidebar } from '../hooks/useResizableSidebar'
 import { useHotkey } from '../hooks/useHotkey'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ChevronsLeft, ChevronsRight } from 'lucide-react'
-import MarkdownEditor from '../components/MarkdownEditor'
-import SaveIndicator, { type SaveState } from '../components/SaveIndicator'
-import { useDebouncedFn } from '../hooks/useDebouncedFn'
-import { fetchProjectTree, fetchProjects, fetchTodos, fetchPersons, createProject, createTodo, deleteProject, restoreProject, updateProject } from '../api'
+import ProjectNotes from '../components/ProjectNotes'
+import { fetchProjectTree, fetchProjects, fetchTodos, fetchPersons, createProject, createTodo, deleteProject, restoreProject, updateProject, reorderProjects } from '../api'
 import { useToast } from '../ToastContext'
 import type { ProjectTree, Project, Todo } from '../types'
 import DatePicker from '../components/DatePicker'
@@ -17,18 +15,48 @@ import BulkActionBar from '../components/BulkActionBar'
 import { useTodoDefaults, useTimezone, useHotkeys, resolveAssigneeId } from '../SettingsContext'
 import { getTodayString } from '../dateUtils'
 
+const IMPORTANCE_CYCLE: Record<string, string> = {
+  low: 'medium',
+  medium: 'high',
+  high: 'low',
+}
+
+const IMPORTANCE_DOT: Record<string, string> = {
+  low: 'bg-slate-300 dark:bg-slate-600',
+  medium: 'bg-blue-400',
+  high: 'bg-red-500',
+}
+
 function ProjectNode({
   node,
+  siblings,
   depth,
   selectedId,
+  dragProjectId,
+  dragOverProjectId,
   onSelect,
   onAddSub,
+  onCycleImportance,
+  onDragStart,
+  onDragOver,
+  onDragLeave,
+  onDrop,
+  onDragEnd,
 }: {
   node: ProjectTree
+  siblings: ProjectTree[]
   depth: number
   selectedId: number | null
+  dragProjectId: number | null
+  dragOverProjectId: number | null
   onSelect: (id: number) => void
   onAddSub: (parentId: number) => void
+  onCycleImportance: (node: ProjectTree) => void
+  onDragStart: (id: number) => void
+  onDragOver: (id: number) => void
+  onDragLeave: (id: number) => void
+  onDrop: (fromId: number, beforeId: number, siblings: ProjectTree[]) => void
+  onDragEnd: () => void
 }) {
   const [open, setOpen] = useState(true)
   const [editing, setEditing] = useState(false)
@@ -55,23 +83,60 @@ function ProjectNode({
     }
   }
 
+  const isSameLevelDrag =
+    dragProjectId !== null &&
+    dragProjectId !== node.id &&
+    siblings.some((s) => s.id === dragProjectId)
+  const isDropTarget = isSameLevelDrag && dragOverProjectId === node.id
+  const isDragSource = dragProjectId === node.id
+
   return (
     <div>
       <div
-        className={`flex items-center gap-1 group cursor-pointer rounded-lg px-2 py-1.5 text-sm ${
+        draggable
+        onDragStart={(e) => {
+          onDragStart(node.id)
+          e.dataTransfer.effectAllowed = 'move'
+        }}
+        onDragOver={(e) => {
+          if (!isSameLevelDrag) return
+          e.preventDefault()
+          e.dataTransfer.dropEffect = 'move'
+          onDragOver(node.id)
+        }}
+        onDragLeave={() => onDragLeave(node.id)}
+        onDrop={(e) => {
+          if (!isSameLevelDrag) return
+          e.preventDefault()
+          onDrop(dragProjectId!, node.id, siblings)
+        }}
+        onDragEnd={onDragEnd}
+        className={`flex items-center gap-1 group cursor-pointer rounded-lg px-2 py-1.5 text-sm transition-colors ${
           selectedId === node.id
             ? 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/50 dark:text-indigo-300 font-semibold'
             : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-        }`}
+        } ${isDropTarget ? 'outline outline-2 outline-indigo-400' : ''} ${isDragSource ? 'opacity-40' : ''}`}
         style={{ paddingLeft: `${8 + depth * 16}px` }}
         onClick={() => onSelect(node.id)}
       >
         <button
           onClick={(e) => { e.stopPropagation(); setOpen((o) => !o) }}
           className="w-4 flex-shrink-0 text-slate-400 dark:text-slate-500 text-xs"
+          draggable={false}
+          onDragStart={(e) => e.preventDefault()}
         >
           {hasChildren ? (open ? '▼' : '▶') : ' '}
         </button>
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            onCycleImportance(node)
+          }}
+          title={`Importance: ${node.importance} (click to cycle)`}
+          className={`w-2 h-2 rounded-full flex-shrink-0 ${IMPORTANCE_DOT[node.importance] ?? IMPORTANCE_DOT.medium}`}
+          draggable={false}
+          onDragStart={(e) => e.preventDefault()}
+        />
         {editing ? (
           <input
             autoFocus
@@ -104,6 +169,8 @@ function ProjectNode({
           }}
           className="opacity-0 group-hover:opacity-100 text-indigo-400 hover:text-indigo-700 text-xs px-1 transition-all"
           title="Add subproject"
+          draggable={false}
+          onDragStart={(e) => e.preventDefault()}
         >
           +
         </button>
@@ -114,10 +181,19 @@ function ProjectNode({
             <ProjectNode
               key={sp.id}
               node={sp}
+              siblings={node.subprojects}
               depth={depth + 1}
               selectedId={selectedId}
+              dragProjectId={dragProjectId}
+              dragOverProjectId={dragOverProjectId}
               onSelect={onSelect}
               onAddSub={onAddSub}
+              onCycleImportance={onCycleImportance}
+              onDragStart={onDragStart}
+              onDragOver={onDragOver}
+              onDragLeave={onDragLeave}
+              onDrop={onDrop}
+              onDragEnd={onDragEnd}
             />
           ))}
         </div>
@@ -252,105 +328,6 @@ function AddTodoCard({ projectId, queryKeys }: { projectId: number; queryKeys: u
   )
 }
 
-function ProjectNotes({ project }: { project: Project }) {
-  const queryClient = useQueryClient()
-  const initialNotes = project.notes || ''
-  const [draft, setDraft] = useState(initialNotes)
-  const [lastSaved, setLastSaved] = useState(initialNotes)
-  const [showRaw, setShowRaw] = useState(false)
-  const draftRef = useRef(draft)
-  draftRef.current = draft
-
-  useEffect(() => {
-    const serverNotes = project.notes || ''
-    setLastSaved(serverNotes)
-    if (serverNotes !== draftRef.current) {
-      setDraft(serverNotes)
-    }
-  }, [project.id, project.notes])
-
-  const saveMutation = useMutation({
-    mutationFn: async (notes: string) => {
-      const updated = await updateProject(project.id, { notes })
-      queryClient.setQueryData<Project[]>(['projects'], (old) =>
-        old?.map((p) => (p.id === project.id ? { ...p, notes: updated.notes } : p)),
-      )
-      queryClient.setQueryData<ProjectTree[]>(['projects-tree'], (old) => {
-        if (!old) return old
-        const patch = (nodes: ProjectTree[]): ProjectTree[] =>
-          nodes.map((n) =>
-            n.id === project.id
-              ? { ...n, notes: updated.notes, subprojects: patch(n.subprojects) }
-              : { ...n, subprojects: patch(n.subprojects) },
-          )
-        return patch(old)
-      })
-      return updated
-    },
-    onSuccess: (_, variables) => setLastSaved(variables),
-  })
-
-  const debouncedSave = useDebouncedFn(
-    (notes: string) => saveMutation.mutate(notes),
-    { idleMs: 500, maxMs: 3000 },
-  )
-
-  const handleChange = useCallback((md: string) => {
-    setDraft(md)
-  }, [])
-
-  const handleSave = useCallback((md: string) => {
-    saveMutation.mutate(md)
-  }, [saveMutation])
-
-  const handleRawChange = useCallback((md: string) => {
-    setDraft(md)
-    debouncedSave.call(md)
-  }, [debouncedSave])
-
-  const dirty = draft !== lastSaved
-  const saveState: SaveState =
-    saveMutation.isPending ? 'saving' :
-    dirty ? 'unsaved' :
-    saveMutation.isSuccess ? 'saved' :
-    'idle'
-
-  return (
-    <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-5 mb-5">
-      <div className="flex items-center justify-between mb-2">
-        <h3 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Notes</h3>
-        <div className="flex items-center gap-3">
-          <SaveIndicator state={saveState} />
-          <button
-            onClick={() => setShowRaw(v => !v)}
-            className="text-[10px] font-mono text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
-          >
-            {showRaw ? 'Hide raw' : 'Raw'}
-          </button>
-        </div>
-      </div>
-      {draft ? (
-        <MarkdownEditor value={draft} onChange={handleChange} onSave={handleSave} />
-      ) : (
-        <p
-          onClick={() => setDraft(' ')}
-          className="text-sm text-slate-400 dark:text-slate-500 italic cursor-text"
-        >
-          Click to add notes...
-        </p>
-      )}
-      {showRaw && (
-        <textarea
-          value={draft}
-          onChange={(e) => handleRawChange(e.target.value)}
-          rows={8}
-          className="mt-3 w-full border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-y"
-        />
-      )}
-    </div>
-  )
-}
-
 export default function ProjectsPage({ onOpenTodo }: { onOpenTodo: (id: number) => void }) {
   const queryClient = useQueryClient()
   const { width: panelWidth, collapsed: panelCollapsed, startResize: startPanelResize, toggleCollapsed: togglePanel } = useResizableSidebar('projectsPanelWidth', 256)
@@ -366,6 +343,8 @@ export default function ProjectsPage({ onOpenTodo }: { onOpenTodo: (id: number) 
   const [showTodoModal, setShowTodoModal] = useState(false)
   const [editingTodo, setEditingTodo] = useState<Todo | null>(null)
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+  const [dragProjectId, setDragProjectId] = useState<number | null>(null)
+  const [dragOverProjectId, setDragOverProjectId] = useState<number | null>(null)
 
   const toggleSelect = (id: number) => {
     setSelectedIds((prev) => {
@@ -430,6 +409,91 @@ export default function ProjectsPage({ onOpenTodo }: { onOpenTodo: (id: number) 
     },
   })
 
+  const importanceMutation = useMutation({
+    mutationFn: ({ id, importance }: { id: number; importance: string }) =>
+      updateProject(id, { importance }),
+    onMutate: async ({ id, importance }) => {
+      await queryClient.cancelQueries({ queryKey: ['projects'] })
+      await queryClient.cancelQueries({ queryKey: ['projects-tree'] })
+      const prevFlat = queryClient.getQueryData<Project[]>(['projects'])
+      const prevTree = queryClient.getQueryData<ProjectTree[]>(['projects-tree'])
+      queryClient.setQueryData<Project[]>(['projects'], (old) =>
+        old?.map((p) => (p.id === id ? { ...p, importance } : p)),
+      )
+      const patchTree = (nodes: ProjectTree[]): ProjectTree[] =>
+        nodes.map((n) =>
+          n.id === id
+            ? { ...n, importance, subprojects: patchTree(n.subprojects) }
+            : { ...n, subprojects: patchTree(n.subprojects) },
+        )
+      queryClient.setQueryData<ProjectTree[]>(['projects-tree'], (old) =>
+        old ? patchTree(old) : old,
+      )
+      return { prevFlat, prevTree }
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.prevFlat) queryClient.setQueryData(['projects'], ctx.prevFlat)
+      if (ctx?.prevTree) queryClient.setQueryData(['projects-tree'], ctx.prevTree)
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['projects'] })
+      queryClient.invalidateQueries({ queryKey: ['projects-tree'] })
+    },
+  })
+
+  const reorderMutation = useMutation({
+    mutationFn: reorderProjects,
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['projects'] })
+      queryClient.invalidateQueries({ queryKey: ['projects-tree'] })
+    },
+  })
+
+  const cycleImportance = (node: ProjectTree) => {
+    const next = IMPORTANCE_CYCLE[node.importance] ?? 'medium'
+    importanceMutation.mutate({ id: node.id, importance: next })
+  }
+
+  const commitTreeReorder = (
+    fromId: number,
+    beforeId: number,
+    siblings: ProjectTree[],
+  ) => {
+    if (fromId === beforeId) return
+    const list = [...siblings]
+    const fromIdx = list.findIndex((s) => s.id === fromId)
+    const toIdx = list.findIndex((s) => s.id === beforeId)
+    if (fromIdx === -1 || toIdx === -1) return
+    const [moved] = list.splice(fromIdx, 1)
+    const insertAt = fromIdx < toIdx ? toIdx - 1 : toIdx
+    list.splice(insertAt, 0, moved)
+    const payload = list.map((s, i) => ({ id: s.id, display_order: i + 1 }))
+    // Optimistic update on tree (only this siblings level changes)
+    const orderMap = new Map(payload.map((p) => [p.id, p.display_order]))
+    const patchTree = (nodes: ProjectTree[]): ProjectTree[] => {
+      // Within this list of siblings (which share a parent), if any of them is in orderMap,
+      // resort the whole group.
+      const updated = nodes.map((n) => ({
+        ...n,
+        display_order: orderMap.get(n.id) ?? n.display_order,
+        subprojects: patchTree(n.subprojects),
+      }))
+      const involved = updated.some((n) => orderMap.has(n.id))
+      return involved
+        ? [...updated].sort((a, b) => (a.display_order - b.display_order) || (a.id - b.id))
+        : updated
+    }
+    queryClient.setQueryData<ProjectTree[]>(['projects-tree'], (old) =>
+      old ? patchTree(old) : old,
+    )
+    queryClient.setQueryData<Project[]>(['projects'], (old) =>
+      old?.map((p) =>
+        orderMap.has(p.id) ? { ...p, display_order: orderMap.get(p.id)! } : p,
+      ),
+    )
+    reorderMutation.mutate(payload)
+  }
+
   const commitDetailRename = () => {
     const trimmed = detailName.trim()
     if (trimmed && trimmed !== selectedProject?.name) {
@@ -488,10 +552,28 @@ export default function ProjectsPage({ onOpenTodo }: { onOpenTodo: (id: number) 
                   <ProjectNode
                     key={node.id}
                     node={node}
+                    siblings={tree}
                     depth={0}
                     selectedId={selectedProjectId}
+                    dragProjectId={dragProjectId}
+                    dragOverProjectId={dragOverProjectId}
                     onSelect={setSelectedProjectId}
                     onAddSub={handleAddSub}
+                    onCycleImportance={cycleImportance}
+                    onDragStart={(id) => setDragProjectId(id)}
+                    onDragOver={(id) => setDragOverProjectId(id)}
+                    onDragLeave={(id) =>
+                      setDragOverProjectId((cur) => (cur === id ? null : cur))
+                    }
+                    onDrop={(fromId, beforeId, siblings) => {
+                      commitTreeReorder(fromId, beforeId, siblings)
+                      setDragProjectId(null)
+                      setDragOverProjectId(null)
+                    }}
+                    onDragEnd={() => {
+                      setDragProjectId(null)
+                      setDragOverProjectId(null)
+                    }}
                   />
                 ))
               )}
@@ -526,6 +608,25 @@ export default function ProjectsPage({ onOpenTodo }: { onOpenTodo: (id: number) 
               <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-5 mb-5">
                 <div className="flex items-start justify-between gap-4">
                   <div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => {
+                          const next = IMPORTANCE_CYCLE[selectedProject.importance] ?? 'medium'
+                          importanceMutation.mutate({ id: selectedProject.id, importance: next })
+                        }}
+                        title={`Importance: ${selectedProject.importance} (click to cycle)`}
+                        className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wide border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors ${
+                          selectedProject.importance === 'high'
+                            ? 'text-red-600 dark:text-red-400'
+                            : selectedProject.importance === 'medium'
+                            ? 'text-blue-600 dark:text-blue-400'
+                            : 'text-slate-500 dark:text-slate-400'
+                        }`}
+                      >
+                        <span className={`w-2 h-2 rounded-full ${IMPORTANCE_DOT[selectedProject.importance] ?? IMPORTANCE_DOT.medium}`} />
+                        {selectedProject.importance}
+                      </button>
+                    </div>
                     {editingName ? (
                       <input
                         autoFocus
@@ -536,11 +637,11 @@ export default function ProjectsPage({ onOpenTodo }: { onOpenTodo: (id: number) 
                           if (e.key === 'Enter') commitDetailRename()
                           if (e.key === 'Escape') setEditingName(false)
                         }}
-                        className="text-xl font-bold text-slate-800 dark:text-slate-100 bg-white dark:bg-slate-700 border border-indigo-400 rounded px-1 outline-none"
+                        className="text-xl font-bold text-slate-800 dark:text-slate-100 bg-white dark:bg-slate-700 border border-indigo-400 rounded px-1 outline-none mt-1"
                       />
                     ) : (
                       <h2
-                        className="text-xl font-bold text-slate-800 dark:text-slate-100 cursor-text select-none"
+                        className="text-xl font-bold text-slate-800 dark:text-slate-100 cursor-text select-none mt-1"
                         onClick={(e) => {
                           e.stopPropagation()
                           setDetailName(selectedProject.name)

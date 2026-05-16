@@ -17,6 +17,9 @@ export interface Project {
   parent_id?: number
   deadline?: string
   deleted_at?: string
+  display_order: number
+  importance: string
+  board_hidden: boolean
 }
 
 export interface ProjectTree extends Project {

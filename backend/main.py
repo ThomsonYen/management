@@ -197,6 +197,9 @@ class Project(Base):
     parent_id = Column(Integer, ForeignKey("projects.id"), nullable=True)
     deadline = Column(String, nullable=True)
     deleted_at = Column(String, nullable=True)
+    display_order = Column(Integer, nullable=False, default=0)
+    importance = Column(String, nullable=False, default="medium")
+    board_hidden = Column(Integer, nullable=False, default=0)  # SQLite-friendly bool
     subprojects = relationship(
         "Project", back_populates="parent", cascade="all, delete-orphan"
     )
@@ -377,6 +380,17 @@ with engine.connect() as _conn:
         if "deleted_at" not in _tbl_cols:
             _conn.execute(text(f"ALTER TABLE {_tbl} ADD COLUMN deleted_at TEXT"))
             _conn.commit()
+    _project_cols = [c["name"] for c in _insp.get_columns("projects")]
+    if "display_order" not in _project_cols:
+        _conn.execute(text("ALTER TABLE projects ADD COLUMN display_order INTEGER NOT NULL DEFAULT 0"))
+        _conn.execute(text("UPDATE projects SET display_order = id WHERE display_order = 0"))
+        _conn.commit()
+    if "importance" not in _project_cols:
+        _conn.execute(text("ALTER TABLE projects ADD COLUMN importance TEXT NOT NULL DEFAULT 'medium'"))
+        _conn.commit()
+    if "board_hidden" not in _project_cols:
+        _conn.execute(text("ALTER TABLE projects ADD COLUMN board_hidden INTEGER NOT NULL DEFAULT 0"))
+        _conn.commit()
     _person_cols = [c["name"] for c in _insp.get_columns("persons")]
     if "notes" not in _person_cols:
         _conn.execute(text("ALTER TABLE persons ADD COLUMN notes TEXT"))
@@ -528,12 +542,17 @@ def _set_person_projects(db: Session, person_id: int, project_ids: List[int]) ->
         ))
 
 
+PROJECT_IMPORTANCE_VALUES = {"low", "medium", "high"}
+
+
 class ProjectCreate(BaseModel):
     name: str
     description: Optional[str] = None
     notes: Optional[str] = None
     parent_id: Optional[int] = None
     deadline: Optional[str] = None
+    importance: Optional[str] = None
+    display_order: Optional[int] = None
 
 
 class ProjectUpdate(BaseModel):
@@ -542,6 +561,9 @@ class ProjectUpdate(BaseModel):
     notes: Optional[str] = None
     parent_id: Optional[int] = None
     deadline: Optional[str] = None
+    importance: Optional[str] = None
+    display_order: Optional[int] = None
+    board_hidden: Optional[bool] = None
 
 
 class ProjectOut(BaseModel):
@@ -552,6 +574,9 @@ class ProjectOut(BaseModel):
     parent_id: Optional[int] = None
     deadline: Optional[str] = None
     deleted_at: Optional[str] = None
+    display_order: int = 0
+    importance: str = "medium"
+    board_hidden: bool = False
     model_config = {"from_attributes": True}
 
 
@@ -562,11 +587,19 @@ class ProjectTreeOut(BaseModel):
     notes: Optional[str] = None
     parent_id: Optional[int] = None
     deadline: Optional[str] = None
+    display_order: int = 0
+    importance: str = "medium"
+    board_hidden: bool = False
     subprojects: List["ProjectTreeOut"] = []
     model_config = {"from_attributes": True}
 
 
 ProjectTreeOut.model_rebuild()
+
+
+class ProjectOrderItem(BaseModel):
+    id: int
+    display_order: int
 
 
 class SubTodoCreate(BaseModel):
@@ -834,8 +867,14 @@ def project_to_tree(p: Project) -> ProjectTreeOut:
         notes=p.notes,
         parent_id=p.parent_id,
         deadline=p.deadline,
+        display_order=p.display_order or 0,
+        importance=p.importance or "medium",
+        board_hidden=bool(p.board_hidden),
         subprojects=[
-            project_to_tree(sp) for sp in p.subprojects if sp.deleted_at is None
+            project_to_tree(sp) for sp in sorted(
+                (sp for sp in p.subprojects if sp.deleted_at is None),
+                key=lambda sp: (sp.display_order or 0, sp.id),
+            )
         ],
     )
 
@@ -1611,7 +1650,12 @@ def person_progress(
 
 @app.get("/projects", response_model=List[ProjectOut])
 def list_projects(db: Session = Depends(get_db)):
-    return db.query(Project).filter(Project.deleted_at == None).all()
+    return (
+        db.query(Project)
+        .filter(Project.deleted_at == None)
+        .order_by(Project.display_order, Project.id)
+        .all()
+    )
 
 
 @app.get("/projects/tree", response_model=List[ProjectTreeOut])
@@ -1619,6 +1663,7 @@ def projects_tree(db: Session = Depends(get_db)):
     roots = (
         db.query(Project)
         .filter(Project.parent_id == None, Project.deleted_at == None)
+        .order_by(Project.display_order, Project.id)
         .all()
     )
     return [project_to_tree(r) for r in roots]
@@ -1626,11 +1671,25 @@ def projects_tree(db: Session = Depends(get_db)):
 
 @app.post("/projects", response_model=ProjectOut)
 def create_project(data: ProjectCreate, db: Session = Depends(get_db)):
-    p = Project(**data.model_dump())
+    payload = data.model_dump(exclude_none=True)
+    importance = payload.get("importance")
+    if importance is not None and importance not in PROJECT_IMPORTANCE_VALUES:
+        raise HTTPException(400, f"importance must be one of {sorted(PROJECT_IMPORTANCE_VALUES)}")
+    p = Project(**payload)
     db.add(p)
     db.commit()
     db.refresh(p)
     return p
+
+
+@app.put("/projects/reorder")
+def reorder_projects(items: List[ProjectOrderItem], db: Session = Depends(get_db)):
+    for item in items:
+        p = db.query(Project).get(item.id)
+        if p:
+            p.display_order = item.display_order
+    db.commit()
+    return {"ok": True}
 
 
 @app.put("/projects/{project_id}", response_model=ProjectOut)
@@ -1638,7 +1697,10 @@ def update_project(project_id: int, data: ProjectUpdate, db: Session = Depends(g
     p = db.query(Project).get(project_id)
     if not p:
         raise HTTPException(404, "Project not found")
-    for k, v in data.model_dump(exclude_none=True).items():
+    payload = data.model_dump(exclude_none=True)
+    if "importance" in payload and payload["importance"] not in PROJECT_IMPORTANCE_VALUES:
+        raise HTTPException(400, f"importance must be one of {sorted(PROJECT_IMPORTANCE_VALUES)}")
+    for k, v in payload.items():
         setattr(p, k, v)
     db.commit()
     db.refresh(p)

@@ -55,12 +55,27 @@ export const createProject = (data: {
   notes?: string
   parent_id?: number
   deadline?: string
+  importance?: string
+  display_order?: number
 }): Promise<Project> => api.post('/projects', data).then((r) => r.data)
 
 export const updateProject = (
   id: number,
-  data: { name?: string; description?: string; notes?: string; parent_id?: number; deadline?: string },
+  data: {
+    name?: string
+    description?: string
+    notes?: string
+    parent_id?: number
+    deadline?: string
+    importance?: string
+    display_order?: number
+    board_hidden?: boolean
+  },
 ): Promise<Project> => api.put(`/projects/${id}`, data).then((r) => r.data)
+
+export const reorderProjects = (
+  items: { id: number; display_order: number }[],
+): Promise<void> => api.put('/projects/reorder', items).then((r) => r.data)
 
 export const deleteProject = (id: number): Promise<void> =>
   api.delete(`/projects/${id}`).then((r) => r.data)

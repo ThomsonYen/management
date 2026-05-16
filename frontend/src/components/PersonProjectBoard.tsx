@@ -1,20 +1,32 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ChevronDown, Eye, EyeOff, X } from 'lucide-react'
-import { fetchPersons, fetchProjects, updatePerson } from '../api'
+import { ChevronDown, Eye, EyeOff, GripVertical, X } from 'lucide-react'
+import {
+  fetchPersons,
+  fetchProjects,
+  reorderProjects,
+  updatePerson,
+  updateProject,
+} from '../api'
 import type { Person, Project } from '../types'
+import ProjectNotes from './ProjectNotes'
 
-const HIDDEN_STORAGE_KEY = 'peopleBoardHiddenProjectIds'
+const IMPORTANCE_CYCLE: Record<string, string> = {
+  low: 'medium',
+  medium: 'high',
+  high: 'low',
+}
 
-function loadHiddenIds(): number[] {
-  try {
-    const raw = localStorage.getItem(HIDDEN_STORAGE_KEY)
-    if (!raw) return []
-    const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed.filter((n): n is number => typeof n === 'number') : []
-  } catch {
-    return []
-  }
+const IMPORTANCE_DOT: Record<string, string> = {
+  low: 'bg-slate-300 dark:bg-slate-600',
+  medium: 'bg-blue-400',
+  high: 'bg-red-500',
+}
+
+const IMPORTANCE_RING: Record<string, string> = {
+  low: '',
+  medium: '',
+  high: 'ring-1 ring-red-200 dark:ring-red-900/40',
 }
 
 export default function PersonProjectBoard({
@@ -34,23 +46,11 @@ export default function PersonProjectBoard({
   })
 
   const [hoverCol, setHoverCol] = useState<number | null>(null)
-  const [hidden, setHidden] = useState<number[]>(loadHiddenIds)
   const [popoverOpen, setPopoverOpen] = useState(false)
   const popoverRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    localStorage.setItem(HIDDEN_STORAGE_KEY, JSON.stringify(hidden))
-  }, [hidden])
-
-  // Prune IDs for projects that no longer exist (deleted/archived).
-  useEffect(() => {
-    if (projects.length === 0) return
-    const validIds = new Set(projects.map((p) => p.id))
-    setHidden((prev) => {
-      const filtered = prev.filter((id) => validIds.has(id))
-      return filtered.length === prev.length ? prev : filtered
-    })
-  }, [projects])
+  const [openedProjectId, setOpenedProjectId] = useState<number | null>(null)
+  const [dragProjectId, setDragProjectId] = useState<number | null>(null)
+  const [dragOverProjectId, setDragOverProjectId] = useState<number | null>(null)
 
   useEffect(() => {
     if (!popoverOpen) return
@@ -87,20 +87,26 @@ export default function PersonProjectBoard({
     return map
   }, [persons, projects])
 
-  const hiddenSet = useMemo(() => new Set(hidden), [hidden])
   const visibleProjects = useMemo(
-    () => projects.filter((p) => !hiddenSet.has(p.id)),
-    [projects, hiddenSet],
+    () => projects.filter((p) => !p.board_hidden),
+    [projects],
   )
   const hiddenProjects = useMemo(
-    () => projects.filter((p) => hiddenSet.has(p.id)),
-    [projects, hiddenSet],
+    () => projects.filter((p) => p.board_hidden),
+    [projects],
   )
+
+  // Auto-close floating notes if its project goes away or is hidden.
+  useEffect(() => {
+    if (openedProjectId === null) return
+    const proj = projectById.get(openedProjectId)
+    if (!proj || proj.board_hidden) setOpenedProjectId(null)
+  }, [openedProjectId, projectById])
 
   const dragPerson =
     dragPersonId !== null ? persons.find((p) => p.id === dragPersonId) : null
 
-  const updateMutation = useMutation({
+  const personUpdate = useMutation({
     mutationFn: ({ id, project_ids }: { id: number; project_ids: number[] }) =>
       updatePerson(id, { project_ids }),
     onMutate: async ({ id, project_ids }) => {
@@ -125,32 +131,91 @@ export default function PersonProjectBoard({
     },
   })
 
-  const handleDrop = (projectId: number) => {
-    setHoverCol(null)
+  const projectUpdate = useMutation({
+    mutationFn: ({
+      id,
+      patch,
+    }: {
+      id: number
+      patch: Parameters<typeof updateProject>[1]
+    }) => updateProject(id, patch),
+    onMutate: async ({ id, patch }) => {
+      await queryClient.cancelQueries({ queryKey: ['projects'] })
+      const prev = queryClient.getQueryData<Project[]>(['projects'])
+      queryClient.setQueryData<Project[]>(['projects'], (old) =>
+        old?.map((p) => (p.id === id ? { ...p, ...patch } : p)),
+      )
+      return { prev }
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.prev) queryClient.setQueryData(['projects'], ctx.prev)
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['projects'] })
+      queryClient.invalidateQueries({ queryKey: ['projects-tree'] })
+    },
+  })
+
+  const reorderMutation = useMutation({
+    mutationFn: reorderProjects,
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['projects'] })
+      queryClient.invalidateQueries({ queryKey: ['projects-tree'] })
+    },
+  })
+
+  const handlePersonDrop = (projectId: number) => {
     if (!dragPerson) return
     if (dragPerson.project_ids.includes(projectId)) return
-    updateMutation.mutate({
+    personUpdate.mutate({
       id: dragPerson.id,
       project_ids: [...dragPerson.project_ids, projectId],
     })
   }
 
+  const commitReorder = (fromId: number, beforeId: number) => {
+    if (fromId === beforeId) return
+    const list = [...visibleProjects]
+    const fromIdx = list.findIndex((p) => p.id === fromId)
+    const toIdx = list.findIndex((p) => p.id === beforeId)
+    if (fromIdx === -1 || toIdx === -1) return
+    const [moved] = list.splice(fromIdx, 1)
+    const insertAt = fromIdx < toIdx ? toIdx - 1 : toIdx
+    list.splice(insertAt, 0, moved)
+    const combined = [...list, ...hiddenProjects]
+    const payload = combined.map((p, i) => ({ id: p.id, display_order: i + 1 }))
+    // Optimistic update
+    const orderMap = new Map(payload.map((it) => [it.id, it.display_order]))
+    queryClient.setQueryData<Project[]>(['projects'], (old) => {
+      if (!old) return old
+      return [...old]
+        .map((p) => ({ ...p, display_order: orderMap.get(p.id) ?? p.display_order }))
+        .sort((a, b) => (a.display_order - b.display_order) || (a.id - b.id))
+    })
+    reorderMutation.mutate(payload)
+  }
+
   const removeAssignment = (person: Person, projectId: number) => {
     const nextIds = person.project_ids.filter((id) => id !== projectId)
-    updateMutation.mutate({ id: person.id, project_ids: nextIds })
+    personUpdate.mutate({ id: person.id, project_ids: nextIds })
   }
 
   const hideProject = (projectId: number) => {
-    setHidden((prev) => (prev.includes(projectId) ? prev : [...prev, projectId]))
+    projectUpdate.mutate({ id: projectId, patch: { board_hidden: true } })
   }
 
   const unhideProject = (projectId: number) => {
-    setHidden((prev) => prev.filter((id) => id !== projectId))
+    projectUpdate.mutate({ id: projectId, patch: { board_hidden: false } })
+  }
+
+  const cycleImportance = (proj: Project) => {
+    const next = IMPORTANCE_CYCLE[proj.importance] ?? 'medium'
+    projectUpdate.mutate({ id: proj.id, patch: { importance: next } })
   }
 
   return (
     <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-      {hidden.length > 0 && (
+      {hiddenProjects.length > 0 && (
         <div className="px-3 pt-2 flex items-center justify-end flex-shrink-0 relative">
           <div ref={popoverRef} className="relative">
             <button
@@ -159,7 +224,7 @@ export default function PersonProjectBoard({
               title="Show hidden projects"
             >
               <EyeOff size={12} />
-              Hidden ({hidden.length})
+              Hidden ({hiddenProjects.length})
               <ChevronDown size={11} className={popoverOpen ? 'rotate-180 transition-transform' : 'transition-transform'} />
             </button>
             {popoverOpen && (
@@ -181,7 +246,9 @@ export default function PersonProjectBoard({
                   <div className="border-t border-slate-200 dark:border-slate-700 mt-1 pt-1">
                     <button
                       onClick={() => {
-                        setHidden([])
+                        hiddenProjects.forEach((p) =>
+                          projectUpdate.mutate({ id: p.id, patch: { board_hidden: false } }),
+                        )
                         setPopoverOpen(false)
                       }}
                       className="w-full text-left px-2 py-1 text-[11px] font-medium text-indigo-600 dark:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-700"
@@ -207,29 +274,75 @@ export default function PersonProjectBoard({
               onClick={() => setPopoverOpen(true)}
               className="text-xs font-medium not-italic text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300"
             >
-              Show hidden ({hidden.length})
+              Show hidden ({hiddenProjects.length})
             </button>
           </div>
         ) : (
-          <div className="grid grid-rows-2 grid-flow-col auto-cols-[180px] gap-2 h-full overflow-x-auto overflow-y-hidden">
+          <div className="grid grid-cols-[repeat(auto-fill,180px)] auto-rows-[minmax(140px,1fr)] gap-2 h-full overflow-y-auto overflow-x-hidden content-start">
             {visibleProjects.map((proj) => {
               const alreadyMember =
                 dragPerson?.project_ids.includes(proj.id) ?? false
-              const canDrop = dragPerson != null && !alreadyMember
+              const canDropPerson = dragPerson != null && !alreadyMember
+              const isReorderTarget =
+                dragProjectId !== null &&
+                dragProjectId !== proj.id &&
+                dragOverProjectId === proj.id
               return (
                 <BoardColumn
                   key={proj.id}
+                  project={proj}
                   title={projectLabel(proj)}
                   people={peopleByProject[proj.id]}
-                  isHover={hoverCol === proj.id}
-                  canDrop={canDrop}
-                  onDragOverColumn={() => setHoverCol(proj.id)}
-                  onDragLeaveColumn={() =>
+                  hoverPerson={hoverCol === proj.id && canDropPerson}
+                  isReorderTarget={isReorderTarget}
+                  isReorderSource={dragProjectId === proj.id}
+                  canDropPerson={canDropPerson}
+                  notesOpen={openedProjectId === proj.id}
+                  onDragOverColumn={(e) => {
+                    if (canDropPerson) {
+                      e.preventDefault()
+                      e.dataTransfer.dropEffect = 'move'
+                      setHoverCol(proj.id)
+                    } else if (
+                      dragProjectId !== null &&
+                      dragProjectId !== proj.id
+                    ) {
+                      e.preventDefault()
+                      e.dataTransfer.dropEffect = 'move'
+                      setDragOverProjectId(proj.id)
+                    }
+                  }}
+                  onDragLeaveColumn={() => {
                     setHoverCol((cur) => (cur === proj.id ? null : cur))
-                  }
-                  onDrop={() => handleDrop(proj.id)}
+                    setDragOverProjectId((cur) => (cur === proj.id ? null : cur))
+                  }}
+                  onDropColumn={(e) => {
+                    if (canDropPerson) {
+                      e.preventDefault()
+                      handlePersonDrop(proj.id)
+                      setHoverCol(null)
+                    } else if (
+                      dragProjectId !== null &&
+                      dragProjectId !== proj.id
+                    ) {
+                      e.preventDefault()
+                      commitReorder(dragProjectId, proj.id)
+                      setDragProjectId(null)
+                      setDragOverProjectId(null)
+                    }
+                  }}
+                  onReorderStart={() => setDragProjectId(proj.id)}
+                  onReorderEnd={() => {
+                    setDragProjectId(null)
+                    setDragOverProjectId(null)
+                  }}
                   onRemove={(person) => removeAssignment(person, proj.id)}
                   onHide={() => hideProject(proj.id)}
+                  onCycleImportance={() => cycleImportance(proj)}
+                  onOpenNotes={() =>
+                    setOpenedProjectId((cur) => (cur === proj.id ? null : proj.id))
+                  }
+                  onCloseNotes={() => setOpenedProjectId(null)}
                 />
               )
             })}
@@ -240,50 +353,128 @@ export default function PersonProjectBoard({
   )
 }
 
+function FloatingNotes({
+  project,
+  title,
+  onClose,
+}: {
+  project: Project
+  title: string
+  onClose: () => void
+}) {
+  return (
+    <div className="absolute top-0 left-full ml-2 w-[360px] max-w-[80vw] max-h-[60vh] z-30 flex flex-col bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700">
+      <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-slate-200 dark:border-slate-700">
+        <h3
+          className="text-sm font-semibold text-slate-800 dark:text-slate-100 truncate"
+          title={title}
+        >
+          {title}
+        </h3>
+        <button
+          onClick={onClose}
+          title="Close"
+          className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
+        >
+          <X size={14} />
+        </button>
+      </div>
+      <div className="flex-1 overflow-y-auto p-2">
+        <ProjectNotes project={project} />
+      </div>
+    </div>
+  )
+}
+
 function BoardColumn({
+  project,
   title,
   people,
-  isHover,
-  canDrop,
+  hoverPerson,
+  isReorderTarget,
+  isReorderSource,
+  canDropPerson,
+  notesOpen,
   onDragOverColumn,
   onDragLeaveColumn,
-  onDrop,
+  onDropColumn,
+  onReorderStart,
+  onReorderEnd,
   onRemove,
   onHide,
+  onCycleImportance,
+  onOpenNotes,
+  onCloseNotes,
 }: {
+  project: Project
   title: string
   people: Person[]
-  isHover: boolean
-  canDrop: boolean
-  onDragOverColumn: () => void
+  hoverPerson: boolean
+  isReorderTarget: boolean
+  isReorderSource: boolean
+  canDropPerson: boolean
+  notesOpen: boolean
+  onDragOverColumn: (e: React.DragEvent) => void
   onDragLeaveColumn: () => void
-  onDrop: () => void
+  onDropColumn: (e: React.DragEvent) => void
+  onReorderStart: () => void
+  onReorderEnd: () => void
   onRemove: (person: Person) => void
   onHide: () => void
+  onCycleImportance: () => void
+  onOpenNotes: () => void
+  onCloseNotes: () => void
 }) {
   return (
     <div
-      onDragOver={(e) => {
-        if (!canDrop) return
-        e.preventDefault()
-        e.dataTransfer.dropEffect = 'move'
-        onDragOverColumn()
-      }}
+      onDragOver={onDragOverColumn}
       onDragLeave={onDragLeaveColumn}
-      onDrop={(e) => {
-        if (!canDrop) return
-        e.preventDefault()
-        onDrop()
-      }}
-      className={`group flex flex-col rounded-lg border overflow-hidden transition-colors min-h-0 ${
-        isHover && canDrop
+      onDrop={onDropColumn}
+      className={`group relative flex flex-col rounded-lg border transition-colors min-h-0 ${IMPORTANCE_RING[project.importance] ?? ''} ${
+        hoverPerson && canDropPerson
           ? 'border-indigo-400 bg-indigo-50/60 dark:bg-indigo-900/20'
+          : isReorderTarget
+          ? 'border-indigo-500 border-dashed bg-indigo-50/40 dark:bg-indigo-900/10'
           : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800'
-      }`}
+      } ${isReorderSource ? 'opacity-50' : ''}`}
     >
-      <div className="px-2 py-1 border-b border-slate-200 dark:border-slate-700 flex-shrink-0">
-        <div className="flex items-start justify-between gap-1">
-          <div className="min-w-0">
+      <div
+        draggable
+        onDragStart={(e) => {
+          onReorderStart()
+          e.dataTransfer.effectAllowed = 'move'
+        }}
+        onDragEnd={onReorderEnd}
+        className="px-2 py-1 border-b border-slate-200 dark:border-slate-700 flex-shrink-0 cursor-grab active:cursor-grabbing"
+        title="Drag to reorder"
+      >
+        <div className="flex items-start gap-1">
+          <GripVertical
+            size={10}
+            className="text-slate-300 dark:text-slate-600 mt-0.5 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+          />
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              onCycleImportance()
+            }}
+            title={`Importance: ${project.importance} (click to cycle)`}
+            className={`w-2 h-2 rounded-full flex-shrink-0 mt-1.5 ${IMPORTANCE_DOT[project.importance] ?? IMPORTANCE_DOT.medium}`}
+            draggable={false}
+            onDragStart={(e) => e.preventDefault()}
+          />
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              onOpenNotes()
+            }}
+            title="Open notes"
+            className="min-w-0 flex-1 text-left rounded hover:bg-slate-50 dark:hover:bg-slate-700/40 -mx-1 px-1 py-0.5 transition-colors"
+            draggable={false}
+            onDragStart={(e) => e.preventDefault()}
+          >
             <h3
               className="text-[11px] font-semibold text-slate-700 dark:text-slate-200 truncate leading-tight"
               title={title}
@@ -293,11 +484,16 @@ function BoardColumn({
             <p className="text-[9px] text-slate-400 dark:text-slate-500 leading-tight">
               {people.length} {people.length === 1 ? 'person' : 'people'}
             </p>
-          </div>
+          </button>
           <button
-            onClick={onHide}
+            onClick={(e) => {
+              e.stopPropagation()
+              onHide()
+            }}
             title="Hide from board"
             className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-opacity flex-shrink-0 mt-0.5"
+            draggable={false}
+            onDragStart={(e) => e.preventDefault()}
           >
             <EyeOff size={11} />
           </button>
@@ -331,6 +527,9 @@ function BoardColumn({
           ))
         )}
       </div>
+      {notesOpen && (
+        <FloatingNotes project={project} title={title} onClose={onCloseNotes} />
+      )}
     </div>
   )
 }
