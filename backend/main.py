@@ -408,6 +408,53 @@ with engine.connect() as _conn:
         _conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_notes_mgmt_id ON notes(mgmt_id)"))
         _conn.execute(text("CREATE INDEX IF NOT EXISTS ix_notes_vault_id ON notes(vault_id)"))
         _conn.commit()
+    # Drop legacy UNIQUE/NOT NULL on notes.filename — filenames may collide across vaults
+    # under Phase 4; relative_path (scoped by vault_id) is the authoritative identifier.
+    _notes_ddl = _conn.execute(
+        text("SELECT sql FROM sqlite_master WHERE type='table' AND name='notes'")
+    ).scalar()
+    if _notes_ddl and "UNIQUE (filename)" in _notes_ddl:
+        _conn.exec_driver_sql("PRAGMA foreign_keys=OFF")
+        _conn.exec_driver_sql("BEGIN")
+        _conn.exec_driver_sql(
+            """
+            CREATE TABLE notes_new (
+                id INTEGER NOT NULL PRIMARY KEY,
+                title VARCHAR NOT NULL,
+                filename VARCHAR,
+                kind VARCHAR NOT NULL,
+                created_at VARCHAR,
+                updated_at VARCHAR,
+                hidden BOOLEAN,
+                vault_id INTEGER REFERENCES vaults(id),
+                relative_path TEXT,
+                mgmt_id TEXT,
+                mtime REAL,
+                size INTEGER,
+                last_indexed_at TEXT
+            )
+            """
+        )
+        _conn.exec_driver_sql(
+            """
+            INSERT INTO notes_new (
+                id, title, filename, kind, created_at, updated_at, hidden,
+                vault_id, relative_path, mgmt_id, mtime, size, last_indexed_at
+            )
+            SELECT
+                id, title, filename, kind, created_at, updated_at, hidden,
+                vault_id, relative_path, mgmt_id, mtime, size, last_indexed_at
+            FROM notes
+            """
+        )
+        _conn.exec_driver_sql("DROP TABLE notes")
+        _conn.exec_driver_sql("ALTER TABLE notes_new RENAME TO notes")
+        _conn.exec_driver_sql("CREATE INDEX ix_notes_id ON notes (id)")
+        _conn.exec_driver_sql("CREATE INDEX ix_notes_kind ON notes (kind)")
+        _conn.exec_driver_sql("CREATE UNIQUE INDEX ix_notes_mgmt_id ON notes(mgmt_id)")
+        _conn.exec_driver_sql("CREATE INDEX ix_notes_vault_id ON notes(vault_id)")
+        _conn.exec_driver_sql("COMMIT")
+        _conn.exec_driver_sql("PRAGMA foreign_keys=ON")
 
 
 def get_db():
