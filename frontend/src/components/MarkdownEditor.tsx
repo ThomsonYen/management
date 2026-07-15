@@ -534,6 +534,14 @@ export default function MarkdownEditor({
       return
     }
     if (value === lastValueRef.current) return
+    // If the user is actively editing this instance, the DOM holds the freshest
+    // content — overwriting it would jump the cursor and clobber in-flight typing.
+    // Acknowledge that we've "seen" the incoming value so we don't re-check next
+    // render, but leave the DOM alone.
+    if (host.contains(document.activeElement)) {
+      lastValueRef.current = value
+      return
+    }
     renderDOM(host, value)
     lastValueRef.current = value
     resetHistory(value)
@@ -662,6 +670,25 @@ export default function MarkdownEditor({
     if ((e.metaKey || e.ctrlKey) && e.key === 's') {
       e.preventDefault()
       syncFromDOM({ saveImmediate: true })
+      return
+    }
+
+    // Cmd/Ctrl+T → convert current line to todo (toggles done if already a todo)
+    if ((e.metaKey || e.ctrlKey) && (e.key === 't' || e.key === 'T')) {
+      e.preventDefault()
+      const info = getCaretInfo(host)
+      if (info) {
+        const cur = readLineEl(info.lineEl)
+        if (cur.type === 'todo') {
+          toggleCheckbox(info.lineEl)
+        } else {
+          const replacement = buildLineEl({ type: 'todo', indent: cur.indent, text: cur.text, done: false })
+          info.lineEl.replaceWith(replacement)
+          const t = findTextEl(replacement)
+          if (t) setCaretIn(t, info.offset)
+        }
+        syncFromDOM()
+      }
       return
     }
 

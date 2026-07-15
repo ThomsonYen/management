@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useMutation } from '@tanstack/react-query'
 import MDEditor from '@uiw/react-md-editor'
 import { Calendar, ChevronDown, ChevronRight, Maximize2, Minimize2 } from 'lucide-react'
 import { fetchDailyGoals, upsertDailyGoal } from '../api'
@@ -14,8 +14,12 @@ import { createMdEditorKeyHandler } from '../utils/mdEditorKeyHandler'
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 function addDays(dateStr: string, days: number): string {
-  const d = new Date(dateStr + 'T00:00:00')
-  d.setDate(d.getDate() + days)
+  // Parse and serialize in UTC consistently. Using local-time getters/setters here
+  // but toISOString() (UTC) below causes the day increment to cancel out in
+  // timezones east of UTC (local midnight is the previous UTC day), which makes
+  // dateRange() loop forever and freezes the page.
+  const d = new Date(dateStr + 'T00:00:00Z')
+  d.setUTCDate(d.getUTCDate() + days)
   return d.toISOString().slice(0, 10)
 }
 
@@ -163,7 +167,6 @@ export default function WeeklyGoalsPage() {
   const { bindings } = useHotkeys()
   const editorKeyDown = useMemo(() => createMdEditorKeyHandler(bindings), [bindings])
   const todayStr = getTodayString(timezone)
-  const queryClient = useQueryClient()
 
   const [showEditor, setShowEditor] = useState(() => {
     const saved = localStorage.getItem('goalShowEditor')
@@ -217,22 +220,32 @@ export default function WeeklyGoalsPage() {
   }, [goals, dates])
 
   // Save mutation: diff each day against last known server value.
+  // We don't invalidate the query on success — the local dayContent is the source of
+  // truth while editing, and a refetch would stomp on in-flight keystrokes (causing
+  // the cursor to jump and recent characters to be lost). Instead we update
+  // lastServerGoals.current with exactly what was saved.
   const saveMutation = useMutation({
     mutationFn: async () => {
+      const saved: Array<[string, string]> = []
       const promises: Promise<DailyGoal>[] = []
       const cur = dayContentRef.current
       for (const date of datesRef.current) {
         const newContent = cur.get(date) || ''
         const oldContent = lastServerGoals.current.get(date) || ''
         if (newContent !== oldContent) {
+          saved.push([date, newContent])
           promises.push(upsertDailyGoal(date, newContent))
         }
       }
       await Promise.all(promises)
+      return saved
     },
-    onSuccess: () => {
+    onSuccess: (saved) => {
+      for (const [date, content] of saved) {
+        if (content) lastServerGoals.current.set(date, content)
+        else lastServerGoals.current.delete(date)
+      }
       setDirty(false)
-      queryClient.invalidateQueries({ queryKey: ['daily-goals'] })
     },
   })
 
