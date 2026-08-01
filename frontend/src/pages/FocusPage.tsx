@@ -427,35 +427,28 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  )
 
  return (
- <div className="p-6 flex gap-6">
- {/* Left sidebar: header, controls, metadata */}
- <div className="w-52 flex-shrink-0 sticky top-6 self-start space-y-5">
- <div>
- <h2 className="text-2xl font-bold text-fg">Focus</h2>
- <p className="text-xs text-fg-muted mt-1 leading-relaxed">
- Drag cards to reorder. Drag any todo onto "Focus" in the sidebar to add it here.
- </p>
- </div>
+ <div className="p-6 flex flex-col gap-4">
+ {/* Compact toolbar. pl-6 aligns the title with the Must Do card's internal text (which has pl-6 after the amber stripe). */}
+ <div className="w-full max-w-4xl mx-auto xl:max-w-none xl:mx-0 flex items-center gap-3 flex-wrap pl-6 pr-1">
+ <h2 className="text-lg font-semibold text-fg tracking-tight">Focus</h2>
+ <span className="text-xs text-fg-muted tabular-nums">
+ {filtered.length} todo{filtered.length !== 1 ? 's' : ''}
+ </span>
+ <div className="flex-1 min-w-0" />
 
- <p className="text-sm text-fg-muted">
- {filtered.length} focused todo{filtered.length !== 1 ? 's' : ''}
- </p>
-
+ {/* Grouped options container — background box makes their locations clear */}
+ <div className="flex items-center gap-0.5 bg-inset rounded-lg p-1 border border-border-subtle">
  {focusedProjects.length > 1 && (
- <div>
- <label className="text-xs font-semibold text-fg-muted uppercase tracking-wide block mb-1.5">
- Filter by project
- </label>
+ <>
+ <div className="flex items-center">
  <select
  value={selectedProject}
  onChange={(e) => { setSelectedProject(e.target.value); localStorage.setItem('focusSelectedProject', e.target.value) }}
- className="w-full border border-border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+ className="bg-transparent hover:bg-surface border border-transparent rounded-md px-2 py-1 text-sm text-fg-muted hover:text-fg cursor-pointer focus:outline-none focus:ring-1 focus:ring-accent transition-colors"
  >
  <option value="">All projects</option>
  {focusedProjects.map((p) => (
- <option key={p.id} value={p.id}>
- {p.name}
- </option>
+ <option key={p.id} value={p.id}>{p.name}</option>
  ))}
  {todos.some((t) => !t.project_id) && (
  <option value="none">No Project</option>
@@ -464,18 +457,17 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  {selectedProject && (
  <button
  onClick={() => { setSelectedProject(''); localStorage.removeItem('focusSelectedProject') }}
- className="text-xs text-accent hover:text-accent-fg font-medium mt-1"
+ className="text-xs text-fg-subtle hover:text-danger font-medium px-1 transition-colors"
+ title="Clear filter"
  >
- Clear filter
+ ✕
  </button>
  )}
  </div>
+ <div className="w-px h-4 bg-border-subtle mx-0.5" />
+ </>
  )}
 
- <div>
- <label className="text-xs font-semibold text-fg-muted uppercase tracking-wide block mb-1.5">
- Group by
- </label>
  <select
  value={groupBy}
  onChange={(e) => {
@@ -483,19 +475,17 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  setGroupBy(v)
  localStorage.setItem('focusGroupBy', v)
  }}
- className="w-full border border-border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+ className="bg-transparent hover:bg-surface border border-transparent rounded-md px-2 py-1 text-sm text-fg-muted hover:text-fg cursor-pointer focus:outline-none focus:ring-1 focus:ring-accent transition-colors"
  >
- <option value="none">None</option>
- <option value="project">Project</option>
- <option value="user">User</option>
- <option value="both">Project &amp; User</option>
+ <option value="none">No grouping</option>
+ <option value="project">Group: Project</option>
+ <option value="user">Group: User</option>
+ <option value="both">Group: Project &amp; User</option>
  </select>
- </div>
 
- <div className="relative">
- <label className="text-xs font-semibold text-fg-muted uppercase tracking-wide block mb-1.5">
- Add existing todo
- </label>
+ <div className="w-px h-4 bg-border-subtle mx-0.5" />
+
+ <div className="relative w-48">
  <input
  type="text"
  value={focusSearch}
@@ -511,8 +501,8 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  setFocusSearchOpen(false)
  }
  }}
- placeholder="Search todos..."
- className="w-full border border-border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent placeholder:text-fg-faint dark:placeholder:text-fg-faint"
+ placeholder="＋ Add existing todo…"
+ className="w-full bg-transparent hover:bg-surface focus:bg-surface border border-transparent focus:border-border rounded-md px-2 py-1 text-sm text-fg placeholder:text-fg-subtle focus:outline-none focus:ring-1 focus:ring-accent transition-colors"
  />
  {focusSearchOpen && focusSearch.trim() && (() => {
  const q = focusSearch.trim().toLowerCase()
@@ -520,12 +510,12 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  (t) => !t.is_focused && t.title.toLowerCase().includes(q)
  ).slice(0, 8)
  if (matches.length === 0) return (
- <div className="absolute left-0 right-0 top-full mt-1 z-20 bg-surface border border-border rounded-lg shadow-lg px-3 py-2 text-xs text-fg-subtle">
+ <div className="absolute right-0 top-full mt-1 z-20 bg-surface border border-border rounded-lg shadow-lg px-3 py-2 text-xs text-fg-subtle w-64">
  No matching todos
  </div>
  )
  return (
- <div className="absolute left-0 right-0 top-full mt-1 z-20 bg-surface border border-border rounded-lg shadow-lg max-h-60 overflow-y-auto">
+ <div className="absolute right-0 top-full mt-1 z-20 bg-surface border border-border rounded-lg shadow-lg max-h-60 overflow-y-auto w-64">
  {matches.map((t) => (
  <button
  key={t.id}
@@ -551,9 +541,10 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  })()}
  </div>
  </div>
+ </div>
 
- {/* Right content area — stacked on narrow screens; on xl+ splits into center (Must Do) and right (Focus tasks, scrollable) */}
- <div className="flex-1 min-w-0 flex flex-col xl:flex-row xl:gap-6 xl:items-start">
+ {/* Content — stacked on narrow screens; on xl+ splits into center (Must Do) and right (Focus tasks, scrollable) */}
+ <div className="flex flex-col xl:flex-row xl:gap-6 xl:items-start min-w-0">
  {/* Must Do column — center on xl+ */}
  <div className="w-full xl:flex-1 xl:min-w-0">
  <div className="max-w-4xl mx-auto xl:mx-0">
