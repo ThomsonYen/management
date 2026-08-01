@@ -355,9 +355,36 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
  {todo.title}
  </h3>
  )}
+ </div>
 
- {/* Info row */}
- <div className="flex flex-wrap gap-3 mt-1.5 text-xs text-fg-muted">
+ {/* Actions */}
+ <div className="flex-shrink-0 flex items-center gap-2">
+ {extraActions}
+ {onOpenDetail && (
+ <button
+ onClick={onOpenDetail}
+ title="Open todo page"
+ className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium text-accent bg-accent-1 hover:bg-accent-2 border border-accent-2 transition-colors"
+ >
+ <span>↗</span> Open
+ </button>
+ )}
+ <button
+ onClick={() => setExpanded((e) => !e)}
+ title={expanded ? 'Collapse' : 'Expand'}
+ className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium text-fg-muted bg-inset hover:bg-inset border border-border transition-colors select-none"
+ >
+ {totalSubs > 0 && (
+ <span className="text-fg-subtle">{doneSubs}/{totalSubs}</span>
+ )}
+ <span>{expanded ? '▲' : '▼'}</span>
+ </button>
+ </div>
+ </div>
+
+ {/* Info row (spans full card width so fields like "1h" aren't
+   squeezed by the actions column on the right) */}
+ <div className="flex flex-wrap gap-3 mt-1.5 text-xs text-fg-muted pl-[52px]">
  {/* Assignee */}
  {editingField === 'assignee_id' ? (
  <select
@@ -451,32 +478,6 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
  <span>⏱</span> {todo.estimated_hours}h
  </span>
  )}
- </div>
- </div>
-
- {/* Actions */}
- <div className="flex-shrink-0 flex items-center gap-2">
- {extraActions}
- {onOpenDetail && (
- <button
- onClick={onOpenDetail}
- title="Open todo page"
- className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium text-accent bg-accent-1 hover:bg-accent-2 border border-accent-2 transition-colors"
- >
- <span>↗</span> Open
- </button>
- )}
- <button
- onClick={() => setExpanded((e) => !e)}
- title={expanded ? 'Collapse' : 'Expand'}
- className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium text-fg-muted bg-inset hover:bg-inset border border-border transition-colors select-none"
- >
- {totalSubs > 0 && (
- <span className="text-fg-subtle">{doneSubs}/{totalSubs}</span>
- )}
- <span>{expanded ? '▲' : '▼'}</span>
- </button>
- </div>
  </div>
 
  {/* Sub-todo progress bar */}
