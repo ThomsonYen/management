@@ -428,19 +428,11 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
 
  return (
  <div className="p-6 flex flex-col gap-4">
- {/* Compact toolbar. pl-6 aligns the title with the Must Do card's internal text (which has pl-6 after the amber stripe). */}
- <div className="w-full max-w-4xl mx-auto xl:max-w-none xl:mx-0 flex items-center gap-3 pl-6 pr-1">
- <h2 className="text-lg font-semibold text-fg tracking-tight">Focus</h2>
- <span className="text-xs text-fg-muted tabular-nums">
- {filtered.length} todo{filtered.length !== 1 ? 's' : ''}
- </span>
- </div>
-
  {/* Content — stacked on narrow screens; on xl+ splits into center (Must Do) and right (Focus tasks, scrollable) */}
  <div className="flex flex-col xl:flex-row xl:gap-6 xl:items-start min-w-0">
  {/* Must Do column — center on xl+ */}
  <div className="w-full xl:flex-1 xl:min-w-0">
- <div className="max-w-4xl mx-auto xl:mx-0">
+ <div className="max-w-4xl mx-auto">
 
  {/* Must Do Today — elevated importance:
       left amber stripe + subtle header tint + stronger shadow. */}
