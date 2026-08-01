@@ -70,17 +70,25 @@ module.exports = {
         popover: '0 0 0 1px rgb(0 0 0 / 0.06), 0 8px 24px rgb(0 0 0 / 0.12)',
         overlay: '0 0 0 1px rgb(0 0 0 / 0.06), 0 24px 48px rgb(0 0 0 / 0.16)',
       },
-      fontSize: {
-        '2xs': ['10px', '14px'],
-        xs:    ['11px', '16px'],
-        sm:    ['13px', '18px'],
-        base:  ['14px', '20px'],
-        md:    ['15px', '22px'],
-        lg:    ['16px', '24px'],
-        xl:    ['18px', '26px'],
-        '2xl': ['22px', '28px'],
-        '3xl': ['28px', '34px'],
-      },
+      fontSize: (() => {
+        // Every font-size and line-height scales with --font-scale (default 1).
+        // Set --font-scale on :root to shrink/enlarge all typography globally.
+        const scale = (px, lh) => [
+          `calc(${px}px * var(--font-scale, 1))`,
+          `calc(${lh}px * var(--font-scale, 1))`,
+        ]
+        return {
+          '2xs': scale(10, 14),
+          xs:    scale(11, 16),
+          sm:    scale(13, 18),
+          base:  scale(14, 20),
+          md:    scale(15, 22),
+          lg:    scale(16, 24),
+          xl:    scale(18, 26),
+          '2xl': scale(22, 28),
+          '3xl': scale(28, 34),
+        }
+      })(),
       fontFamily: {
         sans: ['var(--font-sans)', 'ui-sans-serif', 'system-ui', 'sans-serif'],
         mono: ['var(--font-mono)', 'ui-monospace', 'monospace'],

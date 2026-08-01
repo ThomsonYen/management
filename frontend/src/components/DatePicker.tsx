@@ -71,7 +71,7 @@ export default function DatePicker({
  const triggerBase =
  variant === 'input'
  ? `w-full text-left px-3 py-2 text-sm border border-border rounded-lg bg-surface focus:outline-none focus:ring-2 focus:ring-accent ${!value ? 'text-fg-subtle' : 'text-fg'}`
- : 'font-bold text-xs hover:text-accent dark:hover:text-accent dark:text-fg-faint transition-colors'
+ : 'font-bold text-xs hover:text-accent dark:hover:text-accent dark:text-fg transition-colors'
 
  return (
  <div className={`relative inline-block ${className}`}>

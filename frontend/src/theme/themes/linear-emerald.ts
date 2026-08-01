@@ -14,14 +14,14 @@ export const linearEmerald: ThemePreset = {
       bgInset:       '245 245 244',
 
       fgDefault:     '24 24 27',
-      fgMuted:       '82 82 91',
-      fgSubtle:      '113 113 122',
-      fgFaint:       '161 161 170',
+      fgMuted:       '75 75 84',
+      fgSubtle:      '100 100 110',
+      fgFaint:       '138 138 148',
       fgOnAccent:    '255 255 255',
 
-      borderDefault: '228 228 231',
-      borderStrong:  '212 212 216',
-      borderSubtle:  '244 244 245',
+      borderDefault: '220 220 224',
+      borderStrong:  '200 200 205',
+      borderSubtle:  '232 232 235',
 
       accent1:       '236 253 245',
       accent2:       '209 250 229',
@@ -48,15 +48,15 @@ export const linearEmerald: ThemePreset = {
       bgOverlay:     '36 36 40',
       bgInset:       '15 15 17',
 
-      fgDefault:     '237 237 237',
-      fgMuted:       '175 175 180',
-      fgSubtle:      '130 130 138',
-      fgFaint:       '90 90 96',
+      fgDefault:     '240 240 240',
+      fgMuted:       '185 185 190',
+      fgSubtle:      '150 150 158',
+      fgFaint:       '122 122 130',
       fgOnAccent:    '8 15 12',
 
-      borderDefault: '38 38 42',
-      borderStrong:  '55 55 60',
-      borderSubtle:  '30 30 33',
+      borderDefault: '52 52 56',
+      borderStrong:  '75 75 80',
+      borderSubtle:  '42 42 46',
 
       accent1:       '6 46 33',
       accent2:       '8 63 45',

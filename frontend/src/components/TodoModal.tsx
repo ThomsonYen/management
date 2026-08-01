@@ -167,7 +167,7 @@ export default function TodoModal({ todo, onClose, invalidateKeys, defaultAssign
  </h2>
  <button
  onClick={onClose}
- className="text-fg-subtle hover:text-fg-muted dark:hover:text-fg-faint text-xl font-bold transition-colors"
+ className="text-fg-subtle hover:text-fg-muted dark:hover:text-fg text-xl font-bold transition-colors"
  >
  ×
  </button>
@@ -326,7 +326,7 @@ export default function TodoModal({ todo, onClose, invalidateKeys, defaultAssign
  onChange={() => toggleBlocker(t.id)}
  className="accent-accent"
  />
- <span className="text-sm text-fg dark:text-fg-faint">
+ <span className="text-sm text-fg">
  #{t.id} — {t.title}
  </span>
  </label>
@@ -362,7 +362,7 @@ export default function TodoModal({ todo, onClose, invalidateKeys, defaultAssign
  />
  <span
  className={`flex-1 text-sm ${
- s.done ? 'line-through text-fg-subtle' : 'text-fg dark:text-fg-faint'
+ s.done ? 'line-through text-fg-subtle' : 'text-fg'
  }`}
  >
  {s.title}
@@ -400,7 +400,7 @@ export default function TodoModal({ todo, onClose, invalidateKeys, defaultAssign
  <button
  type="button"
  onClick={handleAddSubTodo}
- className="px-3 py-1.5 bg-inset text-fg dark:text-fg-faint text-sm font-medium rounded-lg hover:bg-inset transition-colors"
+ className="px-3 py-1.5 bg-inset text-fg text-sm font-medium rounded-lg hover:bg-inset transition-colors"
  >
  Add
  </button>
@@ -423,7 +423,7 @@ export default function TodoModal({ todo, onClose, invalidateKeys, defaultAssign
  <button
  type="button"
  onClick={onClose}
- className="px-5 py-2.5 bg-inset text-fg dark:text-fg-faint rounded-lg font-semibold text-sm hover:bg-inset transition-colors"
+ className="px-5 py-2.5 bg-inset text-fg rounded-lg font-semibold text-sm hover:bg-inset transition-colors"
  >
  Cancel
  </button>

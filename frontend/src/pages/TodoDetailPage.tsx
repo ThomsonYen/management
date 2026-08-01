@@ -82,7 +82,7 @@ function BlockerPicker({
  className="px-3 py-2 text-sm cursor-pointer hover:bg-accent-1 dark:hover:bg-accent-1 flex items-center gap-2"
  >
  <span className="text-fg-subtle text-xs flex-shrink-0">#{t.id}</span>
- <span className="flex-1 text-fg dark:text-fg-faint truncate">{t.title}</span>
+ <span className="flex-1 text-fg truncate">{t.title}</span>
  <span className="text-xs text-fg-subtle capitalize flex-shrink-0">{t.status}</span>
  </li>
  ))}
@@ -439,7 +439,7 @@ export default function TodoDetailPage() {
  }
  }}
  title="Copy todo as markdown"
- className={`${ACTION_BASE} bg-inset text-fg-muted border-border hover:bg-inset dark:text-fg-faint `}
+ className={`${ACTION_BASE} bg-inset text-fg-muted border-border hover:bg-inset dark:text-fg `}
  >
  Copy md
  </button>
@@ -563,13 +563,13 @@ export default function TodoDetailPage() {
  }}
  onClick={(e) => e.stopPropagation()}
  rows={4}
- className="text-sm text-fg dark:text-fg-faint w-full bg-transparent border border-accent-2 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-accent resize-none leading-relaxed"
+ className="text-sm text-fg w-full bg-transparent border border-accent-2 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-accent resize-none leading-relaxed"
  />
  ) : (
  <p
  onClick={(e) => startEdit(e, 'description', todo.description || '')}
  title="Click to edit description"
- className="text-sm text-fg dark:text-fg-faint whitespace-pre-wrap leading-relaxed cursor-pointer hover:text-accent transition-colors min-h-[1.5rem]"
+ className="text-sm text-fg whitespace-pre-wrap leading-relaxed cursor-pointer hover:text-accent transition-colors min-h-[1.5rem]"
  >
  {todo.description || <em className="text-fg-faint dark:text-fg-muted not-italic">+ Add a description...</em>}
  </p>
@@ -592,7 +592,7 @@ export default function TodoDetailPage() {
  {/* Subtasks card */}
  <div className="bg-surface rounded-xl border border-border shadow-sm p-5 mb-4">
  <div className="flex items-center justify-between mb-3">
- <h2 className="text-sm font-semibold text-fg dark:text-fg-faint uppercase tracking-wide">
+ <h2 className="text-sm font-semibold text-fg uppercase tracking-wide">
  Subtasks
  </h2>
  {totalSubs > 0 && (
@@ -654,14 +654,14 @@ export default function TodoDetailPage() {
  if (e.key === 'Escape') setEditingSubId(null)
  }}
  onClick={(e) => e.stopPropagation()}
- className="flex-1 text-sm text-fg dark:text-fg-faint bg-transparent border-b border-accent focus:outline-none"
+ className="flex-1 text-sm text-fg bg-transparent border-b border-accent focus:outline-none"
  />
  ) : (
  <span
  onClick={() => { setEditingSubId(s.id); setEditingSubTitle(s.title) }}
  title="Click to edit"
  className={`flex-1 text-sm cursor-pointer hover:text-accent transition-colors ${
- s.done ? 'line-through text-fg-subtle' : 'text-fg dark:text-fg-faint'
+ s.done ? 'line-through text-fg-subtle' : 'text-fg'
  }`}
  >
  {s.title}
@@ -708,7 +708,7 @@ export default function TodoDetailPage() {
 
  {/* Blocked by */}
  <div className="bg-surface rounded-xl border border-border shadow-sm p-5 mb-4">
- <h2 className="text-sm font-semibold text-fg dark:text-fg-faint uppercase tracking-wide mb-3">
+ <h2 className="text-sm font-semibold text-fg uppercase tracking-wide mb-3">
  Blocked by
  </h2>
  {blockers.length > 0 && (
@@ -747,7 +747,7 @@ export default function TodoDetailPage() {
 
  {/* Blocking others */}
  <div className="bg-surface rounded-xl border border-border shadow-sm p-5 mb-4">
- <h2 className="text-sm font-semibold text-fg dark:text-fg-faint uppercase tracking-wide mb-3">
+ <h2 className="text-sm font-semibold text-fg uppercase tracking-wide mb-3">
  Blocking
  </h2>
  {blocking.length > 0 && (

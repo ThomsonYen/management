@@ -321,7 +321,7 @@ export default function ProgressPage() {
  <div className="bg-surface rounded-xl border border-border p-4 mb-6">
  <div className="flex items-center justify-between mb-4">
  <div className="flex items-center gap-3">
- <h2 className="text-sm font-semibold text-fg dark:text-fg-faint">Hours Trend</h2>
+ <h2 className="text-sm font-semibold text-fg">Hours Trend</h2>
  <select
  value={chartPersonId ?? ''}
  onChange={(e) => {
@@ -426,7 +426,7 @@ export default function ProgressPage() {
  <table className="w-full text-sm">
  <thead>
  <tr className="border-b border-border">
- <th className="sticky left-0 z-10 bg-app text-left px-4 py-3 font-semibold text-fg dark:text-fg-faint min-w-[140px]">
+ <th className="sticky left-0 z-10 bg-app text-left px-4 py-3 font-semibold text-fg min-w-[140px]">
  Person
  </th>
  {visiblePeriods.map((period) => (
@@ -437,7 +437,7 @@ export default function ProgressPage() {
  {formatPeriodLabel(period, granularity)}
  </th>
  ))}
- <th className="sticky right-0 z-10 bg-app px-4 py-3 font-semibold text-fg dark:text-fg-faint text-center min-w-[90px]">
+ <th className="sticky right-0 z-10 bg-app px-4 py-3 font-semibold text-fg text-center min-w-[90px]">
  Total
  </th>
  </tr>
@@ -487,14 +487,14 @@ export default function ProgressPage() {
  })}
  {/* Column totals row */}
  <tr className="bg-inset border-t border-border">
- <td className="sticky left-0 z-10 bg-inset px-4 py-3 font-semibold text-fg dark:text-fg-faint">
+ <td className="sticky left-0 z-10 bg-inset px-4 py-3 font-semibold text-fg">
  Total
  </td>
  {visiblePeriods.map((period) => {
  const col = columnTotals.get(period)!
  return (
  <td key={period} className="px-3 py-3 text-center font-semibold">
- <span className="text-fg dark:text-fg-faint">{col.hours.toFixed(1)}h</span>
+ <span className="text-fg">{col.hours.toFixed(1)}h</span>
  <span className="text-fg-subtle text-xs ml-1">
  {col.count}
  </span>

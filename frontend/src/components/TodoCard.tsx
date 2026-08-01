@@ -72,7 +72,7 @@ function BlockerPicker({
  className="px-3 py-2 text-sm cursor-pointer hover:bg-success-bg flex items-center gap-2 border-b border-border-subtle"
  >
  <span className="text-success text-xs font-semibold flex-shrink-0">+ Create</span>
- <span className="flex-1 text-fg dark:text-fg-faint truncate">&ldquo;{search.trim()}&rdquo;</span>
+ <span className="flex-1 text-fg truncate">&ldquo;{search.trim()}&rdquo;</span>
  </li>
  )}
  {filtered.map((t) => (
@@ -82,7 +82,7 @@ function BlockerPicker({
  className="px-3 py-2 text-sm cursor-pointer hover:bg-accent-1 dark:hover:bg-accent-1 flex items-center gap-2"
  >
  <span className="text-fg-subtle text-xs flex-shrink-0">#{t.id}</span>
- <span className="flex-1 text-fg dark:text-fg-faint truncate">{t.title}</span>
+ <span className="flex-1 text-fg truncate">{t.title}</span>
  <span className="text-xs text-fg-subtle capitalize flex-shrink-0">{t.status}</span>
  </li>
  ))}
@@ -512,11 +512,11 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
  }}
  onClick={(e) => e.stopPropagation()}
  rows={3}
- className="flex-1 min-w-0 text-sm text-fg dark:text-fg-faint bg-transparent border border-accent-2 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-accent resize-y font-mono"
+ className="flex-1 min-w-0 text-sm text-fg bg-transparent border border-accent-2 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-accent resize-y font-mono"
  />
  {editValue && (
  <div className="flex-1 min-w-0 overflow-y-auto max-h-[200px] px-2 py-1.5 border border-border rounded-lg">
- <div className="prose prose-sm dark:prose-invert max-w-none text-fg dark:text-fg-faint">
+ <div className="prose prose-sm dark:prose-invert max-w-none text-fg">
  <ReactMarkdown>{editValue}</ReactMarkdown>
  </div>
  </div>
@@ -529,7 +529,7 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
  className="cursor-pointer hover:text-accent transition-colors min-h-[1.25rem]"
  >
  {todo.description ? (
- <div className="prose prose-sm dark:prose-invert max-w-none text-fg dark:text-fg-faint">
+ <div className="prose prose-sm dark:prose-invert max-w-none text-fg">
  <ReactMarkdown>{todo.description}</ReactMarkdown>
  </div>
  ) : (
@@ -633,7 +633,7 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
  ) : (
  <span
  onClick={() => { setEditingSubId(s.id); setEditingSubTitle(s.title) }}
- className={`flex-1 min-w-0 text-sm cursor-pointer hover:text-accent transition-colors break-words ${s.done ? 'line-through text-fg-subtle' : 'text-fg dark:text-fg-faint'}`}
+ className={`flex-1 min-w-0 text-sm cursor-pointer hover:text-accent transition-colors break-words ${s.done ? 'line-through text-fg-subtle' : 'text-fg'}`}
  >
  {s.title}
  </span>

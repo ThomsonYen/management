@@ -11,6 +11,11 @@
 
 html {
   font-feature-settings: var(--font-feature-settings, normal);
+  color-scheme: light;
+}
+
+html.dark {
+  color-scheme: dark;
 }
 
 body {

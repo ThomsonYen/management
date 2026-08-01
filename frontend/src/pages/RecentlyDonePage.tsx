@@ -87,7 +87,7 @@ export default function RecentlyDonePage() {
  >
  <span className="text-success flex-shrink-0">✓</span>
  <div className="flex-1 min-w-0">
- <p className="text-sm font-medium text-fg dark:text-fg-faint truncate line-through decoration-slate-300 dark:decoration-slate-600">
+ <p className="text-sm font-medium text-fg truncate line-through decoration-slate-300 dark:decoration-slate-600">
  {todo.title}
  </p>
  <div className="flex items-center gap-2 mt-0.5 text-xs text-fg-subtle">

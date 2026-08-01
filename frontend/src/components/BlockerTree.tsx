@@ -44,7 +44,7 @@ export function BlockerTreeNode({
  className="flex-1 flex items-center gap-2 text-left px-3 py-2 rounded-lg border border-border-subtle hover:border-accent-2 hover:bg-accent-1 dark:hover:border-accent-hover dark:hover:bg-accent-1 transition-colors"
  >
  <span className={`w-2 h-2 rounded-full flex-shrink-0 ${statusDot(todo.status)}`} />
- <span className="flex-1 text-sm font-medium text-fg dark:text-fg-faint truncate">{todo.title}</span>
+ <span className="flex-1 text-sm font-medium text-fg truncate">{todo.title}</span>
  {todo.assignee_name && (
  <span className="text-xs text-fg-subtle flex-shrink-0">{todo.assignee_name}</span>
  )}
@@ -118,7 +118,7 @@ export function BlockingTreeNode({
  className="flex-1 flex items-center gap-2 text-left px-3 py-2 rounded-lg border border-border-subtle hover:border-warning/40 hover:bg-warning-bg dark:hover:border-amber-700 transition-colors"
  >
  <span className={`w-2 h-2 rounded-full flex-shrink-0 ${statusDot(todo.status)}`} />
- <span className="flex-1 text-sm font-medium text-fg dark:text-fg-faint truncate">{todo.title}</span>
+ <span className="flex-1 text-sm font-medium text-fg truncate">{todo.title}</span>
  {todo.assignee_name && (
  <span className="text-xs text-fg-subtle flex-shrink-0">{todo.assignee_name}</span>
  )}

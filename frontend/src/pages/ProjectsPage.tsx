@@ -114,7 +114,7 @@ function ProjectNode({
  className={`flex items-center gap-1 group cursor-pointer rounded-lg px-2 py-1.5 text-sm transition-colors ${
  selectedId === node.id
  ? 'bg-accent-2 text-accent-fg dark:bg-accent-1 dark:text-accent-fg font-semibold'
- : 'text-fg dark:text-fg-faint hover:bg-inset dark:hover:bg-elevated'
+ : 'text-fg hover:bg-inset dark:hover:bg-elevated'
  } ${isDropTarget ? 'outline outline-2 outline-accent' : ''} ${isDragSource ? 'opacity-40' : ''}`}
  style={{ paddingLeft: `${8 + depth * 16}px` }}
  onClick={() => onSelect(node.id)}
@@ -272,7 +272,7 @@ function AddProjectModal({ parentId, onClose }: AddProjectModalProps) {
  </button>
  <button
  onClick={onClose}
- className="px-4 py-2 bg-inset text-fg dark:text-fg-faint rounded-lg font-semibold text-sm hover:bg-inset transition-colors"
+ className="px-4 py-2 bg-inset text-fg rounded-lg font-semibold text-sm hover:bg-inset transition-colors"
  >
  Cancel
  </button>
@@ -527,7 +527,7 @@ export default function ProjectsPage({ onOpenTodo }: { onOpenTodo: (id: number) 
  <div className="flex flex-col items-center flex-1 justify-end py-3">
  <button
  onClick={togglePanel}
- className="p-2 rounded-lg text-fg-subtle hover:bg-inset dark:hover:bg-elevated hover:text-fg-muted dark:hover:text-fg-faint transition-colors"
+ className="p-2 rounded-lg text-fg-subtle hover:bg-inset dark:hover:bg-elevated hover:text-fg-muted dark:hover:text-fg transition-colors"
  title="Expand projects panel"
  >
  <ChevronsRight size={16} />
@@ -581,7 +581,7 @@ export default function ProjectsPage({ onOpenTodo }: { onOpenTodo: (id: number) 
  <div className="px-2 py-2 border-t border-border">
  <button
  onClick={togglePanel}
- className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm text-fg-subtle hover:bg-inset dark:hover:bg-elevated hover:text-fg-muted dark:hover:text-fg-faint transition-colors"
+ className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm text-fg-subtle hover:bg-inset dark:hover:bg-elevated hover:text-fg-muted dark:hover:text-fg transition-colors"
  title="Collapse projects panel"
  >
  <ChevronsLeft size={16} />

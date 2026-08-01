@@ -84,7 +84,7 @@ function AddPersonModal({ onClose }: { onClose: () => void }) {
  </button>
  <button
  onClick={onClose}
- className="px-4 py-2 bg-inset text-fg dark:text-fg-faint rounded-lg font-semibold text-sm hover:bg-inset transition-colors"
+ className="px-4 py-2 bg-inset text-fg rounded-lg font-semibold text-sm hover:bg-inset transition-colors"
  >
  Cancel
  </button>
@@ -155,7 +155,7 @@ function PersonNotes({ person }: { person: Person }) {
  <SaveIndicator state={saveState} />
  <button
  onClick={() => setShowRaw(v => !v)}
- className="text-[10px] font-mono text-fg-subtle hover:text-fg-muted dark:hover:text-fg-faint transition-colors"
+ className="text-[10px] font-mono text-fg-subtle hover:text-fg-muted dark:hover:text-fg transition-colors"
  >
  {showRaw ? 'Hide raw' : 'Raw'}
  </button>
@@ -226,7 +226,7 @@ function PersonProjects({
  className={`group inline-flex items-center gap-1 text-xs rounded-full px-2 py-0.5 ${
  isPrimary
  ? 'bg-accent-1 text-accent-fg font-semibold'
- : 'bg-inset text-fg dark:text-fg-faint'
+ : 'bg-inset text-fg'
  }`}
  title={isPrimary ? 'Primary affiliation' : 'Click ★ to make primary'}
  >
@@ -334,7 +334,7 @@ function ArchivedPeopleSection({
  >
  <button
  onClick={() => onSelect(person.id)}
- className="flex items-center gap-2 flex-1 min-w-0 text-left hover:text-fg dark:hover:text-fg-faint"
+ className="flex items-center gap-2 flex-1 min-w-0 text-left hover:text-fg dark:hover:text-fg"
  >
  <div className="w-5 h-5 rounded-full bg-inset text-fg-muted flex items-center justify-center text-[10px] font-bold flex-shrink-0">
  {person.name.charAt(0).toUpperCase()}
@@ -530,7 +530,7 @@ export default function PeoplePage({ onOpenTodo }: { onOpenTodo: (id: number) =>
  <div className="flex flex-col items-center flex-1 justify-end py-3">
  <button
  onClick={togglePanel}
- className="p-2 rounded-lg text-fg-subtle hover:bg-inset dark:hover:bg-elevated hover:text-fg-muted dark:hover:text-fg-faint transition-colors"
+ className="p-2 rounded-lg text-fg-subtle hover:bg-inset dark:hover:bg-elevated hover:text-fg-muted dark:hover:text-fg transition-colors"
  title="Expand people panel"
  >
  <ChevronsRight size={16} />
@@ -544,7 +544,7 @@ export default function PeoplePage({ onOpenTodo }: { onOpenTodo: (id: number) =>
  <button
  onClick={togglePanelExpanded}
  title={panelExpanded ? 'Compact view' : 'Expanded view'}
- className="p-1 rounded text-fg-subtle hover:text-fg-muted dark:hover:text-fg-faint hover:bg-inset dark:hover:bg-elevated transition-colors"
+ className="p-1 rounded text-fg-subtle hover:text-fg-muted dark:hover:text-fg hover:bg-inset dark:hover:bg-elevated transition-colors"
  >
  {panelExpanded ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
  </button>
@@ -628,7 +628,7 @@ export default function PeoplePage({ onOpenTodo }: { onOpenTodo: (id: number) =>
  className={`group w-full px-3 py-1 text-sm transition-colors ${
  isSelected
  ? 'bg-accent-2 text-accent-fg dark:bg-accent-1 dark:text-accent-fg font-semibold'
- : 'text-fg dark:text-fg-faint hover:bg-inset dark:hover:bg-elevated'
+ : 'text-fg hover:bg-inset dark:hover:bg-elevated'
  }`}
  >
  <div className="flex items-center justify-between gap-2">
@@ -684,7 +684,7 @@ export default function PeoplePage({ onOpenTodo }: { onOpenTodo: (id: number) =>
  <div className="px-1.5 py-1 border-t border-border">
  <button
  onClick={togglePanel}
- className="w-full flex items-center justify-center gap-1.5 px-2 py-1 rounded-md text-xs text-fg-subtle hover:bg-inset dark:hover:bg-elevated hover:text-fg-muted dark:hover:text-fg-faint transition-colors"
+ className="w-full flex items-center justify-center gap-1.5 px-2 py-1 rounded-md text-xs text-fg-subtle hover:bg-inset dark:hover:bg-elevated hover:text-fg-muted dark:hover:text-fg transition-colors"
  title="Collapse people panel"
  >
  <ChevronsLeft size={14} />
@@ -709,7 +709,7 @@ export default function PeoplePage({ onOpenTodo }: { onOpenTodo: (id: number) =>
  className={`flex items-center gap-1 px-2 py-1 text-xs font-medium transition-colors ${
  viewMode === 'list'
  ? 'bg-accent text-white'
- : 'bg-surface text-fg-muted hover:text-fg dark:hover:text-fg-faint'
+ : 'bg-surface text-fg-muted hover:text-fg dark:hover:text-fg'
  }`}
  >
  <List size={12} /> List
@@ -720,7 +720,7 @@ export default function PeoplePage({ onOpenTodo }: { onOpenTodo: (id: number) =>
  className={`flex items-center gap-1 px-2 py-1 text-xs font-medium transition-colors ${
  viewMode === 'board'
  ? 'bg-accent text-white'
- : 'bg-surface text-fg-muted hover:text-fg dark:hover:text-fg-faint'
+ : 'bg-surface text-fg-muted hover:text-fg dark:hover:text-fg'
  }`}
  >
  <LayoutGrid size={12} /> Board

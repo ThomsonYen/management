@@ -14,14 +14,14 @@ export const notionWarm: ThemePreset = {
       bgInset:       '245 243 238',
 
       fgDefault:     '41 37 36',
-      fgMuted:       '87 83 78',
-      fgSubtle:      '120 113 108',
-      fgFaint:       '168 162 158',
+      fgMuted:       '80 74 68',
+      fgSubtle:      '108 100 92',
+      fgFaint:       '145 138 130',
       fgOnAccent:    '255 251 235',
 
-      borderDefault: '231 224 213',
-      borderStrong:  '214 206 194',
-      borderSubtle:  '245 240 230',
+      borderDefault: '220 212 200',
+      borderStrong:  '200 192 178',
+      borderSubtle:  '235 228 215',
 
       accent1:       '254 243 199',
       accent2:       '253 230 138',
@@ -49,14 +49,14 @@ export const notionWarm: ThemePreset = {
       bgInset:       '26 22 19',
 
       fgDefault:     '245 240 232',
-      fgMuted:       '180 172 162',
-      fgSubtle:      '136 128 118',
-      fgFaint:       '100 92 84',
+      fgMuted:       '190 182 172',
+      fgSubtle:      '155 146 135',
+      fgFaint:       '128 120 110',
       fgOnAccent:    '30 20 10',
 
-      borderDefault: '58 50 42',
-      borderStrong:  '75 66 56',
-      borderSubtle:  '42 36 30',
+      borderDefault: '72 62 52',
+      borderStrong:  '92 82 70',
+      borderSubtle:  '55 48 40',
 
       accent1:       '58 32 6',
       accent2:       '82 45 10',

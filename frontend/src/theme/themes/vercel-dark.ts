@@ -14,14 +14,14 @@ export const vercelDark: ThemePreset = {
       bgInset:       '244 244 245',
 
       fgDefault:     '9 9 11',
-      fgMuted:       '82 82 91',
-      fgSubtle:      '113 113 122',
-      fgFaint:       '161 161 170',
+      fgMuted:       '75 75 84',
+      fgSubtle:      '100 100 110',
+      fgFaint:       '138 138 148',
       fgOnAccent:    '255 255 255',
 
-      borderDefault: '228 228 231',
-      borderStrong:  '212 212 216',
-      borderSubtle:  '244 244 245',
+      borderDefault: '220 220 224',
+      borderStrong:  '200 200 205',
+      borderSubtle:  '232 232 235',
 
       accent1:       '239 246 255',
       accent2:       '219 234 254',
@@ -49,14 +49,14 @@ export const vercelDark: ThemePreset = {
       bgInset:       '10 10 10',
 
       fgDefault:     '250 250 250',
-      fgMuted:       '163 163 163',
-      fgSubtle:      '115 115 115',
-      fgFaint:       '82 82 82',
+      fgMuted:       '180 180 180',
+      fgSubtle:      '140 140 140',
+      fgFaint:       '115 115 115',
       fgOnAccent:    '255 255 255',
 
-      borderDefault: '38 38 38',
-      borderStrong:  '64 64 64',
-      borderSubtle:  '26 26 26',
+      borderDefault: '55 55 55',
+      borderStrong:  '78 78 78',
+      borderSubtle:  '42 42 42',
 
       accent1:       '15 23 42',
       accent2:       '30 41 59',

@@ -97,7 +97,7 @@ function ScheduleCard({ item, allTodos, persons, onOpenTodo }: { item: ScheduleS
  ) : (
  <button
  onClick={(e) => startEdit(e, 'assignee_id', String(mainTodoObj?.assignee_id ?? ''))}
- className="font-medium text-fg dark:text-fg-faint hover:text-accent dark:hover:text-accent hover:underline"
+ className="font-medium text-fg hover:text-accent dark:hover:text-accent hover:underline"
  >
  {item.assignee_name || 'Unassigned'}
  </button>
@@ -312,7 +312,7 @@ export default function Dashboard({ onOpenTodo }: { onOpenTodo: (id: number) => 
  {/* Stats */}
  <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
  <StatCard label="Total Todos" value={todos.length} color="bg-accent" icon={ListTodo} />
- <StatCard label="Completed (past 7 days)" value={recentlyDone.length} color="bg-success" icon={CheckCircle2} />
+ <StatCard label="Completed (past 7 days)" value={recentlyDone.length} color="bg-info" icon={CheckCircle2} />
  <StatCard label="Blocked" value={todos.filter((t) => t.is_blocked).length} color="bg-fg-subtle" icon={ShieldAlert} />
  </div>
 

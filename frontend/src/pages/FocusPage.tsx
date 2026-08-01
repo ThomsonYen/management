@@ -556,17 +556,19 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  <div className="flex-1 min-w-0">
  <div className="max-w-4xl mx-auto">
 
- {/* Must Do Today */}
- <div className="rounded-xl border-2 border-warning/30 bg-warning-bg shadow-sm mb-6">
- <div className="px-5 pt-4 pb-2 flex items-center gap-2">
- <span className="text-warning text-lg">&#9733;</span>
- <h3 className="text-sm font-bold text-warning dark:text-warning uppercase tracking-wide">
+ {/* Must Do Today — elevated importance:
+      left amber stripe + subtle header tint + stronger shadow. */}
+ <div className="relative rounded-xl border border-border bg-surface shadow-md mb-6 overflow-hidden">
+ <span aria-hidden className="absolute inset-y-0 left-0 w-1 bg-warning" />
+ <div className="pl-6 pr-5 pt-4 pb-2 flex items-center gap-2 border-b border-border-subtle bg-warning-bg/40 dark:bg-warning-bg/25">
+ <span className="text-warning text-lg drop-shadow-sm">&#9733;</span>
+ <h3 className="text-sm font-bold text-fg uppercase tracking-wide">
  Must Do Today
  </h3>
- <span className="text-xs text-warning dark:text-warning font-medium">
+ <span className="text-xs text-fg-muted font-medium">
  {todayKey}
  </span>
- <span className="text-xs text-warning dark:text-warning ml-auto">
+ <span className="text-xs text-fg-muted ml-auto tabular-nums">
  {todayItems.filter((i) => i.done || (i.todo_id && todos.find((t) => t.id === i.todo_id)?.status === 'done')).length}/{todayItems.length} done
  </span>
  <button
@@ -575,7 +577,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  await Promise.all(doneItems.map((i) => deleteMustDoItem(i.id)))
  queryClient.invalidateQueries({ queryKey: ['must-do', todayKey] })
  }}
- className="text-warning hover:text-warning dark:text-warning dark:hover:text-warning transition-colors"
+ className="text-fg-subtle hover:text-fg transition-colors"
  title="Clear done items"
  >
  &#8635;
@@ -593,7 +595,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  return (
  <div
  key={sec}
- className={`transition-colors ${isDragOver ? 'bg-warning-bg/60 ' : ''}`}
+ className={`transition-colors ${isDragOver ? 'bg-accent-1/60 ' : ''}`}
  onDragOver={(e) => {
  e.preventDefault()
  e.stopPropagation()
@@ -682,20 +684,20 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  }
  }}
  >
- <div className={`px-5 py-1.5 flex items-center gap-2 ${sec !== 'morning' ? 'border-t border-warning/30/60 ' : ''}`}>
- <span className="text-xs font-semibold uppercase tracking-wider text-warning dark:text-warning capitalize">
+ <div className={`pl-6 pr-5 py-1.5 flex items-center gap-2 ${sec !== 'morning' ? 'border-t border-border-subtle ' : ''}`}>
+ <span className="text-xs font-semibold uppercase tracking-wider text-fg-muted capitalize">
  {sec === 'morning' ? '🌅 Morning' : sec === 'afternoon' ? '☀️ Afternoon' : '🌙 Evening'}
  </span>
- <div className="flex-1 h-px bg-amber-200/50 " />
+ <div className="flex-1 h-px bg-border-subtle" />
  {sectionItems.length > 0 && (
- <span className="text-xs text-warning dark:text-warning">
+ <span className="text-xs text-fg-subtle tabular-nums">
  {sectionItems.filter((i) => i.done || (i.todo_id && todos.find((t) => t.id === i.todo_id)?.status === 'done')).length}/{sectionItems.length}
  </span>
  )}
  </div>
 
  {sectionItems.length > 0 && (
- <ul className="px-5 pb-1 space-y-1">
+ <ul className="pl-6 pr-5 pb-1 space-y-1">
  {sectionItems.map((item, itemIdx) => {
  const linkedTodo = item.todo_id ? todos.find((t) => t.id === item.todo_id) : undefined
  const effectiveDone = item.done || (linkedTodo?.status === 'done')
@@ -723,10 +725,10 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  return (
  <React.Fragment key={item.id}>
  {showLineBefore && (
- <div className="h-0.5 bg-warning rounded-full mx-1 my-0.5 transition-all" />
+ <div className="h-0.5 bg-accent rounded-full mx-1 my-0.5 transition-all" />
  )}
  <li
- className={`flex items-center gap-2 group cursor-pointer rounded px-1 -mx-1 ${selectedMustDoIds.has(item.id) ? 'bg-amber-200/70 ring-1 ring-amber-300 dark:ring-amber-700' : 'hover:bg-warning-bg '}`}
+ className={`flex items-center gap-2 group cursor-pointer rounded px-1 -mx-1 ${selectedMustDoIds.has(item.id) ? 'bg-accent-1 ring-1 ring-accent-2' : 'hover:bg-inset'}`}
  onDragOver={(e) => {
  if (!e.dataTransfer.types.includes('application/x-must-do-id')) return
  e.preventDefault()
@@ -771,8 +773,8 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  onClick={() => toggleTodayDone(item)}
  className={`flex-shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
  effectiveDone
- ? 'bg-warning border-warning text-white'
- : 'border-warning/40 hover:border-warning'
+ ? 'bg-accent border-accent text-fg-on-accent'
+ : 'border-border-strong hover:border-accent'
  }`}
  >
  {effectiveDone && <span className="text-xs">&#10003;</span>}
@@ -780,7 +782,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  {editingMustDoId === item.id && !item.todo_id ? (
  <input
  autoFocus
- className="flex-1 text-sm text-fg bg-transparent outline-none border-b border-warning py-0"
+ className="flex-1 text-md text-fg bg-transparent outline-none border-b border-accent py-0"
  value={editingMustDoText}
  onChange={(e) => setEditingMustDoText(e.target.value)}
  onKeyDown={(e) => {
@@ -805,9 +807,9 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  />
  ) : (
  <span
- className={`flex-1 text-sm ${
+ className={`flex-1 text-md ${
  effectiveDone
- ? 'line-through text-warning dark:text-warning'
+ ? 'line-through text-fg-subtle'
  : 'text-fg'
  } ${!item.todo_id ? 'cursor-text' : ''}`}
  onDoubleClick={() => {
@@ -839,7 +841,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  setCollapseSignal((c) => c + 1)
  highlightTimer.current = setTimeout(() => setHighlightedTodoId(null), 2000)
  }}
- className="ml-1.5 text-xs text-warning hover:text-warning "
+ className="ml-1.5 text-xs text-fg-subtle hover:text-accent transition-colors"
  title="Open todo detail"
  >
  &#8599;
@@ -850,7 +852,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  {!item.todo_id && (
  <button
  onClick={() => convertToTodo(item)}
- className="opacity-0 group-hover:opacity-100 text-xs text-warning hover:text-warning transition-opacity"
+ className="opacity-0 group-hover:opacity-100 text-xs text-fg-subtle hover:text-accent transition-opacity"
  title="Convert to todo"
  >
  &#9745;
@@ -858,14 +860,14 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  )}
  <button
  onClick={() => removeTodayItem(item.id)}
- className="opacity-0 group-hover:opacity-100 text-xs text-warning hover:text-danger transition-opacity"
+ className="opacity-0 group-hover:opacity-100 text-xs text-fg-subtle hover:text-danger transition-opacity"
  title="Remove"
  >
  &#10005;
  </button>
  </li>
  {showLineAfter && (
- <div className="h-0.5 bg-warning rounded-full mx-1 my-0.5 transition-all" />
+ <div className="h-0.5 bg-accent rounded-full mx-1 my-0.5 transition-all" />
  )}
  </React.Fragment>
  )
@@ -874,7 +876,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  )}
 
  {/* Inline input for every section */}
- <div className="px-5 pb-2 pt-0.5 relative">
+ <div className="pl-6 pr-5 pb-2 pt-0.5 relative">
  <input
  ref={sec === activeSection ? todayInputRef : undefined}
  type="text"
@@ -904,7 +906,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  }}
  onBlur={() => setTimeout(() => setTodaySearchOpen(false), 150)}
  placeholder={`Add to ${sec}...`}
- className="w-full text-sm text-fg-muted placeholder-amber-300 dark:placeholder-amber-700 bg-transparent outline-none"
+ className="w-full text-sm text-fg placeholder:text-fg-faint bg-transparent outline-none"
  />
  {isActive && todaySearchOpen && todayInput.trim() && (() => {
  const q = todayInput.trim().toLowerCase()
@@ -919,7 +921,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  {matches.map((t) => (
  <button
  key={t.id}
- className="w-full text-left px-3 py-2 text-sm hover:bg-warning-bg text-fg flex items-center gap-2"
+ className="w-full text-left px-3 py-2 text-sm hover:bg-accent-1 text-fg flex items-center gap-2"
  onMouseDown={(e) => {
  e.preventDefault()
  addTodayTodo(t, sec)
@@ -944,11 +946,11 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
 
  {/* Bulk action bar for must-do items */}
  {selectedMustDoIds.size > 0 && (
- <div className="px-5 py-2 border-t border-warning/30/60 flex items-center gap-2 flex-wrap">
- <span className="text-xs font-semibold text-warning dark:text-warning">
+ <div className="pl-6 pr-5 py-2 border-t border-border-subtle flex items-center gap-2 flex-wrap">
+ <span className="text-xs font-semibold text-fg">
  {selectedMustDoIds.size} selected
  </span>
- <div className="h-4 w-px bg-amber-300 " />
+ <div className="h-4 w-px bg-border" />
  {mustDoSections.map((sec) => (
  <button
  key={sec}
@@ -962,7 +964,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  })
  setSelectedMustDoIds(new Set())
  }}
- className="px-2 py-0.5 rounded text-xs font-medium capitalize bg-warning-bg text-warning hover:bg-amber-200 transition-colors"
+ className="px-2 py-0.5 rounded text-xs font-medium capitalize bg-inset text-fg-muted hover:bg-accent-1 hover:text-accent transition-colors"
  >
  Move to {sec}
  </button>
@@ -979,7 +981,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  </button>
  <button
  onClick={() => setSelectedMustDoIds(new Set())}
- className="text-xs text-warning hover:text-warning font-medium"
+ className="text-xs text-fg-subtle hover:text-fg font-medium"
  >
  Cancel
  </button>
@@ -1012,7 +1014,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  {dragOverIndex === globalIndex && dragItemId.current !== null && dragItemId.current !== t.id && (
  <div className="h-1 bg-accent-hover rounded-full mx-2 mb-1 transition-all" />
  )}
- <div className={`mb-2 rounded-xl transition-all duration-500 ${highlightedTodoId === t.id ? 'ring-2 ring-amber-400 bg-warning-bg/50 ' : ''}`}>
+ <div className={`mb-2 rounded-xl transition-all duration-500 ${highlightedTodoId === t.id ? 'ring-2 ring-accent bg-accent-1/50 ' : ''}`}>
  <TodoCard
  todo={t}
  onEdit={handleEdit}

@@ -48,6 +48,34 @@ function getInitialTheme(): 'light' | 'dark' {
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
 }
 
+// ─── Font size ───────────────────────────────────────────────────────────────
+// Persisted in localStorage (not the backend) so the choice survives without a
+// server round-trip on first paint.
+
+export type FontSize = 'sm' | 'md' | 'lg' | 'xl'
+
+export const FONT_SIZE_SCALE: Record<FontSize, number> = {
+  sm: 0.9,
+  md: 1.0,
+  lg: 1.15,
+  xl: 1.3,
+}
+
+const FONT_SIZE_LS_KEY = 'settings.fontSize'
+
+function getInitialFontSize(): FontSize {
+  const stored = localStorage.getItem(FONT_SIZE_LS_KEY)
+  if (stored === 'sm' || stored === 'md' || stored === 'lg' || stored === 'xl') return stored
+  return 'md'
+}
+
+function applyFontSize(size: FontSize) {
+  document.documentElement.style.setProperty('--font-scale', String(FONT_SIZE_SCALE[size]))
+}
+
+// Apply the saved font scale synchronously so the first paint is correct.
+applyFontSize(getInitialFontSize())
+
 const LS_KEY = 'settings.cache.v1'
 
 function loadCache(): Partial<UserSettings> {
@@ -281,6 +309,16 @@ export function resolveAssigneeId(
   if (!name) return null
   const match = persons.find((p) => p.name === name)
   return match ? match.id : null
+}
+
+export function useFontSize() {
+  const [size, setSizeState] = useState<FontSize>(getInitialFontSize)
+  const setSize = useCallback((next: FontSize) => {
+    setSizeState(next)
+    applyFontSize(next)
+    try { localStorage.setItem(FONT_SIZE_LS_KEY, next) } catch { /* ignore */ }
+  }, [])
+  return { size, setSize }
 }
 
 export function useHotkeys() {

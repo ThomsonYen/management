@@ -258,7 +258,7 @@ export default function NoteDetailPage() {
  <div className="p-6 pb-3 flex items-center gap-3">
  <button
  onClick={() => navigate(listPath)}
- className="p-1.5 rounded-lg text-fg-subtle hover:text-fg-muted dark:hover:text-fg-faint hover:bg-inset dark:hover:bg-elevated transition-colors"
+ className="p-1.5 rounded-lg text-fg-subtle hover:text-fg-muted dark:hover:text-fg hover:bg-inset dark:hover:bg-elevated transition-colors"
  >
  <ArrowLeft size={18} />
  </button>
@@ -477,7 +477,7 @@ function TodoPicker({
  className="px-2.5 py-1.5 text-xs cursor-pointer hover:bg-accent-1 dark:hover:bg-accent-1 flex items-center gap-1.5"
  >
  <span className="text-fg-subtle">#{t.id}</span>
- <span className="flex-1 truncate text-fg dark:text-fg-faint">{t.title}</span>
+ <span className="flex-1 truncate text-fg">{t.title}</span>
  <span className="text-fg-subtle capitalize">{t.status}</span>
  </li>
  ))}
@@ -650,7 +650,7 @@ function SuggestTodosButton({
  onClick={() => !isCreated && openEdit(idx)}
  >
  <div className="flex items-start gap-1.5">
- <span className="flex-1 font-medium text-fg dark:text-fg-faint">{s.title}</span>
+ <span className="flex-1 font-medium text-fg">{s.title}</span>
  {isCreated ? (
  <Check size={12} className="text-emerald-500 flex-shrink-0 mt-0.5" />
  ) : (
@@ -727,7 +727,7 @@ function TodoEditModal({
  <Sparkles size={16} className="text-warning" />
  Edit Suggested Todo
  </h3>
- <button onClick={onClose} className="p-1 text-fg-subtle hover:text-fg-muted dark:hover:text-fg-faint">
+ <button onClick={onClose} className="p-1 text-fg-subtle hover:text-fg-muted dark:hover:text-fg">
  <X size={18} />
  </button>
  </div>
@@ -824,7 +824,7 @@ function TodoEditModal({
  <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-border bg-app">
  <button
  onClick={onClose}
- className="px-4 py-2 text-sm text-fg-muted hover:text-fg dark:hover:text-fg-faint border border-border rounded-lg hover:bg-inset dark:hover:bg-elevated transition-colors"
+ className="px-4 py-2 text-sm text-fg-muted hover:text-fg dark:hover:text-fg border border-border rounded-lg hover:bg-inset dark:hover:bg-elevated transition-colors"
  >
  Cancel
  </button>

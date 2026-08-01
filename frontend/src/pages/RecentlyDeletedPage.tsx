@@ -113,7 +113,7 @@ export default function RecentlyDeletedPage() {
  className={`px-4 py-2 text-sm font-medium capitalize border-b-2 transition-colors -mb-px ${
  tab === t
  ? 'border-accent text-accent'
- : 'border-transparent text-fg-muted hover:text-fg dark:hover:text-fg-faint'
+ : 'border-transparent text-fg-muted hover:text-fg dark:hover:text-fg'
  }`}
  >
  {t} {count > 0 && <span className="ml-1 text-xs opacity-70">({count})</span>}
@@ -144,7 +144,7 @@ export default function RecentlyDeletedPage() {
  >
  <span className="text-fg-faint dark:text-fg-muted flex-shrink-0">✕</span>
  <div className="flex-1 min-w-0">
- <p className="text-sm font-medium text-fg dark:text-fg-faint truncate">
+ <p className="text-sm font-medium text-fg truncate">
  {todo.title}
  </p>
  <div className="flex items-center gap-2 mt-0.5 text-xs text-fg-subtle">
@@ -182,7 +182,7 @@ export default function RecentlyDeletedPage() {
  >
  <span className="text-fg-faint dark:text-fg-muted flex-shrink-0">✕</span>
  <div className="flex-1 min-w-0">
- <p className="text-sm font-medium text-fg dark:text-fg-faint truncate">
+ <p className="text-sm font-medium text-fg truncate">
  {project.name}
  </p>
  <div className="flex items-center gap-2 mt-0.5 text-xs text-fg-subtle">

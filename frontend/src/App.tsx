@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react'
 import { NavLink, Route, Routes, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, CheckSquare, FolderKanban, Users, CheckCircle2, Crosshair, Settings, ChevronsLeft, ChevronsRight, FileText, Target, BarChart3, Square, Trash2, NotebookPen } from 'lucide-react'
+import { LayoutDashboard, CheckSquare, FolderKanban, Users, CheckCircle2, Crosshair, Settings, ChevronsLeft, ChevronsRight, FileText, Target, BarChart3, Square, Trash2, NotebookPen, Sun, Moon } from 'lucide-react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { updateTodo, createNote } from './api'
 import { useResizableSidebar } from './hooks/useResizableSidebar'
@@ -237,6 +237,14 @@ export default function App() {
               <Settings size={16} />
               {!sidebarCollapsed && 'Settings'}
             </NavLink>
+            <button
+              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+              title={sidebarCollapsed ? (theme === 'dark' ? 'Switch to light' : 'Switch to dark') : undefined}
+              className={`mt-0.5 w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'} px-3 py-2 rounded-md text-sm font-medium transition-colors text-fg-muted hover:bg-inset hover:text-fg`}
+            >
+              {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+              {!sidebarCollapsed && (theme === 'dark' ? 'Light mode' : 'Dark mode')}
+            </button>
           </div>
           {!sidebarCollapsed && (
             <div className="px-5 py-3 border-t border-border">

@@ -12,10 +12,12 @@ import {
  useTimezone,
  useMeetingNoteSort,
  useHotkeys,
+ useFontSize,
  formatHotkey,
  eventToBinding,
  type MeetingNoteSortField,
  type HotkeyBindings,
+ type FontSize,
 } from '../SettingsContext'
 import { fetchPersons, fetchVaults, createVault, deleteVault, rescanVault } from '../api'
 import { applyTheme, getSavedTheme, listThemes, type ThemeName } from '../theme'
@@ -53,7 +55,7 @@ function HotkeyInput({ label, description, bindingKey }: { label: string; descri
  return (
  <div className="flex items-center justify-between gap-4">
  <div>
- <p className="text-sm text-fg dark:text-fg-faint">{label}</p>
+ <p className="text-sm text-fg">{label}</p>
  <p className="text-xs text-fg-subtle">{description}</p>
  </div>
  <button
@@ -154,7 +156,7 @@ function RecordingSection() {
  )}
 
  <div className="flex items-center justify-between gap-4">
- <label className="text-sm text-fg dark:text-fg-faint shrink-0">
+ <label className="text-sm text-fg shrink-0">
  System audio device
  </label>
  <select
@@ -176,7 +178,7 @@ function RecordingSection() {
  </div>
 
  <details className="text-xs text-fg-muted">
- <summary className="cursor-pointer hover:text-fg dark:hover:text-fg-faint">
+ <summary className="cursor-pointer hover:text-fg dark:hover:text-fg">
  How to set up loopback on macOS
  </summary>
  <ol className="list-decimal list-inside mt-2 space-y-1 leading-relaxed pl-1">
@@ -399,6 +401,7 @@ export default function SettingsPage() {
  const { timezone, setTimezone } = useTimezone()
  const { sortBy, setSortBy } = useMeetingNoteSort()
  const { resetToDefaults } = useHotkeys()
+ const { size: fontSize, setSize: setFontSize } = useFontSize()
  const { data: persons = [] } = useQuery({ queryKey: ['persons'], queryFn: fetchPersons })
  const [themeVariant, setThemeVariant] = useState<ThemeName>(getSavedTheme())
  const themeOptions = listThemes()
@@ -468,6 +471,31 @@ export default function SettingsPage() {
  </Select>
  </div>
  </div>
+ <div className="px-6 py-5 border-t border-border flex items-center justify-between gap-4">
+ <div className="min-w-0">
+ <h2 className="text-sm font-semibold text-fg">Text size</h2>
+ <p className="text-sm text-fg-muted mt-0.5">
+ Scales all interface text.
+ </p>
+ </div>
+ <div className="flex items-center gap-1 bg-inset rounded-lg p-1">
+ {(['sm', 'md', 'lg', 'xl'] as FontSize[]).map((s) => (
+ <button
+ key={s}
+ onClick={() => setFontSize(s)}
+ className={`px-3 py-1.5 rounded-md font-medium transition-colors ${
+ fontSize === s
+ ? 'bg-surface text-fg shadow-xs'
+ : 'text-fg-muted hover:text-fg'
+ }`}
+ style={{ fontSize: s === 'sm' ? '11px' : s === 'md' ? '13px' : s === 'lg' ? '15px' : '17px' }}
+ title={s === 'sm' ? 'Small' : s === 'md' ? 'Medium' : s === 'lg' ? 'Large' : 'Extra large'}
+ >
+ A
+ </button>
+ ))}
+ </div>
+ </div>
  </div>
 
  {/* Timezone */}
@@ -529,7 +557,7 @@ export default function SettingsPage() {
  </div>
  <button
  onClick={resetToDefaults}
- className="text-xs text-fg-subtle hover:text-fg-muted dark:hover:text-fg-faint transition-colors"
+ className="text-xs text-fg-subtle hover:text-fg-muted dark:hover:text-fg transition-colors"
  >
  Reset defaults
  </button>
@@ -620,7 +648,7 @@ export default function SettingsPage() {
  <div className="space-y-4">
  {/* Default Assignee (stored by name so restores survive person id changes) */}
  <div className="flex items-center justify-between gap-4">
- <label className="text-sm text-fg dark:text-fg-faint shrink-0">
+ <label className="text-sm text-fg shrink-0">
  Default assignee
  </label>
  <select
@@ -644,7 +672,7 @@ export default function SettingsPage() {
 
  {/* Default Deadline to Today */}
  <div className="flex items-center justify-between gap-4">
- <label className="text-sm text-fg dark:text-fg-faint shrink-0">
+ <label className="text-sm text-fg shrink-0">
  Auto-set deadline to today
  </label>
  <button
@@ -663,7 +691,7 @@ export default function SettingsPage() {
 
  {/* Default Estimated Hours */}
  <div className="flex items-center justify-between gap-4">
- <label className="text-sm text-fg dark:text-fg-faint shrink-0">
+ <label className="text-sm text-fg shrink-0">
  Default estimated hours
  </label>
  <input
@@ -678,7 +706,7 @@ export default function SettingsPage() {
 
  {/* Default Importance */}
  <div className="flex items-center justify-between gap-4">
- <label className="text-sm text-fg dark:text-fg-faint shrink-0">
+ <label className="text-sm text-fg shrink-0">
  Default importance
  </label>
  <select
