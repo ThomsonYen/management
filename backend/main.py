@@ -54,6 +54,8 @@ USER_SETTINGS_PATH = Path(__file__).parent / "user_settings.json"
 DEFAULT_USER_SETTINGS: dict = {
     "timezone": None,
     "theme": "light",
+    "theme_variant": "linear-emerald",
+    "font_size": "md",
     "meeting_note_sort": "updated_at",
     "todo_defaults": {
         "assignee_name": "",
@@ -2724,6 +2726,8 @@ class TodoDefaultsPatch(BaseModel):
 class UserSettingsPatch(BaseModel):
     timezone: Optional[str] = None
     theme: Optional[str] = None
+    theme_variant: Optional[str] = None
+    font_size: Optional[str] = None
     meeting_note_sort: Optional[str] = None
     todo_defaults: Optional[TodoDefaultsPatch] = None
     hotkeys: Optional[dict] = None
@@ -2738,6 +2742,8 @@ def _validate_patch(patch: UserSettingsPatch) -> None:
             raise HTTPException(400, f"Unknown IANA timezone: {patch.timezone}")
     if patch.theme is not None and patch.theme not in ("light", "dark"):
         raise HTTPException(400, f"Unknown theme: {patch.theme}")
+    if patch.font_size is not None and patch.font_size not in ("sm", "md", "lg", "xl"):
+        raise HTTPException(400, f"Unknown font_size: {patch.font_size}")
     if patch.meeting_note_sort is not None and patch.meeting_note_sort not in ("created_at", "updated_at"):
         raise HTTPException(400, f"Unknown meeting_note_sort: {patch.meeting_note_sort}")
     if patch.todo_defaults and patch.todo_defaults.importance is not None:

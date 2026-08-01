@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { fetchSettings, updateSettings, type UserSettings, type UserSettingsPatch } from './api'
+import { applyTheme, DEFAULT_THEME, THEMES, type ThemeName } from './theme'
 
 // ─── Defaults (authoritative on the frontend too, so first paint has real values) ───
 
@@ -98,6 +99,8 @@ function buildInitial(): UserSettings {
   return {
     timezone: cache.timezone ?? detectTimezone(),
     theme: cache.theme ?? getInitialTheme(),
+    theme_variant: cache.theme_variant ?? DEFAULT_THEME,
+    font_size: cache.font_size ?? getInitialFontSize(),
     meeting_note_sort: cache.meeting_note_sort ?? 'updated_at',
     todo_defaults: {
       assignee_name: '',
@@ -113,6 +116,8 @@ function buildInitial(): UserSettings {
 // Apply theme class synchronously so the first paint is correct
 const initial = buildInitial()
 document.documentElement.classList.toggle('dark', initial.theme === 'dark')
+applyFontSize(initial.font_size)
+applyTheme((initial.theme_variant in THEMES ? initial.theme_variant : DEFAULT_THEME) as ThemeName)
 
 // ─── Hotkey helpers ─────────────────────────────────────────────────────────
 
@@ -181,6 +186,12 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         const merged: UserSettings = {
           ...server,
           timezone: server.timezone ?? detectTimezone(),
+          theme_variant: server.theme_variant && server.theme_variant in THEMES
+            ? server.theme_variant
+            : DEFAULT_THEME,
+          font_size: (['sm', 'md', 'lg', 'xl'] as FontSize[]).includes(server.font_size)
+            ? server.font_size
+            : 'md',
           hotkeys: { ...DEFAULT_HOTKEYS, ...(server.hotkeys ?? {}) },
         }
         setSettings(merged)
@@ -193,6 +204,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         updateSettings({
           timezone: settings.timezone,
           theme: settings.theme,
+          theme_variant: settings.theme_variant,
+          font_size: settings.font_size,
           meeting_note_sort: settings.meeting_note_sort,
           todo_defaults: settings.todo_defaults,
           hotkeys: settings.hotkeys,
@@ -209,6 +222,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     }
     saveCache(settings)
     document.documentElement.classList.toggle('dark', settings.theme === 'dark')
+    applyFontSize(settings.font_size)
+    applyTheme((settings.theme_variant in THEMES ? settings.theme_variant : DEFAULT_THEME) as ThemeName)
   }, [settings])
 
   const patch = useCallback((p: UserSettingsPatch) => {
@@ -312,13 +327,16 @@ export function resolveAssigneeId(
 }
 
 export function useFontSize() {
-  const [size, setSizeState] = useState<FontSize>(getInitialFontSize)
-  const setSize = useCallback((next: FontSize) => {
-    setSizeState(next)
-    applyFontSize(next)
-    try { localStorage.setItem(FONT_SIZE_LS_KEY, next) } catch { /* ignore */ }
-  }, [])
-  return { size, setSize }
+  const { settings, patch } = useSettings()
+  const setSize = useCallback((next: FontSize) => patch({ font_size: next }), [patch])
+  return { size: settings.font_size, setSize }
+}
+
+export function useThemeVariant() {
+  const { settings, patch } = useSettings()
+  const variant = (settings.theme_variant in THEMES ? settings.theme_variant : DEFAULT_THEME) as ThemeName
+  const setVariant = useCallback((next: ThemeName) => patch({ theme_variant: next }), [patch])
+  return { variant, setVariant }
 }
 
 export function useHotkeys() {

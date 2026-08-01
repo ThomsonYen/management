@@ -13,6 +13,7 @@ import {
  useMeetingNoteSort,
  useHotkeys,
  useFontSize,
+ useThemeVariant,
  formatHotkey,
  eventToBinding,
  type MeetingNoteSortField,
@@ -20,7 +21,7 @@ import {
  type FontSize,
 } from '../SettingsContext'
 import { fetchPersons, fetchVaults, createVault, deleteVault, rescanVault } from '../api'
-import { applyTheme, getSavedTheme, listThemes, type ThemeName } from '../theme'
+import { listThemes, type ThemeName } from '../theme'
 import { Select } from '../components/ui'
 
 function HotkeyInput({ label, description, bindingKey }: { label: string; description: string; bindingKey: keyof HotkeyBindings }) {
@@ -402,13 +403,9 @@ export default function SettingsPage() {
  const { sortBy, setSortBy } = useMeetingNoteSort()
  const { resetToDefaults } = useHotkeys()
  const { size: fontSize, setSize: setFontSize } = useFontSize()
+ const { variant: themeVariant, setVariant: setThemeVariant } = useThemeVariant()
  const { data: persons = [] } = useQuery({ queryKey: ['persons'], queryFn: fetchPersons })
- const [themeVariant, setThemeVariant] = useState<ThemeName>(getSavedTheme())
  const themeOptions = listThemes()
- const changeThemeVariant = (name: ThemeName) => {
-   setThemeVariant(name)
-   applyTheme(name)
- }
 
  const updateField = <K extends keyof typeof defaults>(key: K, value: (typeof defaults)[K]) => {
  setDefaults({ ...defaults, [key]: value })
@@ -463,7 +460,7 @@ export default function SettingsPage() {
  <div className="w-56 shrink-0">
  <Select
    value={themeVariant}
-   onChange={(e) => changeThemeVariant(e.target.value as ThemeName)}
+   onChange={(e) => setThemeVariant(e.target.value as ThemeName)}
  >
    {themeOptions.map((opt) => (
      <option key={opt.name} value={opt.name}>{opt.label}</option>

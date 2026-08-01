@@ -336,6 +336,8 @@ export const upsertDailyGoal = (date: string, content: string): Promise<DailyGoa
 export interface UserSettings {
   timezone: string | null
   theme: 'light' | 'dark'
+  theme_variant: string
+  font_size: 'sm' | 'md' | 'lg' | 'xl'
   meeting_note_sort: 'created_at' | 'updated_at'
   todo_defaults: {
     assignee_name: string
