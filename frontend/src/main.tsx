@@ -7,6 +7,7 @@ import { SettingsProvider } from './SettingsContext'
 import { SuggestedNotesProvider } from './SuggestedNotesContext'
 import { RecordingProvider } from './RecordingContext'
 import { ToastProvider } from './ToastContext'
+import './theme'      // applies saved theme CSS variables synchronously
 import './index.css'
 
 const queryClient = new QueryClient({

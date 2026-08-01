@@ -134,21 +134,21 @@ export default function App() {
   }
 
   return (
-    <div className="flex h-screen bg-slate-100 dark:bg-slate-950 overflow-hidden">
+    <div className="flex h-screen bg-app overflow-hidden">
       {/* Sidebar */}
       <aside
         style={{ width: sidebarCollapsed ? 56 : sidebarWidth }}
-        className="bg-slate-900 dark:bg-slate-900 dark:border-r dark:border-slate-800 text-white flex flex-col flex-shrink-0 shadow-xl relative transition-[width] duration-200"
+        className="bg-surface border-r border-border text-fg flex flex-col flex-shrink-0 relative transition-[width] duration-200"
       >
-        <div className={`py-5 border-b border-slate-800 ${sidebarCollapsed ? 'px-2' : 'px-5'}`}>
+        <div className={`py-5 border-b border-border ${sidebarCollapsed ? 'px-2' : 'px-5'}`}>
           <div className="flex items-center gap-2.5 justify-center">
-            <div className="w-7 h-7 bg-indigo-500 rounded-lg flex items-center justify-center flex-shrink-0">
-              <LayoutDashboard size={14} className="text-white" />
+            <div className="w-7 h-7 bg-accent rounded-md flex items-center justify-center flex-shrink-0">
+              <LayoutDashboard size={14} className="text-fg-on-accent" />
             </div>
             {!sidebarCollapsed && (
               <div>
-                <h1 className="text-sm font-bold tracking-tight text-white leading-none">Management</h1>
-                <p className="text-slate-400 text-xs mt-0.5 leading-none">Work tracker</p>
+                <h1 className="text-sm font-semibold tracking-tight text-fg leading-none">Management</h1>
+                <p className="text-fg-subtle text-xs mt-0.5 leading-none">Work tracker</p>
               </div>
             )}
           </div>
@@ -167,12 +167,12 @@ export default function App() {
                 onDragOver={isFocusItem ? handleDragOver : undefined}
                 onDragLeave={isFocusItem ? handleDragLeave : undefined}
                 className={({ isActive }) =>
-                  `w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'} px-3 py-2.5 rounded-lg text-sm font-medium transition-colors mb-0.5 ${
+                  `w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'} px-3 py-2 rounded-md text-sm font-medium transition-colors mb-0.5 ${
                     isFocusItem && dragOverFocus
-                      ? 'bg-indigo-500 text-white ring-2 ring-indigo-300 scale-105'
+                      ? 'bg-accent text-fg-on-accent ring-2 ring-accent/40'
                       : isActive
-                        ? 'bg-indigo-600 text-white'
-                        : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                        ? 'bg-accent-1 text-accent-fg'
+                        : 'text-fg-muted hover:bg-inset hover:text-fg'
                   }`
                 }
               >
@@ -187,20 +187,20 @@ export default function App() {
         </nav>
         {/* Global recording indicator */}
         {(isRecording || isUploading) && recordingNoteId != null && (
-          <div className="px-2 py-2 border-t border-slate-800">
+          <div className="px-2 py-2 border-t border-border">
             <div
-              className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-900/30 cursor-pointer hover:bg-red-900/50 transition-colors"
+              className="flex items-center gap-2 px-3 py-2 rounded-md bg-danger-bg cursor-pointer hover:opacity-90 transition-opacity"
               onClick={() => navigate(`/meeting-notes/${recordingNoteId}`)}
               title="Go to recording"
             >
               {isRecording && (
                 <span className="relative flex h-2.5 w-2.5 flex-shrink-0">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
-                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500" />
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-danger opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-danger" />
                 </span>
               )}
               {!sidebarCollapsed && (
-                <span className="text-xs font-mono text-red-400 flex-1 truncate">
+                <span className="text-xs font-mono text-danger flex-1 truncate">
                   {isUploading
                     ? 'Uploading...'
                     : `REC ${Math.floor(duration / 60)}:${(duration % 60).toString().padStart(2, '0')}`}
@@ -212,7 +212,7 @@ export default function App() {
                     e.stopPropagation()
                     stopRecording()
                   }}
-                  className="p-1 rounded text-red-400 hover:text-white hover:bg-red-800 transition-colors flex-shrink-0"
+                  className="p-1 rounded text-danger hover:opacity-80 transition-opacity flex-shrink-0"
                   title="Stop recording"
                 >
                   <Square size={12} />
@@ -221,16 +221,16 @@ export default function App() {
             </div>
           </div>
         )}
-        <div className="border-t border-slate-800">
+        <div className="border-t border-border">
           <div className="px-2 py-2">
             <NavLink
               to="/settings"
               title={sidebarCollapsed ? 'Settings' : undefined}
               className={({ isActive }) =>
-                `w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'} px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                `w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'} px-3 py-2 rounded-md text-sm font-medium transition-colors ${
                   isActive
-                    ? 'bg-indigo-600 text-white'
-                    : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                    ? 'bg-accent-1 text-accent-fg'
+                    : 'text-fg-muted hover:bg-inset hover:text-fg'
                 }`
               }
             >
@@ -239,15 +239,15 @@ export default function App() {
             </NavLink>
           </div>
           {!sidebarCollapsed && (
-            <div className="px-5 py-3 border-t border-slate-800">
-              <p className="text-slate-500 text-xs">9h/day per person</p>
-              <p className="text-slate-500 text-xs mt-0.5">3 windows × 3h</p>
+            <div className="px-5 py-3 border-t border-border">
+              <p className="text-fg-subtle text-xs">9h/day per person</p>
+              <p className="text-fg-subtle text-xs mt-0.5">3 windows × 3h</p>
             </div>
           )}
-          <div className="px-2 py-2 border-t border-slate-800">
+          <div className="px-2 py-2 border-t border-border">
             <button
               onClick={toggleSidebar}
-              className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm text-slate-400 hover:bg-slate-800 hover:text-white transition-colors"
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm text-fg-muted hover:bg-inset hover:text-fg transition-colors"
               title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             >
               {sidebarCollapsed ? <ChevronsRight size={16} /> : <ChevronsLeft size={16} />}
@@ -258,13 +258,13 @@ export default function App() {
         {!sidebarCollapsed && (
           <div
             onMouseDown={startResize}
-            className="absolute top-0 right-0 w-1.5 h-full cursor-col-resize hover:bg-indigo-500/50 active:bg-indigo-500/50 transition-colors"
+            className="absolute top-0 right-0 w-1.5 h-full cursor-col-resize hover:bg-accent/50 active:bg-accent/50 transition-colors"
           />
         )}
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 overflow-auto dark:bg-slate-950">
+      <main className="flex-1 overflow-auto bg-app">
         <Routes>
           <Route path="/" element={<Dashboard onOpenTodo={(id) => navigate(`/todos/${id}`)} />} />
           <Route path="/focus" element={<FocusPage onOpenTodo={(id) => navigate(`/todos/${id}`)} />} />

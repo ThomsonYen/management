@@ -2,14 +2,14 @@ import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import {
-  ResponsiveContainer,
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  Tooltip,
-  CartesianGrid,
-  Legend,
+ ResponsiveContainer,
+ LineChart,
+ Line,
+ XAxis,
+ YAxis,
+ Tooltip,
+ CartesianGrid,
+ Legend,
 } from 'recharts'
 import { fetchPersonProgress } from '../api'
 import { useTodoDefaults, useTimezone } from '../SettingsContext'
@@ -21,498 +21,498 @@ const DEFAULT_COUNTS: Record<Granularity, number> = { day: 14, week: 8, month: 6
 const DEFAULT_K: Record<Granularity, number> = { day: 7, week: 4, month: 3 }
 
 function computeRollingAverage(
-  values: number[],
-  k: number,
+ values: number[],
+ k: number,
 ): number[] {
-  return values.map((_, i) => {
-    const start = Math.max(0, i - k + 1)
-    const window = values.slice(start, i + 1)
-    return window.reduce((a, b) => a + b, 0) / window.length
-  })
+ return values.map((_, i) => {
+ const start = Math.max(0, i - k + 1)
+ const window = values.slice(start, i + 1)
+ return window.reduce((a, b) => a + b, 0) / window.length
+ })
 }
 
 function formatPeriodLabel(period: string, granularity: Granularity): string {
-  if (granularity === 'day') {
-    const d = new Date(period + 'T00:00:00')
-    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
-  }
-  if (granularity === 'week') {
-    return period.replace(/^\d{4}-/, '')
-  }
-  const [y, m] = period.split('-')
-  const d = new Date(Number(y), Number(m) - 1, 1)
-  return d.toLocaleDateString(undefined, { month: 'short', year: 'numeric' })
+ if (granularity === 'day') {
+ const d = new Date(period + 'T00:00:00')
+ return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+ }
+ if (granularity === 'week') {
+ return period.replace(/^\d{4}-/, '')
+ }
+ const [y, m] = period.split('-')
+ const d = new Date(Number(y), Number(m) - 1, 1)
+ return d.toLocaleDateString(undefined, { month: 'short', year: 'numeric' })
 }
 
 function heatColor(hours: number, maxHours: number): string {
-  if (hours === 0 || maxHours === 0) return ''
-  const ratio = hours / maxHours
-  if (ratio < 0.25) return 'bg-green-100 dark:bg-green-900/30'
-  if (ratio < 0.5) return 'bg-green-200 dark:bg-green-800/40'
-  if (ratio < 0.75) return 'bg-green-300 dark:bg-green-700/50'
-  return 'bg-green-400 dark:bg-green-600/60'
+ if (hours === 0 || maxHours === 0) return ''
+ const ratio = hours / maxHours
+ if (ratio < 0.25) return 'bg-success-bg '
+ if (ratio < 0.5) return 'bg-green-200 '
+ if (ratio < 0.75) return 'bg-green-300 '
+ return 'bg-green-400 dark:bg-success/60'
 }
 
 function getCurrentPeriodKey(granularity: Granularity): string {
-  const now = new Date()
-  if (granularity === 'day') {
-    const y = now.getFullYear()
-    const m = String(now.getMonth() + 1).padStart(2, '0')
-    const d = String(now.getDate()).padStart(2, '0')
-    return `${y}-${m}-${d}`
-  }
-  if (granularity === 'week') {
-    // ISO week calculation
-    const d = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()))
-    d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7))
-    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1))
-    const weekNo = Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7)
-    return `${d.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`
-  }
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+ const now = new Date()
+ if (granularity === 'day') {
+ const y = now.getFullYear()
+ const m = String(now.getMonth() + 1).padStart(2, '0')
+ const d = String(now.getDate()).padStart(2, '0')
+ return `${y}-${m}-${d}`
+ }
+ if (granularity === 'week') {
+ // ISO week calculation
+ const d = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()))
+ d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7))
+ const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1))
+ const weekNo = Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7)
+ return `${d.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`
+ }
+ return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
 }
 
 export default function ProgressPage() {
-  const [granularity, setGranularity] = useState<Granularity>(() => {
-    const saved = localStorage.getItem('progress-granularity')
-    if (saved === 'day' || saved === 'week' || saved === 'month') return saved
-    return 'week'
-  })
-  const [counts, setCounts] = useState<Record<Granularity, number>>(() => {
-    try {
-      const saved = localStorage.getItem('progress-counts')
-      if (saved) return { ...DEFAULT_COUNTS, ...JSON.parse(saved) }
-    } catch { /* ignore */ }
-    return { ...DEFAULT_COUNTS }
-  })
-  const [pageOffset, setPageOffset] = useState(0) // 0 = most recent, 1 = one page back, etc.
+ const [granularity, setGranularity] = useState<Granularity>(() => {
+ const saved = localStorage.getItem('progress-granularity')
+ if (saved === 'day' || saved === 'week' || saved === 'month') return saved
+ return 'week'
+ })
+ const [counts, setCounts] = useState<Record<Granularity, number>>(() => {
+ try {
+ const saved = localStorage.getItem('progress-counts')
+ if (saved) return { ...DEFAULT_COUNTS, ...JSON.parse(saved) }
+ } catch { /* ignore */ }
+ return { ...DEFAULT_COUNTS }
+ })
+ const [pageOffset, setPageOffset] = useState(0) // 0 = most recent, 1 = one page back, etc.
 
-  const { defaults } = useTodoDefaults()
-  const { timezone } = useTimezone()
-  const [selectedPersonId, setSelectedPersonId] = useState<number | null>(() => {
-    const saved = localStorage.getItem('progress-chart-person')
-    if (saved === null) return null
-    const n = parseInt(saved, 10)
-    return Number.isFinite(n) ? n : null
-  })
-  const [kWindow, setKWindow] = useState<Record<Granularity, number>>(() => {
-    try {
-      const saved = localStorage.getItem('progress-k-window')
-      if (saved) return { ...DEFAULT_K, ...JSON.parse(saved) }
-    } catch { /* ignore */ }
-    return { ...DEFAULT_K }
-  })
+ const { defaults } = useTodoDefaults()
+ const { timezone } = useTimezone()
+ const [selectedPersonId, setSelectedPersonId] = useState<number | null>(() => {
+ const saved = localStorage.getItem('progress-chart-person')
+ if (saved === null) return null
+ const n = parseInt(saved, 10)
+ return Number.isFinite(n) ? n : null
+ })
+ const [kWindow, setKWindow] = useState<Record<Granularity, number>>(() => {
+ try {
+ const saved = localStorage.getItem('progress-k-window')
+ if (saved) return { ...DEFAULT_K, ...JSON.parse(saved) }
+ } catch { /* ignore */ }
+ return { ...DEFAULT_K }
+ })
 
-  const count = counts[granularity]
+ const count = counts[granularity]
 
-  const { data: progress = [], isLoading } = useQuery<PersonProgress[]>({
-    queryKey: ['person-progress', granularity, timezone],
-    queryFn: () => fetchPersonProgress(granularity, undefined, timezone),
-  })
+ const { data: progress = [], isLoading } = useQuery<PersonProgress[]>({
+ queryKey: ['person-progress', granularity, timezone],
+ queryFn: () => fetchPersonProgress(granularity, undefined, timezone),
+ })
 
-  // Collect all unique periods, sorted chronologically
-  const allPeriods = useMemo(() => {
-    const set = new Set<string>()
-    for (const p of progress) {
-      for (const b of p.buckets) set.add(b.period)
-    }
-    return Array.from(set).sort()
-  }, [progress])
+ // Collect all unique periods, sorted chronologically
+ const allPeriods = useMemo(() => {
+ const set = new Set<string>()
+ for (const p of progress) {
+ for (const b of p.buckets) set.add(b.period)
+ }
+ return Array.from(set).sort()
+ }, [progress])
 
-  // Slice to show `count` periods ending at the current page window
-  const visiblePeriods = useMemo(() => {
-    const currentKey = getCurrentPeriodKey(granularity)
-    // Find the index of the current period (or the last one <= current)
-    let endIdx = allPeriods.length
-    for (let i = allPeriods.length - 1; i >= 0; i--) {
-      if (allPeriods[i] <= currentKey) {
-        endIdx = i + 1
-        break
-      }
-    }
-    // Apply page offset
-    const pageEnd = endIdx - pageOffset * count
-    const pageStart = Math.max(0, pageEnd - count)
-    return allPeriods.slice(pageStart, Math.max(pageStart, pageEnd))
-  }, [allPeriods, granularity, count, pageOffset])
+ // Slice to show `count` periods ending at the current page window
+ const visiblePeriods = useMemo(() => {
+ const currentKey = getCurrentPeriodKey(granularity)
+ // Find the index of the current period (or the last one <= current)
+ let endIdx = allPeriods.length
+ for (let i = allPeriods.length - 1; i >= 0; i--) {
+ if (allPeriods[i] <= currentKey) {
+ endIdx = i + 1
+ break
+ }
+ }
+ // Apply page offset
+ const pageEnd = endIdx - pageOffset * count
+ const pageStart = Math.max(0, pageEnd - count)
+ return allPeriods.slice(pageStart, Math.max(pageStart, pageEnd))
+ }, [allPeriods, granularity, count, pageOffset])
 
-  const canGoNewer = pageOffset > 0
-  const canGoOlder = useMemo(() => {
-    const currentKey = getCurrentPeriodKey(granularity)
-    let endIdx = allPeriods.length
-    for (let i = allPeriods.length - 1; i >= 0; i--) {
-      if (allPeriods[i] <= currentKey) { endIdx = i + 1; break }
-    }
-    const pageEnd = endIdx - pageOffset * count
-    return pageEnd - count > 0
-  }, [allPeriods, granularity, count, pageOffset])
+ const canGoNewer = pageOffset > 0
+ const canGoOlder = useMemo(() => {
+ const currentKey = getCurrentPeriodKey(granularity)
+ let endIdx = allPeriods.length
+ for (let i = allPeriods.length - 1; i >= 0; i--) {
+ if (allPeriods[i] <= currentKey) { endIdx = i + 1; break }
+ }
+ const pageEnd = endIdx - pageOffset * count
+ return pageEnd - count > 0
+ }, [allPeriods, granularity, count, pageOffset])
 
-  // Build lookup: personId -> period -> bucket
-  const lookup = useMemo(() => {
-    const m = new Map<number, Map<string, { task_count: number; total_hours: number }>>()
-    for (const p of progress) {
-      const bm = new Map<string, { task_count: number; total_hours: number }>()
-      for (const b of p.buckets) bm.set(b.period, b)
-      m.set(p.person_id, bm)
-    }
-    return m
-  }, [progress])
+ // Build lookup: personId -> period -> bucket
+ const lookup = useMemo(() => {
+ const m = new Map<number, Map<string, { task_count: number; total_hours: number }>>()
+ for (const p of progress) {
+ const bm = new Map<string, { task_count: number; total_hours: number }>()
+ for (const b of p.buckets) bm.set(b.period, b)
+ m.set(p.person_id, bm)
+ }
+ return m
+ }, [progress])
 
-  // Max hours in any visible cell (for heat coloring)
-  const maxHours = useMemo(() => {
-    let max = 0
-    const periodSet = new Set(visiblePeriods)
-    for (const p of progress) {
-      for (const b of p.buckets) {
-        if (periodSet.has(b.period) && b.total_hours > max) max = b.total_hours
-      }
-    }
-    return max
-  }, [progress, visiblePeriods])
+ // Max hours in any visible cell (for heat coloring)
+ const maxHours = useMemo(() => {
+ let max = 0
+ const periodSet = new Set(visiblePeriods)
+ for (const p of progress) {
+ for (const b of p.buckets) {
+ if (periodSet.has(b.period) && b.total_hours > max) max = b.total_hours
+ }
+ }
+ return max
+ }, [progress, visiblePeriods])
 
-  // Column totals for visible periods
-  const columnTotals = useMemo(() => {
-    const totals = new Map<string, { count: number; hours: number }>()
-    for (const period of visiblePeriods) {
-      let c = 0, h = 0
-      for (const p of progress) {
-        const b = lookup.get(p.person_id)?.get(period)
-        if (b) { c += b.task_count; h += b.total_hours }
-      }
-      totals.set(period, { count: c, hours: h })
-    }
-    return totals
-  }, [visiblePeriods, progress, lookup])
+ // Column totals for visible periods
+ const columnTotals = useMemo(() => {
+ const totals = new Map<string, { count: number; hours: number }>()
+ for (const period of visiblePeriods) {
+ let c = 0, h = 0
+ for (const p of progress) {
+ const b = lookup.get(p.person_id)?.get(period)
+ if (b) { c += b.task_count; h += b.total_hours }
+ }
+ totals.set(period, { count: c, hours: h })
+ }
+ return totals
+ }, [visiblePeriods, progress, lookup])
 
-  // Visible-window totals per person
-  const visibleTotals = useMemo(() => {
-    const periodSet = new Set(visiblePeriods)
-    const m = new Map<number, { count: number; hours: number }>()
-    for (const p of progress) {
-      let c = 0, h = 0
-      for (const b of p.buckets) {
-        if (periodSet.has(b.period)) { c += b.task_count; h += b.total_hours }
-      }
-      m.set(p.person_id, { count: c, hours: h })
-    }
-    return m
-  }, [progress, visiblePeriods])
+ // Visible-window totals per person
+ const visibleTotals = useMemo(() => {
+ const periodSet = new Set(visiblePeriods)
+ const m = new Map<number, { count: number; hours: number }>()
+ for (const p of progress) {
+ let c = 0, h = 0
+ for (const b of p.buckets) {
+ if (periodSet.has(b.period)) { c += b.task_count; h += b.total_hours }
+ }
+ m.set(p.person_id, { count: c, hours: h })
+ }
+ return m
+ }, [progress, visiblePeriods])
 
-  const totalTasks = Array.from(visibleTotals.values()).reduce((s, v) => s + v.count, 0)
-  const totalHours = Array.from(visibleTotals.values()).reduce((s, v) => s + v.hours, 0)
+ const totalTasks = Array.from(visibleTotals.values()).reduce((s, v) => s + v.count, 0)
+ const totalHours = Array.from(visibleTotals.values()).reduce((s, v) => s + v.hours, 0)
 
-  // Resolve which person is selected for the chart
-  const chartPersonId = useMemo(() => {
-    if (selectedPersonId !== null) return selectedPersonId
-    const defaultName = defaults.assigneeName
-    if (defaultName) {
-      const match = progress.find((p) => p.person_name === defaultName)
-      if (match) return match.person_id
-    }
-    return progress.length > 0 ? progress[0].person_id : null
-  }, [selectedPersonId, defaults.assigneeName, progress])
+ // Resolve which person is selected for the chart
+ const chartPersonId = useMemo(() => {
+ if (selectedPersonId !== null) return selectedPersonId
+ const defaultName = defaults.assigneeName
+ if (defaultName) {
+ const match = progress.find((p) => p.person_name === defaultName)
+ if (match) return match.person_id
+ }
+ return progress.length > 0 ? progress[0].person_id : null
+ }, [selectedPersonId, defaults.assigneeName, progress])
 
-  const k = kWindow[granularity]
+ const k = kWindow[granularity]
 
-  // Build chart data for selected person
-  const chartData = useMemo(() => {
-    if (chartPersonId === null) return []
-    const person = progress.find((p) => p.person_id === chartPersonId)
-    if (!person) return []
+ // Build chart data for selected person
+ const chartData = useMemo(() => {
+ if (chartPersonId === null) return []
+ const person = progress.find((p) => p.person_id === chartPersonId)
+ if (!person) return []
 
-    const bucketMap = new Map(person.buckets.map((b) => [b.period, b]))
-    const hoursRaw = allPeriods.map((p) => bucketMap.get(p)?.total_hours ?? 0)
-    const avgHours = computeRollingAverage(hoursRaw, k)
+ const bucketMap = new Map(person.buckets.map((b) => [b.period, b]))
+ const hoursRaw = allPeriods.map((p) => bucketMap.get(p)?.total_hours ?? 0)
+ const avgHours = computeRollingAverage(hoursRaw, k)
 
-    return allPeriods.map((period, i) => ({
-      period,
-      label: formatPeriodLabel(period, granularity),
-      hours: hoursRaw[i],
-      avg: Math.round(avgHours[i] * 100) / 100,
-    }))
-  }, [chartPersonId, progress, allPeriods, granularity, k])
+ return allPeriods.map((period, i) => ({
+ period,
+ label: formatPeriodLabel(period, granularity),
+ hours: hoursRaw[i],
+ avg: Math.round(avgHours[i] * 100) / 100,
+ }))
+ }, [chartPersonId, progress, allPeriods, granularity, k])
 
-  const handleKChange = (val: string) => {
-    const n = parseInt(val, 10)
-    if (n > 0 && n <= 100) {
-      setKWindow((prev) => {
-        const next = { ...prev, [granularity]: n }
-        localStorage.setItem('progress-k-window', JSON.stringify(next))
-        return next
-      })
-    }
-  }
+ const handleKChange = (val: string) => {
+ const n = parseInt(val, 10)
+ if (n > 0 && n <= 100) {
+ setKWindow((prev) => {
+ const next = { ...prev, [granularity]: n }
+ localStorage.setItem('progress-k-window', JSON.stringify(next))
+ return next
+ })
+ }
+ }
 
-  const granularityOptions: Granularity[] = ['day', 'week', 'month']
+ const granularityOptions: Granularity[] = ['day', 'week', 'month']
 
-  const handleCountChange = (val: string) => {
-    const n = parseInt(val, 10)
-    if (n > 0 && n <= 365) {
-      setCounts((prev) => {
-        const next = { ...prev, [granularity]: n }
-        localStorage.setItem('progress-counts', JSON.stringify(next))
-        return next
-      })
-      setPageOffset(0)
-    }
-  }
+ const handleCountChange = (val: string) => {
+ const n = parseInt(val, 10)
+ if (n > 0 && n <= 365) {
+ setCounts((prev) => {
+ const next = { ...prev, [granularity]: n }
+ localStorage.setItem('progress-counts', JSON.stringify(next))
+ return next
+ })
+ setPageOffset(0)
+ }
+ }
 
-  const handleGranularityChange = (g: Granularity) => {
-    setGranularity(g)
-    localStorage.setItem('progress-granularity', g)
-    setPageOffset(0)
-  }
+ const handleGranularityChange = (g: Granularity) => {
+ setGranularity(g)
+ localStorage.setItem('progress-granularity', g)
+ setPageOffset(0)
+ }
 
-  return (
-    <div className="p-6 max-w-[1400px] mx-auto">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Progress</h1>
-        <div className="flex items-center gap-4">
-          {/* Period count */}
-          <div className="flex items-center gap-2">
-            <label className="text-sm text-slate-500 dark:text-slate-400">Show</label>
-            <input
-              type="number"
-              min={1}
-              max={365}
-              value={count}
-              onChange={(e) => handleCountChange(e.target.value)}
-              className="w-16 px-2 py-1.5 text-sm rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-center"
-            />
-            <span className="text-sm text-slate-500 dark:text-slate-400">{granularity}s</span>
-          </div>
-          {/* Granularity toggle */}
-          <div className="flex items-center gap-1 bg-slate-200 dark:bg-slate-800 rounded-lg p-1">
-            {granularityOptions.map((g) => (
-              <button
-                key={g}
-                onClick={() => handleGranularityChange(g)}
-                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                  granularity === g
-                    ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                }`}
-              >
-                {g.charAt(0).toUpperCase() + g.slice(1)}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
+ return (
+ <div className="p-6 max-w-[1400px] mx-auto">
+ <div className="flex items-center justify-between mb-6">
+ <h1 className="text-2xl font-bold text-fg dark:text-white">Progress</h1>
+ <div className="flex items-center gap-4">
+ {/* Period count */}
+ <div className="flex items-center gap-2">
+ <label className="text-sm text-fg-muted">Show</label>
+ <input
+ type="number"
+ min={1}
+ max={365}
+ value={count}
+ onChange={(e) => handleCountChange(e.target.value)}
+ className="w-16 px-2 py-1.5 text-sm rounded-md border border-border bg-surface text-fg dark:text-white text-center"
+ />
+ <span className="text-sm text-fg-muted">{granularity}s</span>
+ </div>
+ {/* Granularity toggle */}
+ <div className="flex items-center gap-1 bg-border-subtle rounded-lg p-1">
+ {granularityOptions.map((g) => (
+ <button
+ key={g}
+ onClick={() => handleGranularityChange(g)}
+ className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+ granularity === g
+ ? 'bg-surface text-fg dark:text-white shadow-sm'
+ : 'text-fg-muted hover:text-fg dark:hover:text-white'
+ }`}
+ >
+ {g.charAt(0).toUpperCase() + g.slice(1)}
+ </button>
+ ))}
+ </div>
+ </div>
+ </div>
 
-      {/* Summary cards */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
-        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4">
-          <p className="text-sm text-slate-500 dark:text-slate-400">People</p>
-          <p className="text-2xl font-bold text-slate-900 dark:text-white">{progress.length}</p>
-        </div>
-        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4">
-          <p className="text-sm text-slate-500 dark:text-slate-400">Tasks Completed</p>
-          <p className="text-2xl font-bold text-slate-900 dark:text-white">{totalTasks}</p>
-        </div>
-        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4">
-          <p className="text-sm text-slate-500 dark:text-slate-400">Total Hours</p>
-          <p className="text-2xl font-bold text-slate-900 dark:text-white">{totalHours.toFixed(1)}</p>
-        </div>
-      </div>
+ {/* Summary cards */}
+ <div className="grid grid-cols-3 gap-4 mb-6">
+ <div className="bg-surface rounded-xl border border-border p-4">
+ <p className="text-sm text-fg-muted">People</p>
+ <p className="text-2xl font-bold text-fg dark:text-white">{progress.length}</p>
+ </div>
+ <div className="bg-surface rounded-xl border border-border p-4">
+ <p className="text-sm text-fg-muted">Tasks Completed</p>
+ <p className="text-2xl font-bold text-fg dark:text-white">{totalTasks}</p>
+ </div>
+ <div className="bg-surface rounded-xl border border-border p-4">
+ <p className="text-sm text-fg-muted">Total Hours</p>
+ <p className="text-2xl font-bold text-fg dark:text-white">{totalHours.toFixed(1)}</p>
+ </div>
+ </div>
 
-      {/* Rolling average chart */}
-      {progress.length > 0 && (
-        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4 mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Hours Trend</h2>
-              <select
-                value={chartPersonId ?? ''}
-                onChange={(e) => {
-                  const n = parseInt(e.target.value)
-                  setSelectedPersonId(n)
-                  localStorage.setItem('progress-chart-person', String(n))
-                }}
-                className="text-sm border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              >
-                {progress.map((p) => (
-                  <option key={p.person_id} value={p.person_id}>
-                    {p.person_name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="flex items-center gap-2">
-              <label className="text-sm text-slate-500 dark:text-slate-400">Window</label>
-              <input
-                type="number"
-                min={1}
-                max={100}
-                value={k}
-                onChange={(e) => handleKChange(e.target.value)}
-                className="w-14 px-2 py-1 text-sm rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-center"
-              />
-              <span className="text-sm text-slate-500 dark:text-slate-400">{granularity}s</span>
-            </div>
-          </div>
-          <ResponsiveContainer width="100%" height={260}>
-            <LineChart data={chartData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="currentColor" className="text-slate-200 dark:text-slate-700" />
-              <XAxis
-                dataKey="label"
-                tick={{ fontSize: 11 }}
-                interval="preserveStartEnd"
-                className="text-slate-500 dark:text-slate-400"
-              />
-              <YAxis tick={{ fontSize: 11 }} className="text-slate-500 dark:text-slate-400" />
-              <Tooltip
-                contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e2e8f0' }}
-                formatter={(value, name) => [
-                  `${Number(value).toFixed(1)}h`,
-                  name === 'hours' ? 'Hours' : `${k}-${granularity} avg`,
-                ]}
-              />
-              <Legend
-                formatter={(value) => (value === 'hours' ? 'Hours' : `${k}-${granularity} avg`)}
-              />
-              <Line
-                type="monotone"
-                dataKey="hours"
-                stroke="#94a3b8"
-                strokeWidth={1}
-                dot={false}
-                opacity={0.5}
-              />
-              <Line
-                type="monotone"
-                dataKey="avg"
-                stroke="#22c55e"
-                strokeWidth={2}
-                dot={false}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      )}
+ {/* Rolling average chart */}
+ {progress.length > 0 && (
+ <div className="bg-surface rounded-xl border border-border p-4 mb-6">
+ <div className="flex items-center justify-between mb-4">
+ <div className="flex items-center gap-3">
+ <h2 className="text-sm font-semibold text-fg dark:text-fg-faint">Hours Trend</h2>
+ <select
+ value={chartPersonId ?? ''}
+ onChange={(e) => {
+ const n = parseInt(e.target.value)
+ setSelectedPersonId(n)
+ localStorage.setItem('progress-chart-person', String(n))
+ }}
+ className="text-sm border border-border bg-surface text-fg dark:text-white rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-accent"
+ >
+ {progress.map((p) => (
+ <option key={p.person_id} value={p.person_id}>
+ {p.person_name}
+ </option>
+ ))}
+ </select>
+ </div>
+ <div className="flex items-center gap-2">
+ <label className="text-sm text-fg-muted">Window</label>
+ <input
+ type="number"
+ min={1}
+ max={100}
+ value={k}
+ onChange={(e) => handleKChange(e.target.value)}
+ className="w-14 px-2 py-1 text-sm rounded-md border border-border bg-surface text-fg dark:text-white text-center"
+ />
+ <span className="text-sm text-fg-muted">{granularity}s</span>
+ </div>
+ </div>
+ <ResponsiveContainer width="100%" height={260}>
+ <LineChart data={chartData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+ <CartesianGrid strokeDasharray="3 3" stroke="currentColor" className="text-fg-faint dark:text-fg" />
+ <XAxis
+ dataKey="label"
+ tick={{ fontSize: 11 }}
+ interval="preserveStartEnd"
+ className="text-fg-muted"
+ />
+ <YAxis tick={{ fontSize: 11 }} className="text-fg-muted" />
+ <Tooltip
+ contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e2e8f0' }}
+ formatter={(value, name) => [
+ `${Number(value).toFixed(1)}h`,
+ name === 'hours' ? 'Hours' : `${k}-${granularity} avg`,
+ ]}
+ />
+ <Legend
+ formatter={(value) => (value === 'hours' ? 'Hours' : `${k}-${granularity} avg`)}
+ />
+ <Line
+ type="monotone"
+ dataKey="hours"
+ stroke="#94a3b8"
+ strokeWidth={1}
+ dot={false}
+ opacity={0.5}
+ />
+ <Line
+ type="monotone"
+ dataKey="avg"
+ stroke="#22c55e"
+ strokeWidth={2}
+ dot={false}
+ />
+ </LineChart>
+ </ResponsiveContainer>
+ </div>
+ )}
 
-      {isLoading ? (
-        <p className="text-slate-500 dark:text-slate-400">Loading...</p>
-      ) : progress.length === 0 ? (
-        <div className="text-center py-16 text-slate-500 dark:text-slate-400">
-          No completed tasks found for this period.
-        </div>
-      ) : (
-        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden">
-          {/* Pagination controls */}
-          <div className="flex items-center justify-between px-4 py-2 border-b border-slate-200 dark:border-slate-800">
-            <button
-              onClick={() => setPageOffset((p) => p + 1)}
-              disabled={!canGoOlder}
-              className="flex items-center gap-1 text-sm text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-            >
-              <ChevronLeft size={16} /> Older
-            </button>
-            <span className="text-xs text-slate-400 dark:text-slate-500">
-              {visiblePeriods.length > 0
-                ? `${formatPeriodLabel(visiblePeriods[0], granularity)} — ${formatPeriodLabel(visiblePeriods[visiblePeriods.length - 1], granularity)}`
-                : 'No data'}
-            </span>
-            <button
-              onClick={() => setPageOffset((p) => Math.max(0, p - 1))}
-              disabled={!canGoNewer}
-              className="flex items-center gap-1 text-sm text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-            >
-              Newer <ChevronRight size={16} />
-            </button>
-          </div>
+ {isLoading ? (
+ <p className="text-fg-muted">Loading...</p>
+ ) : progress.length === 0 ? (
+ <div className="text-center py-16 text-fg-muted">
+ No completed tasks found for this period.
+ </div>
+ ) : (
+ <div className="bg-surface rounded-xl border border-border overflow-hidden">
+ {/* Pagination controls */}
+ <div className="flex items-center justify-between px-4 py-2 border-b border-border">
+ <button
+ onClick={() => setPageOffset((p) => p + 1)}
+ disabled={!canGoOlder}
+ className="flex items-center gap-1 text-sm text-fg-muted hover:text-fg dark:hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+ >
+ <ChevronLeft size={16} /> Older
+ </button>
+ <span className="text-xs text-fg-subtle">
+ {visiblePeriods.length > 0
+ ? `${formatPeriodLabel(visiblePeriods[0], granularity)} — ${formatPeriodLabel(visiblePeriods[visiblePeriods.length - 1], granularity)}`
+ : 'No data'}
+ </span>
+ <button
+ onClick={() => setPageOffset((p) => Math.max(0, p - 1))}
+ disabled={!canGoNewer}
+ className="flex items-center gap-1 text-sm text-fg-muted hover:text-fg dark:hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+ >
+ Newer <ChevronRight size={16} />
+ </button>
+ </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 dark:border-slate-800">
-                  <th className="sticky left-0 z-10 bg-slate-50 dark:bg-slate-900 text-left px-4 py-3 font-semibold text-slate-700 dark:text-slate-300 min-w-[140px]">
-                    Person
-                  </th>
-                  {visiblePeriods.map((period) => (
-                    <th
-                      key={period}
-                      className="px-3 py-3 font-medium text-slate-500 dark:text-slate-400 text-center whitespace-nowrap min-w-[80px]"
-                    >
-                      {formatPeriodLabel(period, granularity)}
-                    </th>
-                  ))}
-                  <th className="sticky right-0 z-10 bg-slate-50 dark:bg-slate-900 px-4 py-3 font-semibold text-slate-700 dark:text-slate-300 text-center min-w-[90px]">
-                    Total
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {progress.map((person) => {
-                  const personBuckets = lookup.get(person.person_id)!
-                  const pTotals = visibleTotals.get(person.person_id)!
-                  return (
-                    <tr
-                      key={person.person_id}
-                      className="border-b border-slate-100 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-800/30"
-                    >
-                      <td className="sticky left-0 z-10 bg-white dark:bg-slate-900 px-4 py-3 font-medium text-slate-900 dark:text-white whitespace-nowrap">
-                        {person.person_name}
-                      </td>
-                      {visiblePeriods.map((period) => {
-                        const bucket = personBuckets.get(period)
-                        const cnt = bucket?.task_count ?? 0
-                        const hrs = bucket?.total_hours ?? 0
-                        return (
-                          <td
-                            key={period}
-                            className={`px-3 py-3 text-center ${heatColor(hrs, maxHours)}`}
-                          >
-                            {cnt > 0 ? (
-                              <div>
-                                <span className="font-medium text-slate-900 dark:text-white">{hrs.toFixed(1)}h</span>
-                                <span className="text-slate-400 dark:text-slate-500 text-xs ml-1">
-                                  {cnt}
-                                </span>
-                              </div>
-                            ) : (
-                              <span className="text-slate-300 dark:text-slate-700">-</span>
-                            )}
-                          </td>
-                        )
-                      })}
-                      <td className="sticky right-0 z-10 bg-white dark:bg-slate-900 px-4 py-3 text-center font-semibold">
-                        <span className="text-slate-900 dark:text-white">{pTotals.hours.toFixed(1)}h</span>
-                        <span className="text-slate-400 dark:text-slate-500 text-xs ml-1">
-                          {pTotals.count}
-                        </span>
-                      </td>
-                    </tr>
-                  )
-                })}
-                {/* Column totals row */}
-                <tr className="bg-slate-50 dark:bg-slate-800/50 border-t border-slate-200 dark:border-slate-700">
-                  <td className="sticky left-0 z-10 bg-slate-50 dark:bg-slate-800/50 px-4 py-3 font-semibold text-slate-700 dark:text-slate-300">
-                    Total
-                  </td>
-                  {visiblePeriods.map((period) => {
-                    const col = columnTotals.get(period)!
-                    return (
-                      <td key={period} className="px-3 py-3 text-center font-semibold">
-                        <span className="text-slate-700 dark:text-slate-300">{col.hours.toFixed(1)}h</span>
-                        <span className="text-slate-400 dark:text-slate-500 text-xs ml-1">
-                          {col.count}
-                        </span>
-                      </td>
-                    )
-                  })}
-                  <td className="sticky right-0 z-10 bg-slate-50 dark:bg-slate-800/50 px-4 py-3 text-center font-bold">
-                    <span className="text-slate-900 dark:text-white">{totalHours.toFixed(1)}h</span>
-                    <span className="text-slate-400 dark:text-slate-500 text-xs ml-1">
-                      {totalTasks}
-                    </span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-    </div>
-  )
+ <div className="overflow-x-auto">
+ <table className="w-full text-sm">
+ <thead>
+ <tr className="border-b border-border">
+ <th className="sticky left-0 z-10 bg-app text-left px-4 py-3 font-semibold text-fg dark:text-fg-faint min-w-[140px]">
+ Person
+ </th>
+ {visiblePeriods.map((period) => (
+ <th
+ key={period}
+ className="px-3 py-3 font-medium text-fg-muted text-center whitespace-nowrap min-w-[80px]"
+ >
+ {formatPeriodLabel(period, granularity)}
+ </th>
+ ))}
+ <th className="sticky right-0 z-10 bg-app px-4 py-3 font-semibold text-fg dark:text-fg-faint text-center min-w-[90px]">
+ Total
+ </th>
+ </tr>
+ </thead>
+ <tbody>
+ {progress.map((person) => {
+ const personBuckets = lookup.get(person.person_id)!
+ const pTotals = visibleTotals.get(person.person_id)!
+ return (
+ <tr
+ key={person.person_id}
+ className="border-b border-border-subtle/50 hover:bg-inset/30"
+ >
+ <td className="sticky left-0 z-10 bg-surface px-4 py-3 font-medium text-fg dark:text-white whitespace-nowrap">
+ {person.person_name}
+ </td>
+ {visiblePeriods.map((period) => {
+ const bucket = personBuckets.get(period)
+ const cnt = bucket?.task_count ?? 0
+ const hrs = bucket?.total_hours ?? 0
+ return (
+ <td
+ key={period}
+ className={`px-3 py-3 text-center ${heatColor(hrs, maxHours)}`}
+ >
+ {cnt > 0 ? (
+ <div>
+ <span className="font-medium text-fg dark:text-white">{hrs.toFixed(1)}h</span>
+ <span className="text-fg-subtle text-xs ml-1">
+ {cnt}
+ </span>
+ </div>
+ ) : (
+ <span className="text-fg-faint dark:text-fg">-</span>
+ )}
+ </td>
+ )
+ })}
+ <td className="sticky right-0 z-10 bg-surface px-4 py-3 text-center font-semibold">
+ <span className="text-fg dark:text-white">{pTotals.hours.toFixed(1)}h</span>
+ <span className="text-fg-subtle text-xs ml-1">
+ {pTotals.count}
+ </span>
+ </td>
+ </tr>
+ )
+ })}
+ {/* Column totals row */}
+ <tr className="bg-inset border-t border-border">
+ <td className="sticky left-0 z-10 bg-inset px-4 py-3 font-semibold text-fg dark:text-fg-faint">
+ Total
+ </td>
+ {visiblePeriods.map((period) => {
+ const col = columnTotals.get(period)!
+ return (
+ <td key={period} className="px-3 py-3 text-center font-semibold">
+ <span className="text-fg dark:text-fg-faint">{col.hours.toFixed(1)}h</span>
+ <span className="text-fg-subtle text-xs ml-1">
+ {col.count}
+ </span>
+ </td>
+ )
+ })}
+ <td className="sticky right-0 z-10 bg-inset px-4 py-3 text-center font-bold">
+ <span className="text-fg dark:text-white">{totalHours.toFixed(1)}h</span>
+ <span className="text-fg-subtle text-xs ml-1">
+ {totalTasks}
+ </span>
+ </td>
+ </tr>
+ </tbody>
+ </table>
+ </div>
+ </div>
+ )}
+ </div>
+ )
 }

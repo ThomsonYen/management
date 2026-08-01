@@ -81,14 +81,14 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         {toasts.map((t) => {
           const toneStyle =
             t.tone === 'success'
-              ? 'bg-green-600 text-white border-green-500'
+              ? 'bg-success text-white border-success'
               : t.tone === 'danger'
-                ? 'bg-slate-800 text-white border-slate-700'
-                : 'bg-slate-800 text-white border-slate-700'
+                ? 'bg-danger text-white border-danger'
+                : 'bg-fg text-app border-fg'
           return (
             <div
               key={t.id}
-              className={`pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg border min-w-[280px] max-w-md animate-[fadeIn_0.15s_ease-out] ${toneStyle}`}
+              className={`pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-lg shadow-overlay border min-w-[280px] max-w-md animate-[fadeIn_0.15s_ease-out] ${toneStyle}`}
               role="status"
             >
               <span className="flex-1 text-sm">{t.message}</span>
@@ -98,7 +98,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                     t.action!.onClick()
                     dismissToast(t.id)
                   }}
-                  className="text-xs font-semibold uppercase tracking-wide px-2.5 py-1 rounded-md bg-white/10 hover:bg-white/20 transition-colors"
+                  className="text-xs font-semibold px-2.5 py-1 rounded-md bg-white/15 hover:bg-white/25 transition-colors"
                 >
                   {t.action.label}
                   <span className="ml-1.5 opacity-70">({t.remainingSeconds}s)</span>
@@ -107,7 +107,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               <button
                 onClick={() => dismissToast(t.id)}
                 aria-label="Dismiss"
-                className="text-white/60 hover:text-white transition-colors text-lg leading-none"
+                className="opacity-60 hover:opacity-100 transition-opacity text-lg leading-none"
               >
                 ×
               </button>

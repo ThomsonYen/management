@@ -5,131 +5,131 @@ import type { Person, Project } from '../types'
 import DatePicker from './DatePicker'
 
 interface BulkActionBarProps {
-  selectedIds: Set<number>
-  onClearSelection: () => void
-  queryKeys: unknown[][]
+ selectedIds: Set<number>
+ onClearSelection: () => void
+ queryKeys: unknown[][]
 }
 
 export default function BulkActionBar({ selectedIds, onClearSelection, queryKeys }: BulkActionBarProps) {
-  const queryClient = useQueryClient()
-  const [activeAction, setActiveAction] = useState<'person' | 'project' | 'deadline' | null>(null)
-  const [deadlineValue, setDeadlineValue] = useState('')
+ const queryClient = useQueryClient()
+ const [activeAction, setActiveAction] = useState<'person' | 'project' | 'deadline' | null>(null)
+ const [deadlineValue, setDeadlineValue] = useState('')
 
-  const { data: persons = [] } = useQuery<Person[]>({ queryKey: ['persons'], queryFn: fetchPersons })
-  const { data: projects = [] } = useQuery<Project[]>({ queryKey: ['projects'], queryFn: fetchProjects })
+ const { data: persons = [] } = useQuery<Person[]>({ queryKey: ['persons'], queryFn: fetchPersons })
+ const { data: projects = [] } = useQuery<Project[]>({ queryKey: ['projects'], queryFn: fetchProjects })
 
-  const bulkUpdate = useMutation({
-    mutationFn: async (data: Record<string, unknown>) => {
-      await Promise.all(Array.from(selectedIds).map((id) => updateTodo(id, data)))
-    },
-    onSuccess: () => {
-      queryKeys.forEach((k) => queryClient.invalidateQueries({ queryKey: k as string[] }))
-      queryClient.invalidateQueries({ queryKey: ['reminders'] })
-      queryClient.invalidateQueries({ queryKey: ['recently-done'] })
-      onClearSelection()
-      setActiveAction(null)
-      setDeadlineValue('')
-    },
-  })
+ const bulkUpdate = useMutation({
+ mutationFn: async (data: Record<string, unknown>) => {
+ await Promise.all(Array.from(selectedIds).map((id) => updateTodo(id, data)))
+ },
+ onSuccess: () => {
+ queryKeys.forEach((k) => queryClient.invalidateQueries({ queryKey: k as string[] }))
+ queryClient.invalidateQueries({ queryKey: ['reminders'] })
+ queryClient.invalidateQueries({ queryKey: ['recently-done'] })
+ onClearSelection()
+ setActiveAction(null)
+ setDeadlineValue('')
+ },
+ })
 
-  const count = selectedIds.size
-  if (count === 0) return null
+ const count = selectedIds.size
+ if (count === 0) return null
 
-  return (
-    <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 w-full max-w-3xl px-4">
-      <div className="bg-indigo-600 dark:bg-indigo-700 text-white rounded-xl shadow-2xl px-5 py-3 flex items-center gap-3 flex-wrap">
-        <span className="text-sm font-semibold flex-shrink-0">
-          {count} selected
-        </span>
+ return (
+ <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 w-full max-w-3xl px-4">
+ <div className="bg-accent dark:bg-accent-hover text-white rounded-xl shadow-2xl px-5 py-3 flex items-center gap-3 flex-wrap">
+ <span className="text-sm font-semibold flex-shrink-0">
+ {count} selected
+ </span>
 
-        <div className="h-5 w-px bg-indigo-400 flex-shrink-0" />
+ <div className="h-5 w-px bg-accent-hover flex-shrink-0" />
 
-        {/* Assign Person */}
-        {activeAction === 'person' ? (
-          <select
-            autoFocus
-            onChange={(e) => {
-              const val = e.target.value
-              if (val === '') return
-              bulkUpdate.mutate({ assignee_id: val === '__none__' ? null : parseInt(val) })
-            }}
-            onBlur={() => setActiveAction(null)}
-            className="text-sm bg-white text-slate-800 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-white"
-          >
-            <option value="">Pick a person...</option>
-            <option value="__none__">-- Remove assignee --</option>
-            {persons.map((p) => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </select>
-        ) : (
-          <button
-            onClick={() => setActiveAction('person')}
-            disabled={bulkUpdate.isPending}
-            className="text-sm bg-indigo-500 hover:bg-indigo-400 px-3 py-1.5 rounded-lg font-medium transition-colors disabled:opacity-50"
-          >
-            Assign Person
-          </button>
-        )}
+ {/* Assign Person */}
+ {activeAction === 'person' ? (
+ <select
+ autoFocus
+ onChange={(e) => {
+ const val = e.target.value
+ if (val === '') return
+ bulkUpdate.mutate({ assignee_id: val === '__none__' ? null : parseInt(val) })
+ }}
+ onBlur={() => setActiveAction(null)}
+ className="text-sm bg-white text-fg rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-white"
+ >
+ <option value="">Pick a person...</option>
+ <option value="__none__">-- Remove assignee --</option>
+ {persons.map((p) => (
+ <option key={p.id} value={p.id}>{p.name}</option>
+ ))}
+ </select>
+ ) : (
+ <button
+ onClick={() => setActiveAction('person')}
+ disabled={bulkUpdate.isPending}
+ className="text-sm bg-accent hover:bg-accent-hover px-3 py-1.5 rounded-lg font-medium transition-colors disabled:opacity-50"
+ >
+ Assign Person
+ </button>
+ )}
 
-        {/* Set Project */}
-        {activeAction === 'project' ? (
-          <select
-            autoFocus
-            onChange={(e) => {
-              const val = e.target.value
-              if (val === '') return
-              bulkUpdate.mutate({ project_id: val === '__none__' ? null : parseInt(val) })
-            }}
-            onBlur={() => setActiveAction(null)}
-            className="text-sm bg-white text-slate-800 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-white"
-          >
-            <option value="">Pick a project...</option>
-            <option value="__none__">-- Remove project --</option>
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </select>
-        ) : (
-          <button
-            onClick={() => setActiveAction('project')}
-            disabled={bulkUpdate.isPending}
-            className="text-sm bg-indigo-500 hover:bg-indigo-400 px-3 py-1.5 rounded-lg font-medium transition-colors disabled:opacity-50"
-          >
-            Set Project
-          </button>
-        )}
+ {/* Set Project */}
+ {activeAction === 'project' ? (
+ <select
+ autoFocus
+ onChange={(e) => {
+ const val = e.target.value
+ if (val === '') return
+ bulkUpdate.mutate({ project_id: val === '__none__' ? null : parseInt(val) })
+ }}
+ onBlur={() => setActiveAction(null)}
+ className="text-sm bg-white text-fg rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-white"
+ >
+ <option value="">Pick a project...</option>
+ <option value="__none__">-- Remove project --</option>
+ {projects.map((p) => (
+ <option key={p.id} value={p.id}>{p.name}</option>
+ ))}
+ </select>
+ ) : (
+ <button
+ onClick={() => setActiveAction('project')}
+ disabled={bulkUpdate.isPending}
+ className="text-sm bg-accent hover:bg-accent-hover px-3 py-1.5 rounded-lg font-medium transition-colors disabled:opacity-50"
+ >
+ Set Project
+ </button>
+ )}
 
-        {/* Set Deadline */}
-        {activeAction === 'deadline' ? (
-          <DatePicker
-            value={deadlineValue}
-            onChange={(v) => {
-              setDeadlineValue(v)
-              if (v) bulkUpdate.mutate({ deadline: v })
-            }}
-            variant="input"
-            triggerClassName="!bg-white !text-slate-800 !px-3 !py-1.5 !text-sm !rounded-lg"
-          />
-        ) : (
-          <button
-            onClick={() => setActiveAction('deadline')}
-            disabled={bulkUpdate.isPending}
-            className="text-sm bg-indigo-500 hover:bg-indigo-400 px-3 py-1.5 rounded-lg font-medium transition-colors disabled:opacity-50"
-          >
-            Set Deadline
-          </button>
-        )}
+ {/* Set Deadline */}
+ {activeAction === 'deadline' ? (
+ <DatePicker
+ value={deadlineValue}
+ onChange={(v) => {
+ setDeadlineValue(v)
+ if (v) bulkUpdate.mutate({ deadline: v })
+ }}
+ variant="input"
+ triggerClassName="!bg-white !text-fg !px-3 !py-1.5 !text-sm !rounded-lg"
+ />
+ ) : (
+ <button
+ onClick={() => setActiveAction('deadline')}
+ disabled={bulkUpdate.isPending}
+ className="text-sm bg-accent hover:bg-accent-hover px-3 py-1.5 rounded-lg font-medium transition-colors disabled:opacity-50"
+ >
+ Set Deadline
+ </button>
+ )}
 
-        <div className="flex-1" />
+ <div className="flex-1" />
 
-        <button
-          onClick={onClearSelection}
-          className="text-sm text-indigo-200 hover:text-white font-medium transition-colors flex-shrink-0"
-        >
-          Cancel
-        </button>
-      </div>
-    </div>
-  )
+ <button
+ onClick={onClearSelection}
+ className="text-sm text-accent-fg hover:text-white font-medium transition-colors flex-shrink-0"
+ >
+ Cancel
+ </button>
+ </div>
+ </div>
+ )
 }

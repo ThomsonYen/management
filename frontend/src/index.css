@@ -1,3 +1,4 @@
+/* Fallback font (real font families are loaded by the active theme in src/theme/) */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
 @tailwind base;
@@ -8,20 +9,60 @@
   box-sizing: border-box;
 }
 
+html {
+  font-feature-settings: var(--font-feature-settings, normal);
+}
+
 body {
   margin: 0;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background-color: #f1f5f9;
+  font-family: var(--font-sans, 'Inter', system-ui, sans-serif);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  @apply bg-app text-fg;
 }
 
-.dark body,
-html.dark body {
-  background-color: #020617;
+/* Native checkbox/radio inherit the accent color */
+input[type='checkbox'],
+input[type='radio'] {
+  accent-color: rgb(var(--accent));
 }
 
-/* Restore list styles inside the markdown editor preview */
+/* ─── Tailwind Typography (prose) override — map to design tokens ─── */
+.prose {
+  --tw-prose-body:         rgb(var(--fg-default));
+  --tw-prose-headings:     rgb(var(--fg-default));
+  --tw-prose-lead:         rgb(var(--fg-muted));
+  --tw-prose-links:        rgb(var(--accent));
+  --tw-prose-bold:         rgb(var(--fg-default));
+  --tw-prose-counters:     rgb(var(--fg-subtle));
+  --tw-prose-bullets:      rgb(var(--fg-faint));
+  --tw-prose-hr:           rgb(var(--border-default));
+  --tw-prose-quotes:       rgb(var(--fg-muted));
+  --tw-prose-quote-borders: rgb(var(--border-default));
+  --tw-prose-captions:     rgb(var(--fg-subtle));
+  --tw-prose-code:         rgb(var(--fg-default));
+  --tw-prose-pre-code:     rgb(var(--fg-default));
+  --tw-prose-pre-bg:       rgb(var(--bg-inset));
+  --tw-prose-th-borders:   rgb(var(--border-default));
+  --tw-prose-td-borders:   rgb(var(--border-subtle));
+  --tw-prose-invert-body:  rgb(var(--fg-default));
+  --tw-prose-invert-headings: rgb(var(--fg-default));
+  --tw-prose-invert-links: rgb(var(--accent));
+  --tw-prose-invert-bold:  rgb(var(--fg-default));
+  --tw-prose-invert-counters: rgb(var(--fg-subtle));
+  --tw-prose-invert-bullets:  rgb(var(--fg-faint));
+  --tw-prose-invert-hr:    rgb(var(--border-default));
+  --tw-prose-invert-quotes: rgb(var(--fg-muted));
+  --tw-prose-invert-quote-borders: rgb(var(--border-default));
+  --tw-prose-invert-captions: rgb(var(--fg-subtle));
+  --tw-prose-invert-code:  rgb(var(--fg-default));
+  --tw-prose-invert-pre-code: rgb(var(--fg-default));
+  --tw-prose-invert-pre-bg:   rgb(var(--bg-inset));
+  --tw-prose-invert-th-borders: rgb(var(--border-default));
+  --tw-prose-invert-td-borders: rgb(var(--border-subtle));
+}
+
+/* ─── @uiw/react-md-editor preview list styles ─── */
 .wmde-markdown ul,
 .wmde-markdown ol {
   padding-left: 2em;
@@ -66,31 +107,20 @@ html.dark body {
   100% { opacity: 0; }
 }
 
-/* Inline `#tag` pills rendered by remarkHashtag inside MDEditor preview. */
+/* ─── Inline `#tag` pills rendered by remarkHashtag inside MDEditor preview ─── */
 .wmde-markdown a.md-hashtag {
   display: inline-block;
   padding: 0 6px;
   margin: 0 1px;
   font-size: 0.875em;
   font-weight: 500;
-  color: #4f46e5;
-  background-color: #eef2ff;
+  color: rgb(var(--accent));
+  background-color: rgb(var(--accent-1));
   border-radius: 9999px;
   text-decoration: none;
-  border: 1px solid #c7d2fe;
+  border: 1px solid rgb(var(--accent-2));
 }
 .wmde-markdown a.md-hashtag:hover {
-  background-color: #e0e7ff;
-  border-color: #a5b4fc;
-}
-.dark .wmde-markdown a.md-hashtag,
-html.dark .wmde-markdown a.md-hashtag {
-  color: #c7d2fe;
-  background-color: rgba(79, 70, 229, 0.15);
-  border-color: rgba(99, 102, 241, 0.4);
-}
-.dark .wmde-markdown a.md-hashtag:hover,
-html.dark .wmde-markdown a.md-hashtag:hover {
-  background-color: rgba(79, 70, 229, 0.25);
-  border-color: rgba(99, 102, 241, 0.6);
+  background-color: rgb(var(--accent-2));
+  border-color: rgb(var(--accent));
 }
