@@ -552,9 +552,11 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  </div>
  </div>
 
- {/* Right content area */}
- <div className="flex-1 min-w-0">
- <div className="max-w-4xl mx-auto">
+ {/* Right content area — stacked on narrow screens; on xl+ splits into center (Must Do) and right (Focus tasks, scrollable) */}
+ <div className="flex-1 min-w-0 flex flex-col xl:flex-row xl:gap-6 xl:items-start">
+ {/* Must Do column — center on xl+ */}
+ <div className="w-full xl:flex-1 xl:min-w-0">
+ <div className="max-w-4xl mx-auto xl:mx-0">
 
  {/* Must Do Today — elevated importance:
       left amber stripe + subtle header tint + stronger shadow. */}
@@ -697,7 +699,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  </div>
 
  {sectionItems.length > 0 && (
- <ul className="pl-6 pr-5 pb-1 space-y-1">
+ <ul className="pl-4 pr-3 pb-1">
  {sectionItems.map((item, itemIdx) => {
  const linkedTodo = item.todo_id ? todos.find((t) => t.id === item.todo_id) : undefined
  const effectiveDone = item.done || (linkedTodo?.status === 'done')
@@ -728,7 +730,11 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  <div className="h-0.5 bg-accent rounded-full mx-1 my-0.5 transition-all" />
  )}
  <li
- className={`flex items-center gap-2 group cursor-pointer rounded px-1 -mx-1 ${selectedMustDoIds.has(item.id) ? 'bg-accent-1 ring-1 ring-accent-2' : 'hover:bg-inset'}`}
+ className={`flex items-center gap-3 group cursor-pointer rounded-md px-2 py-2 transition-colors ${
+ selectedMustDoIds.has(item.id)
+ ? 'bg-accent-2 ring-1 ring-inset ring-accent/25'
+ : 'hover:bg-inset/60'
+ }`}
  onDragOver={(e) => {
  if (!e.dataTransfer.types.includes('application/x-must-do-id')) return
  e.preventDefault()
@@ -768,10 +774,10 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  setMustDoDragOverPos(null)
  }}
  >
- <span className="text-fg-faint dark:text-fg-muted text-xs cursor-grab active:cursor-grabbing select-none">⠿</span>
+ <span className="w-3 text-fg-faint dark:text-fg-muted text-xs cursor-grab active:cursor-grabbing select-none opacity-0 group-hover:opacity-60 transition-opacity">⠿</span>
  <button
  onClick={() => toggleTodayDone(item)}
- className={`flex-shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
+ className={`flex-shrink-0 w-[18px] h-[18px] rounded-full border flex items-center justify-center transition-colors ${
  effectiveDone
  ? 'bg-accent border-accent text-fg-on-accent'
  : 'border-border-strong hover:border-accent'
@@ -810,7 +816,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  className={`flex-1 text-md ${
  effectiveDone
  ? 'line-through text-fg-subtle'
- : 'text-fg'
+ : 'text-fg font-medium'
  } ${!item.todo_id ? 'cursor-text' : ''}`}
  onDoubleClick={() => {
  if (!item.todo_id) {
@@ -988,6 +994,12 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  </div>
  )}
  </div>
+ </div>
+ </div>
+
+ {/* Focus tasks column — right on xl+, scrolls independently */}
+ <div className="w-full xl:flex-1 xl:min-w-0 xl:sticky xl:top-6 xl:self-start xl:max-h-[calc(100vh-3rem)] xl:overflow-y-auto">
+ <div className="max-w-4xl mx-auto xl:mx-0">
 
  {isLoading ? (
  <div className="text-fg-muted text-sm">Loading...</div>
@@ -1027,9 +1039,9 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  <button
  onClick={() => removeFocus.mutate(t.id)}
  title="Remove from Focus"
- className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium text-danger bg-danger-bg hover:bg-danger/20 border border-danger/30 transition-colors"
+ className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium text-fg-muted bg-inset hover:bg-danger-bg hover:text-danger border border-border hover:border-danger/30 transition-colors"
  >
- ✕ Deprio
+ <span>☆</span> Unfocus
  </button>
  }
  />
@@ -1161,6 +1173,9 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  </div>
  </div>
  )}
+ </div>
+ </div>
+ </div>
 
  <BulkActionBar
  selectedIds={selectedIds}
@@ -1175,8 +1190,6 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  invalidateKeys={[['todos'], ['todos', { is_focused: true }]]}
  />
  )}
- </div>
- </div>
  </div>
  )
 }
