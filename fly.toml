@@ -1,7 +1,6 @@
 # Fly.io config — used by `fly deploy` and the dashboard "Launch from GitHub" flow.
-# Set the app name during launch (or edit it here); it must be globally unique.
-app = "management-tyen"
-primary_region = "sjc"
+app = "management-wxisjq"
+primary_region = "ams"
 
 swap_size_mb = 2048
 
@@ -10,7 +9,7 @@ swap_size_mb = 2048
 
 [env]
   DATA_DIR = "/data"
-  APP_ORIGIN = "https://management-tyen.fly.dev"  # update if the app name or domain changes
+  APP_ORIGIN = "https://management-wxisjq.fly.dev"  # update if the app name or domain changes
   COOKIE_SECURE = "1"
   BACKUP_LOOP_ENABLED = "0"  # enable after the backup loop is rewritten for rclone/Tigris
 
