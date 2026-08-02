@@ -22,3 +22,7 @@ uvicorn==0.41.0
 uvloop==0.22.1
 watchfiles==1.1.1
 websockets==16.0
+argon2-cffi==25.1.0
+argon2-cffi-bindings==25.1.0
+cffi==2.1.0
+pycparser==3.0

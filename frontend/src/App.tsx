@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react'
-import { NavLink, Route, Routes, useNavigate } from 'react-router-dom'
+import { Navigate, NavLink, Route, Routes, useNavigate } from 'react-router-dom'
 import { LayoutDashboard, CheckSquare, FolderKanban, Users, CheckCircle2, Crosshair, Settings, ChevronsLeft, ChevronsRight, FileText, Target, BarChart3, Square, Trash2, NotebookPen, Sun, Moon } from 'lucide-react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { updateTodo, createNote } from './api'
@@ -24,6 +24,8 @@ import WeeklyGoalsPage from './pages/WeeklyGoalsPage'
 import ProgressPage from './pages/ProgressPage'
 import TodoModal from './components/TodoModal'
 import CommandPalette from './components/CommandPalette'
+import RequireAuth from './components/RequireAuth'
+import LoginPage from './pages/LoginPage'
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
@@ -39,7 +41,7 @@ const navItems = [
   { to: '/deleted', label: 'Recently Deleted', icon: Trash2, end: false },
 ]
 
-export default function App() {
+function AppShell() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [dragOverFocus, setDragOverFocus] = useState(false)
@@ -289,6 +291,7 @@ export default function App() {
           <Route path="/weekly-goals" element={<WeeklyGoalsPage />} />
           <Route path="/progress" element={<ProgressPage />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
 
@@ -315,5 +318,21 @@ export default function App() {
         />
       )}
     </div>
+  )
+}
+
+export default function App() {
+  return (
+    <Routes>
+      <Route path="/login" element={<LoginPage />} />
+      <Route
+        path="/*"
+        element={
+          <RequireAuth>
+            <AppShell />
+          </RequireAuth>
+        }
+      />
+    </Routes>
   )
 }

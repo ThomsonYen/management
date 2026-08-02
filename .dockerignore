@@ -1,0 +1,20 @@
+# Data must never enter the build context (~1 GB lives inside backend/ today)
+backend/management.db*
+backend/meeting_audio/
+backend/meeting_transcripts/
+backend/meeting_notes/
+backend/meeting_templates/
+backend/notes/
+backend/user_settings.json
+backend/.env
+backend/__pycache__/
+backend/**/__pycache__/
+
+frontend/node_modules/
+frontend/dist/
+*.pem
+
+.git/
+.claude/
+claude_readmes/
+plan/

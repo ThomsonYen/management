@@ -5,6 +5,37 @@ const api = axios.create({
   baseURL: '/api',
 })
 
+// On session expiry mid-use, send the user to the login page. The /auth/*
+// calls are excluded: RequireAuth and LoginPage handle those outcomes inline.
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const status = error?.response?.status
+    const url: string = error?.config?.url ?? ''
+    if (status === 401 && !url.startsWith('/auth/') && window.location.pathname !== '/login') {
+      const next = window.location.pathname + window.location.search
+      window.location.assign(`/login?next=${encodeURIComponent(next)}`)
+    }
+    return Promise.reject(error)
+  },
+)
+
+// ─── Auth ────────────────────────────────────────────────────────────────────
+
+export interface AuthUser {
+  id: number
+  username: string
+}
+
+export const fetchMe = (): Promise<AuthUser> =>
+  api.get('/auth/me').then((r) => r.data)
+
+export const login = (data: { username: string; password: string }): Promise<AuthUser> =>
+  api.post('/auth/login', data).then((r) => r.data)
+
+export const logout = (): Promise<void> =>
+  api.post('/auth/logout').then((r) => r.data)
+
 // ─── Persons ─────────────────────────────────────────────────────────────────
 
 export const fetchPersons = (): Promise<Person[]> =>

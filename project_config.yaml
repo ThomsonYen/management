@@ -1,9 +1,8 @@
 backend:
   port: 8001
-  venv_path: null # Path to the Python virtual environment
+  venv_path: /Users/michi/.uv/uv_venvs/mana_back # Path to the Python virtual environment
 
 models:
   suggest_todos: "gpt-4o-mini"
 
-whisper:
-  api_key: ""  # OpenAI API key for Whisper transcription
+# Secrets (e.g. the OpenAI API key) live in backend/.env — never in this file.

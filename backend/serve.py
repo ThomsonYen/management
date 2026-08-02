@@ -1,0 +1,42 @@
+"""Production entrypoint: serves the built SPA and mounts the API under /api.
+
+The ASGI mount strips the /api prefix exactly like the Vite dev proxy, so
+routes in main.py stay prefix-free and dev (`uvicorn main:app --reload`)
+is unaffected. Used by the container CMD: `uvicorn serve:app`.
+"""
+
+from pathlib import Path
+
+from fastapi import FastAPI
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+
+from main import app as api_app
+
+DIST = (Path(__file__).parent.parent / "frontend" / "dist").resolve()
+
+app = FastAPI(openapi_url=None, docs_url=None, redoc_url=None)
+
+
+@app.middleware("http")
+async def secure_headers(request, call_next):
+    response = await call_next(request)
+    response.headers.setdefault(
+        "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
+    )
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("Referrer-Policy", "same-origin")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    return response
+
+
+app.mount("/api", api_app)
+app.mount("/assets", StaticFiles(directory=DIST / "assets"), name="assets")
+
+
+@app.get("/{full_path:path}", include_in_schema=False)
+def spa(full_path: str):
+    candidate = (DIST / full_path).resolve()
+    if full_path and candidate.is_file() and candidate.is_relative_to(DIST):
+        return FileResponse(candidate)  # favicon, manifest, icons, sw.js
+    return FileResponse(DIST / "index.html")  # SPA fallback

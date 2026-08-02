@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Moon, Sun, FolderOpen, Plus, RefreshCw, Trash2, Loader2, Mic } from 'lucide-react'
+import { Moon, Sun, FolderOpen, Plus, RefreshCw, Trash2, Loader2, Mic, LogOut } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
  getSystemAudioDevice,
@@ -20,7 +20,7 @@ import {
  type HotkeyBindings,
  type FontSize,
 } from '../SettingsContext'
-import { fetchPersons, fetchVaults, createVault, deleteVault, rescanVault } from '../api'
+import { fetchPersons, fetchVaults, createVault, deleteVault, rescanVault, logout, type AuthUser } from '../api'
 import { listThemes, type ThemeName } from '../theme'
 import { Select } from '../components/ui'
 
@@ -396,6 +396,39 @@ const TIMEZONES = getAvailableTimezones()
 
 const IMPORTANCE_OPTIONS = ['low', 'medium', 'high', 'critical']
 
+function AccountSection() {
+ const queryClient = useQueryClient()
+ const sessionUser = queryClient.getQueryData<AuthUser>(['session'])
+ const logoutMutation = useMutation({
+ mutationFn: logout,
+ onSettled: () => {
+ queryClient.clear()
+ window.location.assign('/login')
+ },
+ })
+
+ return (
+ <div className="bg-surface rounded-xl shadow-sm border border-border">
+ <div className="px-6 py-5 flex items-center justify-between">
+ <div>
+ <h2 className="text-sm font-semibold text-fg">Account</h2>
+ <p className="text-sm text-fg-muted mt-0.5">
+ {sessionUser ? `Signed in as ${sessionUser.username}` : 'Signed in'}
+ </p>
+ </div>
+ <button
+ onClick={() => logoutMutation.mutate()}
+ disabled={logoutMutation.isPending}
+ className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium border border-border text-fg-muted hover:text-fg hover:bg-inset transition-colors disabled:opacity-50"
+ >
+ <LogOut size={14} />
+ {logoutMutation.isPending ? 'Signing out…' : 'Sign out'}
+ </button>
+ </div>
+ </div>
+ )
+}
+
 export default function SettingsPage() {
  const { theme, setTheme } = useTheme()
  const { defaults, setDefaults } = useTodoDefaults()
@@ -416,6 +449,8 @@ export default function SettingsPage() {
  <h1 className="text-2xl font-bold text-fg mb-6">Settings</h1>
 
  <div className="space-y-4">
+ <AccountSection />
+
  {/* Appearance */}
  <div className="bg-surface rounded-xl shadow-sm border border-border">
  <div className="px-6 py-5 flex items-center justify-between">

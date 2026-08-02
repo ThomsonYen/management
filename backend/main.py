@@ -1,24 +1,32 @@
 import asyncio
+import hashlib
 import io
 import json
 import logging
 import math
+import os
+import re
+import secrets
 import shutil
 import tempfile
+import time
 import uuid
 from contextlib import asynccontextmanager
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from collections import defaultdict
+from collections import defaultdict, deque
 from typing import List, Optional
 
 import yaml
-from fastapi import Depends, FastAPI, HTTPException, Query, UploadFile
+from argon2 import PasswordHasher
+from argon2.exceptions import VerifyMismatchError
+from dotenv import load_dotenv
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response, UploadFile
 
 from backup.backup import run_backup_once
 from backup.scheduler import backup_loop
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from openai import OpenAI
 from pydantic import BaseModel
 from sqlalchemy import (
@@ -32,6 +40,7 @@ from sqlalchemy import (
     Table,
     Text,
     create_engine,
+    event,
     func,
     inspect,
     nullslast,
@@ -40,16 +49,25 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import DeclarativeBase, Session, joinedload, relationship, sessionmaker
 
+load_dotenv(Path(__file__).parent / ".env")
+
 PROJECT_CONFIG_PATH = Path(__file__).parent.parent / "project_config.yaml"
 with open(PROJECT_CONFIG_PATH, encoding="utf-8") as _f:
     PROJECT_CONFIG = yaml.safe_load(_f) or {}
 
-_openai_key = (PROJECT_CONFIG.get("keys") or {}).get("openai_key", "")
+_openai_key = os.environ.get("OPENAI_API_KEY", "")
 openai_client: Optional[OpenAI] = OpenAI(api_key=_openai_key) if _openai_key else None
+
+logger = logging.getLogger("management")
+
+# All persistent state (DB, media, settings). Defaults to backend/ for local
+# dev; production sets DATA_DIR=/data so deploys never touch data.
+DATA_DIR = Path(os.environ.get("DATA_DIR", str(Path(__file__).parent)))
+DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 # ─── User settings (persisted, shared with frontend) ─────────────────────────
 
-USER_SETTINGS_PATH = Path(__file__).parent / "user_settings.json"
+USER_SETTINGS_PATH = DATA_DIR / "user_settings.json"
 
 DEFAULT_USER_SETTINGS: dict = {
     "timezone": None,
@@ -106,20 +124,33 @@ def get_user_timezone() -> str:
     except Exception:
         return "UTC"
 
-MEETING_NOTES_DIR = Path(__file__).parent / "meeting_notes"
-MEETING_TEMPLATES_DIR = Path(__file__).parent / "meeting_templates"
-MEETING_AUDIO_DIR = Path(__file__).parent / "meeting_audio"
-MEETING_TRANSCRIPTS_DIR = Path(__file__).parent / "meeting_transcripts"
-NOTES_DIR = Path(__file__).parent / "notes"
+MEETING_NOTES_DIR = DATA_DIR / "meeting_notes"
+MEETING_TEMPLATES_DIR = DATA_DIR / "meeting_templates"
+MEETING_AUDIO_DIR = DATA_DIR / "meeting_audio"
+MEETING_TRANSCRIPTS_DIR = DATA_DIR / "meeting_transcripts"
+NOTES_DIR = DATA_DIR / "notes"
 MEETING_NOTES_DIR.mkdir(exist_ok=True)
 MEETING_TEMPLATES_DIR.mkdir(exist_ok=True)
 MEETING_AUDIO_DIR.mkdir(exist_ok=True)
 MEETING_TRANSCRIPTS_DIR.mkdir(exist_ok=True)
 NOTES_DIR.mkdir(exist_ok=True)
 
-DATABASE_URL = "sqlite:///./management.db"
+# When set (always in prod, where it defaults to DATA_DIR), user-created vaults
+# must live under this root; unset in local dev to allow arbitrary folders.
+_vaults_root_env = os.environ.get("VAULTS_ROOT") or os.environ.get("DATA_DIR")
+VAULTS_ROOT: Optional[Path] = Path(_vaults_root_env).resolve() if _vaults_root_env else None
+
+DATABASE_URL = f"sqlite:///{DATA_DIR / 'management.db'}"
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+
+@event.listens_for(engine, "connect")
+def _set_sqlite_pragmas(dbapi_conn, _record):
+    cursor = dbapi_conn.cursor()
+    cursor.execute("PRAGMA journal_mode=WAL")
+    cursor.execute("PRAGMA busy_timeout=5000")
+    cursor.close()
 
 
 class Base(DeclarativeBase):
@@ -366,6 +397,26 @@ class Tag(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False, unique=True, index=True)
     created_at = Column(String, default=lambda: datetime.now(timezone.utc).isoformat())
+
+
+class User(Base):
+    __tablename__ = "users"
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, unique=True, nullable=False)
+    password_hash = Column(String, nullable=False)  # argon2id encoded string
+    created_at = Column(String, default=lambda: datetime.now(timezone.utc).isoformat())
+    is_active = Column(Boolean, default=True, nullable=False)
+
+
+class AuthSession(Base):
+    __tablename__ = "auth_sessions"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    token_hash = Column(String, unique=True, nullable=False, index=True)  # sha256(token)
+    created_at = Column(String, nullable=False)
+    last_seen_at = Column(String, nullable=False)
+    expires_at = Column(String, nullable=False)
+    user_agent = Column(String, default="")
 
 
 Base.metadata.create_all(bind=engine)
@@ -1439,6 +1490,10 @@ async def lifespan(_app: FastAPI):
         db.query(Todo).filter(Todo.status.in_(["in_progress", "in-progress"])).update(
             {Todo.status: "todo"}, synchronize_session=False
         )
+        # UTC isoformat strings compare lexically, so string <= string is safe here.
+        db.query(AuthSession).filter(
+            AuthSession.expires_at <= datetime.now(timezone.utc).isoformat()
+        ).delete(synchronize_session=False)
         db.commit()
         _migrate_meeting_notes_to_unified_notes(db)
         managed_vault = _get_or_create_managed_vault(db)
@@ -1452,26 +1507,233 @@ async def lifespan(_app: FastAPI):
         _backfill_meeting_notes_tag(db)
         _resync_all_note_tags(db)
         db.commit()
-    task = asyncio.create_task(backup_loop(get_user_timezone))
+    task = None
+    if os.environ.get("BACKUP_LOOP_ENABLED", "1") == "1":
+        task = asyncio.create_task(backup_loop(get_user_timezone))
     try:
         yield
     finally:
-        task.cancel()
-        try:
-            await task
-        except (asyncio.CancelledError, Exception):
-            pass
+        if task is not None:
+            task.cancel()
+            try:
+                await task
+            except (asyncio.CancelledError, Exception):
+                pass
 
 
 app = FastAPI(title="Management API", lifespan=lifespan)
 
+APP_ORIGIN = os.environ.get("APP_ORIGIN", "")
+_cors_origins = [
+    origin
+    for origin in (
+        APP_ORIGIN,
+        "https://dev.localhost:5173",
+        "http://dev.localhost:5173",
+        "http://localhost:5173",
+    )
+    if origin
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(Exception)
+async def _unhandled_exception(request: Request, exc: Exception):
+    logger.exception("Unhandled error on %s %s", request.method, request.url.path)
+    return JSONResponse({"detail": "Internal server error"}, status_code=500)
+
+
+# ─── Authentication ──────────────────────────────────────────────────────────
+
+_password_hasher = PasswordHasher()
+# Verified against when the username is unknown, so login duration doesn't
+# reveal whether an account exists.
+_DUMMY_HASH = _password_hasher.hash(secrets.token_urlsafe(16))
+
+SESSION_COOKIE = "session"
+SESSION_TTL = timedelta(days=90)
+SESSION_REFRESH_INTERVAL = timedelta(hours=1)
+COOKIE_SECURE = os.environ.get("COOKIE_SECURE", "1") == "1"
+
+PUBLIC_PATHS = {"/auth/login", "/healthz"}
+
+LOGIN_MAX_FAILURES = 5
+LOGIN_WINDOW_SECONDS = 15 * 60
+_login_failures: dict = defaultdict(deque)
+
+
+def _hash_token(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def _set_session_cookie(response: Response, token: str) -> None:
+    response.set_cookie(
+        SESSION_COOKIE,
+        token,
+        max_age=int(SESSION_TTL.total_seconds()),
+        httponly=True,
+        secure=COOKIE_SECURE,
+        samesite="lax",
+        path="/",
+    )
+
+
+def _parse_iso(value: str) -> datetime:
+    try:
+        parsed = datetime.fromisoformat(value)
+    except (ValueError, TypeError):
+        return datetime.min.replace(tzinfo=timezone.utc)
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
+def _resolve_session(db: Session, token: Optional[str]):
+    """Return (user, refreshed) for a valid session token, else (None, False)."""
+    if not token:
+        return None, False
+    sess = db.query(AuthSession).filter(AuthSession.token_hash == _hash_token(token)).first()
+    if not sess:
+        return None, False
+    now = datetime.now(timezone.utc)
+    if _parse_iso(sess.expires_at) <= now:
+        db.delete(sess)
+        db.commit()
+        return None, False
+    refreshed = False
+    if now - _parse_iso(sess.last_seen_at) > SESSION_REFRESH_INTERVAL:
+        sess.last_seen_at = now.isoformat()
+        sess.expires_at = (now + SESSION_TTL).isoformat()
+        db.commit()
+        refreshed = True
+    user = db.query(User).filter(User.id == sess.user_id, User.is_active == True).first()
+    if not user:
+        return None, False
+    db.expunge(user)  # keep attributes readable after the session closes
+    return user, refreshed
+
+
+@app.middleware("http")
+async def require_auth(request: Request, call_next):
+    # Under the production /api mount, scope["path"] keeps the full path and the
+    # mount prefix lands in root_path — strip it so PUBLIC_PATHS matches in both
+    # dev (no mount) and prod.
+    path = request.scope["path"]
+    root_path = request.scope.get("root_path", "")
+    if root_path and path.startswith(root_path):
+        path = path[len(root_path):] or "/"
+    if request.method == "OPTIONS" or path in PUBLIC_PATHS:
+        return await call_next(request)
+    # CSRF backstop on top of SameSite=Lax: mutating cross-origin requests are
+    # rejected even if a cookie somehow rides along.
+    if request.method not in ("GET", "HEAD"):
+        origin = request.headers.get("origin")
+        if origin and origin not in _cors_origins:
+            return JSONResponse({"detail": "Origin not allowed"}, status_code=403)
+    token = request.cookies.get(SESSION_COOKIE)
+    with SessionLocal() as db:
+        user, refreshed = _resolve_session(db, token)
+    if user is None:
+        return JSONResponse({"detail": "Not authenticated"}, status_code=401)
+    request.state.user = user
+    response = await call_next(request)
+    if refreshed:
+        _set_session_cookie(response, token)
+    return response
+
+
+def get_current_user(request: Request) -> User:
+    user = getattr(request.state, "user", None)
+    if user is None:
+        raise HTTPException(401, "Not authenticated")
+    return user
+
+
+class LoginIn(BaseModel):
+    username: str
+    password: str
+
+
+class AuthUserOut(BaseModel):
+    id: int
+    username: str
+
+
+@app.get("/healthz")
+def healthz():
+    return {"ok": True}
+
+
+@app.post("/auth/login", response_model=AuthUserOut)
+def auth_login(
+    data: LoginIn,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+):
+    ip = request.client.host if request.client else "unknown"
+    now_mono = time.monotonic()
+    failures = _login_failures[ip]
+    while failures and now_mono - failures[0] > LOGIN_WINDOW_SECONDS:
+        failures.popleft()
+    if len(failures) >= LOGIN_MAX_FAILURES:
+        raise HTTPException(
+            429,
+            "Too many failed login attempts. Try again later.",
+            headers={"Retry-After": str(LOGIN_WINDOW_SECONDS)},
+        )
+
+    user = db.query(User).filter(User.username == data.username).first()
+    try:
+        _password_hasher.verify(user.password_hash if user else _DUMMY_HASH, data.password)
+        ok = user is not None and user.is_active
+    except VerifyMismatchError:
+        ok = False
+    if not ok:
+        failures.append(now_mono)
+        time.sleep(0.5)
+        raise HTTPException(401, "Invalid username or password")
+
+    if _password_hasher.check_needs_rehash(user.password_hash):
+        user.password_hash = _password_hasher.hash(data.password)
+
+    token = secrets.token_urlsafe(32)
+    now = datetime.now(timezone.utc)
+    db.add(
+        AuthSession(
+            user_id=user.id,
+            token_hash=_hash_token(token),
+            created_at=now.isoformat(),
+            last_seen_at=now.isoformat(),
+            expires_at=(now + SESSION_TTL).isoformat(),
+            user_agent=(request.headers.get("user-agent") or "")[:300],
+        )
+    )
+    db.commit()
+    _set_session_cookie(response, token)
+    return {"id": user.id, "username": user.username}
+
+
+@app.post("/auth/logout")
+def auth_logout(request: Request, response: Response, db: Session = Depends(get_db)):
+    token = request.cookies.get(SESSION_COOKIE)
+    if token:
+        db.query(AuthSession).filter(AuthSession.token_hash == _hash_token(token)).delete(
+            synchronize_session=False
+        )
+        db.commit()
+    response.delete_cookie(SESSION_COOKIE, path="/")
+    return {"ok": True}
+
+
+@app.get("/auth/me", response_model=AuthUserOut)
+def auth_me(user: User = Depends(get_current_user)):
+    return {"id": user.id, "username": user.username}
 
 
 # ─── Persons ─────────────────────────────────────────────────────────────────
@@ -2152,6 +2414,8 @@ def create_vault(data: VaultCreate, db: Session = Depends(get_db)):
     if not name:
         raise HTTPException(400, "Vault name is required")
     path = Path(data.root_path).expanduser().resolve()
+    if VAULTS_ROOT is not None and not path.is_relative_to(VAULTS_ROOT):
+        raise HTTPException(400, f"Vault path must be under {VAULTS_ROOT}")
     if not path.exists() or not path.is_dir():
         raise HTTPException(400, f"Path does not exist or is not a directory: {path}")
     if db.query(Vault).filter(Vault.name == name).first():
@@ -2354,7 +2618,11 @@ def create_note(data: NoteCreate, db: Session = Depends(get_db)):
     # Body: explicit content wins; otherwise pull from template (meeting kind only)
     body = data.content or ""
     if not body and data.template:
-        tmpl_path = MEETING_TEMPLATES_DIR / f"{data.template}.md"
+        if not re.fullmatch(r"[A-Za-z0-9 _\-]+", data.template):
+            raise HTTPException(400, "Invalid template name")
+        tmpl_path = (MEETING_TEMPLATES_DIR / f"{data.template}.md").resolve()
+        if not tmpl_path.is_relative_to(MEETING_TEMPLATES_DIR.resolve()):
+            raise HTTPException(400, "Invalid template name")
         if tmpl_path.exists():
             body = tmpl_path.read_text(encoding="utf-8")
 
@@ -2528,6 +2796,11 @@ def purge_note(note_id: int, db: Session = Depends(get_db)):
 # Audio + transcribe + suggest-todos (rehomed from /meeting-notes/{id}/...)
 
 
+MAX_AUDIO_UPLOAD_MB = int(os.environ.get("MAX_AUDIO_UPLOAD_MB", "300"))
+# Only a demuxer hint for ffmpeg — everything is transcoded to mp3 regardless.
+ALLOWED_AUDIO_EXTENSIONS = {".webm", ".mp4", ".m4a", ".mp3", ".wav", ".ogg"}
+
+
 @app.post("/notes/{note_id}/audio")
 async def upload_note_audio(note_id: int, file: UploadFile, db: Session = Depends(get_db)):
     n = db.query(Note).get(note_id)
@@ -2536,11 +2809,22 @@ async def upload_note_audio(note_id: int, file: UploadFile, db: Session = Depend
     audio_dir = MEETING_AUDIO_DIR / str(note_id)
     audio_dir.mkdir(exist_ok=True)
     tmp_name = f"{uuid.uuid4().hex}_raw"
-    raw_ext = Path(file.filename or "recording.webm").suffix or ".webm"
+    raw_ext = Path(file.filename or "recording.webm").suffix.lower()
+    if raw_ext not in ALLOWED_AUDIO_EXTENSIONS:
+        raw_ext = ".webm"
     raw_dest = audio_dir / f"{tmp_name}{raw_ext}"
-    with open(raw_dest, "wb") as f:
-        while chunk := await file.read(1024 * 1024):
-            f.write(chunk)
+    max_bytes = MAX_AUDIO_UPLOAD_MB * 1024 * 1024
+    received = 0
+    try:
+        with open(raw_dest, "wb") as f:
+            while chunk := await file.read(1024 * 1024):
+                received += len(chunk)
+                if received > max_bytes:
+                    raise HTTPException(413, f"Audio upload exceeds {MAX_AUDIO_UPLOAD_MB} MB limit")
+                f.write(chunk)
+    except HTTPException:
+        raw_dest.unlink(missing_ok=True)
+        raise
     dest = audio_dir / f"{uuid.uuid4().hex}.mp3"
     try:
         from pydub import AudioSegment
@@ -2606,7 +2890,7 @@ async def transcribe_note(
     if not openai_client:
         raise HTTPException(
             503,
-            "OpenAI API key not configured. Set keys.openai_key in project_config.yaml.",
+            "OpenAI API key not configured. Set OPENAI_API_KEY in backend/.env.",
         )
     n = db.query(Note).get(note_id)
     if not n:
@@ -2633,18 +2917,22 @@ async def transcribe_note(
         for audio_path in audio_paths:
             file_size = audio_path.stat().st_size
             if file_size > 25 * 1024 * 1024:
-                segments.extend(_transcribe_chunked(audio_path))
-            else:
-                with open(audio_path, "rb") as af:
-                    result = openai_client.audio.transcriptions.create(
-                        model="whisper-1",
-                        file=af,
-                    )
-                segments.append(result.text)
+                raise HTTPException(
+                    413,
+                    "Audio file too large to transcribe (>25 MB). "
+                    "Chunked transcription is not implemented yet.",
+                )
+            with open(audio_path, "rb") as af:
+                result = openai_client.audio.transcriptions.create(
+                    model="whisper-1",
+                    file=af,
+                )
+            segments.append(result.text)
+    except HTTPException:
+        raise
     except Exception:
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(500, f"Transcription failed: {traceback.format_exc()}")
+        logger.exception("Transcription failed for note %s", note_id)
+        raise HTTPException(500, "Transcription failed")
 
     transcript = "\n\n".join(segments)
     _write_transcript(note_id, transcript)
@@ -2658,7 +2946,7 @@ async def suggest_note_todos(note_id: int, db: Session = Depends(get_db)):
     if not openai_client:
         raise HTTPException(
             503,
-            "OpenAI API key not configured. Set keys.openai_key in project_config.yaml.",
+            "OpenAI API key not configured. Set OPENAI_API_KEY in backend/.env.",
         )
     n = db.query(Note).get(note_id)
     if not n:
