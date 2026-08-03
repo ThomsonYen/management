@@ -5,6 +5,7 @@ routes in main.py stay prefix-free and dev (`uvicorn main:app --reload`)
 is unaffected. Used by the container CMD: `uvicorn serve:app`.
 """
 
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -15,7 +16,16 @@ from main import app as api_app
 
 DIST = (Path(__file__).parent.parent / "frontend" / "dist").resolve()
 
-app = FastAPI(openapi_url=None, docs_url=None, redoc_url=None)
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    # Starlette does not run mounted sub-apps' lifespans; without this the
+    # API's startup (vault reconciliation, backfills, scans) never executes.
+    async with api_app.router.lifespan_context(api_app):
+        yield
+
+
+app = FastAPI(openapi_url=None, docs_url=None, redoc_url=None, lifespan=lifespan)
 
 
 @app.middleware("http")

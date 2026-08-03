@@ -1012,6 +1012,17 @@ def _note_path(note: "Note") -> Path:
     return Path(note.vault.root_path) / note.relative_path
 
 
+def _require_accessible_vault(vault: Optional["Vault"]) -> None:
+    """Refuse disk writes when the vault root is missing — e.g. a root_path
+    minted on another machine before the DB moved. Writing would mkdir the
+    path on whatever filesystem is behind it (on Fly, the ephemeral rootfs)
+    and the data would silently vanish on restart."""
+    if vault is not None and not Path(vault.root_path).is_dir():
+        raise HTTPException(
+            409, f"Vault '{vault.name}' root is not accessible: {vault.root_path}"
+        )
+
+
 def _read_note_body(note: "Note") -> str:
     """Return note body (stripping frontmatter). Empty if file missing."""
     path = _note_path(note)
@@ -1024,6 +1035,7 @@ def _read_note_body(note: "Note") -> str:
 
 def _write_note_body(note: "Note", body: str) -> None:
     """Replace body of the note's file, preserving its frontmatter on disk."""
+    _require_accessible_vault(note.vault)
     path = _note_path(note)
     fm: dict = {}
     if path.exists():
@@ -1079,7 +1091,13 @@ def _resolve_unique_filename(
 
 
 def _update_note_frontmatter(note: "Note", patch: dict, remove_keys: Optional[set] = None) -> None:
-    """Patch frontmatter keys on disk. `patch` upserts, `remove_keys` clears."""
+    """Patch frontmatter keys on disk. `patch` upserts, `remove_keys` clears.
+
+    Raises FileNotFoundError when the vault root is missing so trash/restore
+    degrade to their DB-flag-only path instead of writing outside the vault.
+    """
+    if note.vault is not None and not Path(note.vault.root_path).is_dir():
+        raise FileNotFoundError(f"vault root not accessible: {note.vault.root_path}")
     path = _note_path(note)
     fm: dict = {}
     body = ""
@@ -1305,6 +1323,14 @@ MANAGED_VAULT_NAME = "default"
 def _get_or_create_managed_vault(db: Session) -> Vault:
     v = db.query(Vault).filter(Vault.is_managed == True).first()
     if v is not None:
+        # root_path is an absolute path minted where the row was created; when
+        # the DB moves to a machine with a different DATA_DIR (e.g. the Fly
+        # volume), it goes stale and every note would read empty. Re-anchor it.
+        expected = str(NOTES_DIR.resolve())
+        if v.root_path != expected:
+            log.warning("Managed vault root_path %s → %s", v.root_path, expected)
+            v.root_path = expected
+            db.commit()
         return v
     v = Vault(
         name=MANAGED_VAULT_NAME,
@@ -2614,6 +2640,7 @@ def create_note(data: NoteCreate, db: Session = Depends(get_db)):
         vault = db.query(Vault).filter(Vault.is_managed == True).first()
         if not vault:
             raise HTTPException(500, "Managed vault missing (lifespan should create it)")
+    _require_accessible_vault(vault)
 
     # Body: explicit content wins; otherwise pull from template (meeting kind only)
     body = data.content or ""
@@ -2705,6 +2732,7 @@ def update_note(note_id: int, data: NoteUpdate, db: Session = Depends(get_db)):
     # Rename the on-disk file to match the new title.
     # Preserves the current subdirectory; only the basename changes.
     if title_changed and n.vault and n.relative_path:
+        _require_accessible_vault(n.vault)
         stem = _slugify_title_for_filename(n.title)
         if stem:
             vault_root = Path(n.vault.root_path)
