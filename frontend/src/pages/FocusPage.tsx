@@ -90,21 +90,65 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  queryFn: () => fetchMustDoItems(todayKey),
  })
 
+ // All must-do mutations update the cache immediately and sync in the
+ // background; onError restores the pre-mutation snapshot.
+ const mustDoKey = ['must-do', todayKey]
+
+ const snapshotMustDo = async () => {
+ await queryClient.cancelQueries({ queryKey: mustDoKey })
+ return { previous: queryClient.getQueryData<MustDoItem[]>(mustDoKey) }
+ }
+
+ const rollbackMustDo = (_err: unknown, _vars: unknown, context?: { previous?: MustDoItem[] }) => {
+ if (context?.previous) queryClient.setQueryData(mustDoKey, context.previous)
+ }
+
+ const refetchMustDo = () => queryClient.invalidateQueries({ queryKey: mustDoKey })
+
  const addMustDo = useMutation({
  mutationFn: (data: { todo_id?: number; text: string; order?: number; section?: string }) =>
  createMustDoItem(todayKey, data),
- onSuccess: () => queryClient.invalidateQueries({ queryKey: ['must-do', todayKey] }),
+ onMutate: async (data) => {
+ const context = await snapshotMustDo()
+ const temp: MustDoItem = {
+ id: -Date.now(), // placeholder until the server id arrives via refetch
+ date: todayKey,
+ todo_id: data.todo_id,
+ text: data.text,
+ done: false,
+ order: data.order ?? 0,
+ section: data.section ?? 'morning',
+ }
+ queryClient.setQueryData<MustDoItem[]>(mustDoKey, (old = []) => [...old, temp])
+ return context
+ },
+ onError: rollbackMustDo,
+ onSettled: refetchMustDo,
  })
 
  const updateMustDo = useMutation({
  mutationFn: ({ id, ...data }: { id: number; text?: string; done?: boolean; order?: number; section?: string; todo_id?: number }) =>
  updateMustDoItem(id, data),
- onSuccess: () => queryClient.invalidateQueries({ queryKey: ['must-do', todayKey] }),
+ onMutate: async ({ id, ...patch }) => {
+ const context = await snapshotMustDo()
+ queryClient.setQueryData<MustDoItem[]>(mustDoKey, (old = []) =>
+ old.map((i) => (i.id === id ? { ...i, ...patch } : i))
+ )
+ return context
+ },
+ onError: rollbackMustDo,
+ onSettled: refetchMustDo,
  })
 
  const deleteMustDo = useMutation({
  mutationFn: (id: number) => deleteMustDoItem(id),
- onSuccess: () => queryClient.invalidateQueries({ queryKey: ['must-do', todayKey] }),
+ onMutate: async (id) => {
+ const context = await snapshotMustDo()
+ queryClient.setQueryData<MustDoItem[]>(mustDoKey, (old = []) => old.filter((i) => i.id !== id))
+ return context
+ },
+ onError: rollbackMustDo,
+ onSettled: refetchMustDo,
  })
 
  const addTodayText = useCallback((text: string, section?: string) => {
@@ -124,9 +168,14 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  const newDone = !item.done
  updateMustDo.mutate({ id: item.id, done: newDone })
  if (item.todo_id) {
- updateTodo(item.todo_id, { status: newDone ? 'done' : 'todo' }).then(() => {
- queryClient.invalidateQueries({ queryKey: ['todos'] })
- })
+ const status = newDone ? 'done' : 'todo'
+ queryClient.setQueriesData<Todo[]>({ queryKey: ['todos'] }, (old) =>
+ old?.map((t) => (t.id === item.todo_id ? { ...t, status } : t))
+ )
+ // sync in the background; invalidate either way so an error resyncs the cache
+ updateTodo(item.todo_id, { status })
+ .catch(() => {})
+ .then(() => queryClient.invalidateQueries({ queryKey: ['todos'] }))
  }
  }, [updateMustDo, queryClient])
 
@@ -174,10 +223,31 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  await updateTodo(todo.id, { is_focused: true, focus_order: maxOrder + 1 })
  return todo
  },
- onSuccess: () => {
- queryClient.invalidateQueries({ queryKey: ['todos'] })
- setNewTitle('')
+ onMutate: async (title) => {
+ setNewTitle('') // clear the input right away so typing the next todo isn't blocked
+ await queryClient.cancelQueries({ queryKey: ['todos', { is_focused: true }] })
+ const previous = queryClient.getQueryData<Todo[]>(['todos', { is_focused: true }])
+ const maxOrder = (previous ?? []).reduce((max, t) => Math.max(max, t.focus_order), 0)
+ const temp: Todo = {
+ id: -Date.now(), // placeholder until refetch delivers the server row
+ title,
+ importance: 'medium',
+ estimated_hours: 1,
+ status: 'todo',
+ is_blocked: false,
+ is_focused: true,
+ focus_order: maxOrder + 1,
+ created_at: new Date().toISOString(),
+ subtodos: [],
+ blocked_by_ids: [],
+ }
+ queryClient.setQueryData<Todo[]>(['todos', { is_focused: true }], (old = []) => [...old, temp])
+ return { previous }
  },
+ onError: (_err, _title, context) => {
+ if (context?.previous) queryClient.setQueryData(['todos', { is_focused: true }], context.previous)
+ },
+ onSettled: () => queryClient.invalidateQueries({ queryKey: ['todos'] }),
  })
 
  const addExistingToFocus = useMutation({
@@ -450,10 +520,9 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  {todayItems.filter((i) => i.done || (i.todo_id && todos.find((t) => t.id === i.todo_id)?.status === 'done')).length}/{todayItems.length} done
  </span>
  <button
- onClick={async () => {
+ onClick={() => {
  const doneItems = todayItems.filter((i) => i.done || (i.todo_id && todos.find((t) => t.id === i.todo_id)?.status === 'done'))
- await Promise.all(doneItems.map((i) => deleteMustDoItem(i.id)))
- queryClient.invalidateQueries({ queryKey: ['must-do', todayKey] })
+ doneItems.forEach((i) => deleteMustDo.mutate(i.id))
  }}
  className="text-fg-subtle hover:text-fg transition-colors"
  title="Clear done items"
@@ -1145,13 +1214,12 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  value={newTitle}
  onChange={(e) => setNewTitle(e.target.value)}
  onKeyDown={(e) => {
- if (e.key === 'Enter' && newTitle.trim() && !addFocusedTodo.isPending) {
+ if (e.key === 'Enter' && newTitle.trim()) {
  addFocusedTodo.mutate(newTitle.trim())
  }
  }}
- placeholder={addFocusedTodo.isPending ? 'Adding...' : '+ Add a focused todo...'}
- disabled={addFocusedTodo.isPending}
- className="w-full text-sm font-medium text-fg-muted placeholder:text-fg-faint dark:placeholder:text-fg-faint bg-transparent outline-none disabled:opacity-50"
+ placeholder="+ Add a focused todo..."
+ className="w-full text-sm font-medium text-fg-muted placeholder:text-fg-faint dark:placeholder:text-fg-faint bg-transparent outline-none"
  />
  </div>
  </div>
