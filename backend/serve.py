@@ -37,6 +37,17 @@ async def secure_headers(request, call_next):
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("Referrer-Policy", "same-origin")
     response.headers.setdefault("X-Frame-Options", "DENY")
+    path = request.url.path
+    if path.startswith("/assets/"):
+        # Vite emits content-hashed filenames, so assets never change in place
+        response.headers.setdefault(
+            "Cache-Control", "public, max-age=31536000, immutable"
+        )
+    elif path.startswith("/api/"):
+        response.headers.setdefault("Cache-Control", "no-store")
+    else:
+        # index.html and unhashed files (favicon, manifest): revalidate via ETag
+        response.headers.setdefault("Cache-Control", "no-cache")
     return response
 
 

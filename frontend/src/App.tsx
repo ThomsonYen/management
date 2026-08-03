@@ -8,6 +8,7 @@ import { useHotkeys, useTheme, useTimezone } from './SettingsContext'
 import { useHotkey } from './hooks/useHotkey'
 import { useRecording } from './RecordingContext'
 import { getTodayString } from './dateUtils'
+import { APP_VERSION } from './config'
 import Dashboard from './pages/Dashboard'
 import TodosPage from './pages/TodosPage'
 import ProjectsPage from './pages/ProjectsPage'
@@ -150,7 +151,7 @@ function AppShell() {
             {!sidebarCollapsed && (
               <div>
                 <h1 className="text-sm font-semibold tracking-tight text-fg leading-none">Management</h1>
-                <p className="text-fg-subtle text-xs mt-0.5 leading-none">Work tracker</p>
+                <p className="text-fg-subtle text-xs mt-0.5 leading-none">Work tracker · v{APP_VERSION}</p>
               </div>
             )}
           </div>

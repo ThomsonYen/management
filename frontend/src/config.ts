@@ -5,3 +5,7 @@ declare const __FRONTEND_CONFIG__: {
 }
 
 export const config = __FRONTEND_CONFIG__
+
+declare const __APP_VERSION__: string
+
+export const APP_VERSION = __APP_VERSION__
