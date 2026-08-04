@@ -139,7 +139,7 @@ export default function MeetingNotesPage() {
  const showingSearch = !!debouncedSearch
 
  return (
- <div className="p-6 max-w-5xl mx-auto">
+ <div className="p-4 md:p-6 max-w-5xl mx-auto">
  <div className="flex items-center justify-between mb-6">
  <h1 className="text-2xl font-bold text-fg">Meeting Notes</h1>
  <div className="flex items-center gap-2">

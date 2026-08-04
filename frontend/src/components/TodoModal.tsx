@@ -209,7 +209,7 @@ export default function TodoModal({ todo, onClose, invalidateKeys, defaultAssign
  </div>
 
  {/* Row: project + assignee */}
- <div className="grid grid-cols-2 gap-4">
+ <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
  <div>
  <label className="block text-xs font-semibold text-fg-muted uppercase tracking-wide mb-1">
  Project
@@ -247,7 +247,7 @@ export default function TodoModal({ todo, onClose, invalidateKeys, defaultAssign
  </div>
 
  {/* Row: deadline + estimated hours */}
- <div className="grid grid-cols-2 gap-4">
+ <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
  <div>
  <label className="block text-xs font-semibold text-fg-muted uppercase tracking-wide mb-1">
  Deadline
@@ -276,7 +276,7 @@ export default function TodoModal({ todo, onClose, invalidateKeys, defaultAssign
  </div>
 
  {/* Row: importance + status */}
- <div className="grid grid-cols-2 gap-4">
+ <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
  <div>
  <label className="block text-xs font-semibold text-fg-muted uppercase tracking-wide mb-1">
  Importance

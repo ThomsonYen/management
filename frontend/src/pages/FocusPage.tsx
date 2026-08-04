@@ -1,4 +1,5 @@
 import React, { useState, useRef, useCallback } from 'react'
+import { ChevronUp, ChevronDown } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { fetchTodos, fetchProjects, updateTodo, createTodo, reorderFocus, fetchMustDoItems, createMustDoItem, updateMustDoItem, deleteMustDoItem } from '../api'
 import type { Todo, Project } from '../types'
@@ -496,6 +497,30 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  [reorderMutation],
  )
 
+ // Touch reorder (drag is mouse-only): move a focused todo one step in the flat order
+ const moveFocusTodo = useCallback(
+ (index: number, delta: number) => {
+ const target = index + delta
+ if (target < 0 || target >= filtered.length) return
+ const reordered = [...filtered]
+ const [moved] = reordered.splice(index, 1)
+ reordered.splice(target, 0, moved)
+ reorderMutation.mutate(reordered.map((t, i) => ({ id: t.id, focus_order: i })))
+ },
+ [filtered, reorderMutation],
+ )
+
+ const moveMustDo = (sectionItems: MustDoItem[], idx: number, delta: number) => {
+ const target = idx + delta
+ if (target < 0 || target >= sectionItems.length) return
+ const reordered = [...sectionItems]
+ const [moved] = reordered.splice(idx, 1)
+ reordered.splice(target, 0, moved)
+ reordered.forEach((item, i) => {
+ if (item.order !== i) updateMustDo.mutate({ id: item.id, order: i })
+ })
+ }
+
  return (
  <div className="p-6 flex flex-col gap-4">
  {/* Content — stacked on narrow screens; on xl+ splits into center (Must Do) and right (Focus tasks, scrollable) */}
@@ -803,7 +828,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  {!item.todo_id && (
  <button
  onClick={() => convertToTodo(item)}
- className="opacity-0 group-hover:opacity-100 text-xs text-fg-subtle hover:text-accent transition-opacity"
+ className="opacity-60 md:opacity-0 md:group-hover:opacity-100 text-xs text-fg-subtle hover:text-accent transition-opacity"
  title="Convert to todo"
  >
  &#9745;
@@ -811,11 +836,35 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  )}
  <button
  onClick={() => removeTodayItem(item.id)}
- className="opacity-0 group-hover:opacity-100 text-xs text-fg-subtle hover:text-danger transition-opacity"
+ className="opacity-60 md:opacity-0 md:group-hover:opacity-100 text-xs text-fg-subtle hover:text-danger transition-opacity"
  title="Remove"
  >
  &#10005;
  </button>
+ <span className="md:hidden flex items-center flex-shrink-0">
+ <button
+ disabled={itemIdx === 0}
+ onClick={(e) => {
+ e.stopPropagation()
+ moveMustDo(sectionItems, itemIdx, -1)
+ }}
+ className="p-2 -my-2 text-fg-subtle disabled:opacity-30"
+ title="Move up"
+ >
+ <ChevronUp size={16} />
+ </button>
+ <button
+ disabled={itemIdx === sectionItems.length - 1}
+ onClick={(e) => {
+ e.stopPropagation()
+ moveMustDo(sectionItems, itemIdx, 1)
+ }}
+ className="p-2 -my-2 text-fg-subtle disabled:opacity-30"
+ title="Move down"
+ >
+ <ChevronDown size={16} />
+ </button>
+ </span>
  </li>
  {showLineAfter && (
  <div className="h-0.5 bg-accent rounded-full mx-1 my-0.5 transition-all" />
@@ -1089,13 +1138,39 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  onToggleSelect={toggleSelect}
  forceCollapseSignal={highlightedTodoId === t.id ? collapseSignal : 0}
  extraActions={
+ <>
+ <span className="md:hidden flex items-center">
+ <button
+ disabled={globalIndex === 0}
+ onClick={(e) => {
+ e.stopPropagation()
+ moveFocusTodo(globalIndex, -1)
+ }}
+ className="p-1.5 rounded-lg text-fg-muted bg-inset border border-border disabled:opacity-30"
+ title="Move up"
+ >
+ <ChevronUp size={14} />
+ </button>
+ <button
+ disabled={globalIndex === filtered.length - 1}
+ onClick={(e) => {
+ e.stopPropagation()
+ moveFocusTodo(globalIndex, 1)
+ }}
+ className="ml-1 p-1.5 rounded-lg text-fg-muted bg-inset border border-border disabled:opacity-30"
+ title="Move down"
+ >
+ <ChevronDown size={14} />
+ </button>
+ </span>
  <button
  onClick={() => removeFocus.mutate(t.id)}
  title="Remove from Focus"
  className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium text-fg-muted bg-inset hover:bg-danger-bg hover:text-danger border border-border hover:border-danger/30 transition-colors"
  >
- <span>☆</span> Unfocus
+ <span>☆</span><span className="hidden md:inline"> Unfocus</span>
  </button>
+ </>
  }
  />
  </div>

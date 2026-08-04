@@ -156,7 +156,7 @@ function RecordingSection() {
  </div>
  )}
 
- <div className="flex items-center justify-between gap-4">
+ <div className="flex flex-wrap items-center justify-between gap-4 gap-y-2">
  <label className="text-sm text-fg shrink-0">
  System audio device
  </label>
@@ -164,7 +164,7 @@ function RecordingSection() {
  value={selected?.deviceId ?? ''}
  onChange={(e) => choose(e.target.value)}
  disabled={loading}
- className="w-72 border border-border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+ className="w-full md:w-72 border border-border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
  >
  <option value="">None — use screen-share prompt</option>
  {devices.map((d) => (
@@ -445,7 +445,7 @@ export default function SettingsPage() {
  }
 
  return (
- <div className="p-8 max-w-2xl">
+ <div className="p-4 md:p-8 max-w-2xl">
  <h1 className="text-2xl font-bold text-fg mb-6">Settings</h1>
 
  <div className="space-y-4">
@@ -485,14 +485,14 @@ export default function SettingsPage() {
  </button>
  </div>
  </div>
- <div className="px-6 py-5 border-t border-border flex items-start justify-between gap-4">
+ <div className="px-6 py-5 border-t border-border flex flex-wrap items-start justify-between gap-4 gap-y-2">
  <div className="min-w-0">
  <h2 className="text-sm font-semibold text-fg">Theme</h2>
  <p className="text-sm text-fg-muted mt-0.5">
  Choose the visual style. Changes apply instantly.
  </p>
  </div>
- <div className="w-56 shrink-0">
+ <div className="w-full md:w-56 md:shrink-0">
  <Select
    value={themeVariant}
    onChange={(e) => setThemeVariant(e.target.value as ThemeName)}
@@ -532,7 +532,7 @@ export default function SettingsPage() {
 
  {/* Timezone */}
  <div className="bg-surface rounded-xl shadow-sm border border-border">
- <div className="px-6 py-5 flex items-center justify-between">
+ <div className="px-6 py-5 flex flex-wrap items-center justify-between gap-y-2">
  <div>
  <h2 className="text-sm font-semibold text-fg">Timezone</h2>
  <p className="text-sm text-fg-muted mt-0.5">
@@ -542,7 +542,7 @@ export default function SettingsPage() {
  <select
  value={timezone}
  onChange={(e) => setTimezone(e.target.value)}
- className="w-64 border border-border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+ className="w-full md:w-64 border border-border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
  >
  {TIMEZONES.map((tz) => (
  <option key={tz} value={tz}>
@@ -559,7 +559,7 @@ export default function SettingsPage() {
 
  {/* Meeting Notes */}
  <div className="bg-surface rounded-xl shadow-sm border border-border">
- <div className="px-6 py-5 flex items-center justify-between">
+ <div className="px-6 py-5 flex flex-wrap items-center justify-between gap-y-2">
  <div>
  <h2 className="text-sm font-semibold text-fg">Meeting Notes Sort Order</h2>
  <p className="text-sm text-fg-muted mt-0.5">
@@ -569,7 +569,7 @@ export default function SettingsPage() {
  <select
  value={sortBy}
  onChange={(e) => setSortBy(e.target.value as MeetingNoteSortField)}
- className="w-64 border border-border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+ className="w-full md:w-64 border border-border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
  >
  <option value="updated_at">Last edited</option>
  <option value="created_at">Created</option>
@@ -577,8 +577,8 @@ export default function SettingsPage() {
  </div>
  </div>
 
- {/* Hotkeys */}
- <div className="bg-surface rounded-xl shadow-sm border border-border">
+ {/* Hotkeys — pointless on touch, hidden below md */}
+ <div className="hidden md:block bg-surface rounded-xl shadow-sm border border-border">
  <div className="px-6 py-5">
  <div className="flex items-center justify-between mb-4">
  <div>

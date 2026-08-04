@@ -29,6 +29,17 @@ body {
   @apply bg-app text-fg;
 }
 
+/* iOS focus-zoom guard: Safari zooms the page when focusing any control under 16px.
+   Width-scoped (not pointer:coarse) so iPads at desktop widths keep the desktop sizes. */
+@media (max-width: 767.98px) {
+  input,
+  select,
+  textarea,
+  .w-md-editor-text-input {
+    font-size: max(16px, 1em) !important;
+  }
+}
+
 /* Native checkbox/radio inherit the accent color */
 input[type='checkbox'],
 input[type='radio'] {

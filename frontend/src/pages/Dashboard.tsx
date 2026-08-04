@@ -342,7 +342,7 @@ export default function Dashboard({ onOpenTodo }: { onOpenTodo: (id: number) => 
  .slice(0, 5)
 
  return (
- <div className="p-6 max-w-5xl mx-auto">
+ <div className="p-4 md:p-6 max-w-5xl mx-auto">
  <h2 className="text-2xl font-bold text-fg mb-6">Dashboard</h2>
 
  {/* Stats */}

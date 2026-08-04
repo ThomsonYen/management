@@ -121,8 +121,8 @@ export default function PersonalNotesPage() {
  const showingSearch = !!debouncedSearch
 
  return (
- <div className="flex h-full">
- <div className="flex-1 overflow-auto p-6 max-w-5xl mx-auto w-full">
+ <div className="flex flex-col md:flex-row md:h-full">
+ <div className="flex-1 md:overflow-auto p-4 md:p-6 max-w-5xl mx-auto w-full">
  <div className="flex items-center justify-between mb-6">
  <h1 className="text-2xl font-bold text-fg">Notes</h1>
  <div className="flex items-center gap-2">

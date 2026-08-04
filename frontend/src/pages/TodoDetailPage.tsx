@@ -328,7 +328,7 @@ export default function TodoDetailPage() {
 
  if (isLoading || !todo) {
  return (
- <div className="p-6 max-w-3xl mx-auto">
+ <div className="p-4 md:p-6 max-w-3xl mx-auto">
  <button
  onClick={onBack}
  className="mb-4 text-sm text-accent hover:text-accent-fg flex items-center gap-1"
@@ -385,7 +385,7 @@ export default function TodoDetailPage() {
 
  return (
  <div
- className="p-6 max-w-3xl mx-auto"
+ className="p-4 md:p-6 max-w-3xl mx-auto"
  style={{ opacity: isDying ? 0 : 1, transition: `opacity ${config.todo_done_fade_seconds}s ease` }}
  >
  {/* Back */}
@@ -397,8 +397,8 @@ export default function TodoDetailPage() {
  </button>
 
  {/* Header card */}
- <div className="bg-surface rounded-xl border border-border shadow-sm p-6 mb-4">
- <div className="flex items-start justify-between gap-4">
+ <div className="bg-surface rounded-xl border border-border shadow-sm p-4 md:p-6 mb-4">
+ <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
  <div className="flex-1 min-w-0">
  <div className="flex flex-wrap gap-2 mb-3 items-center">
  <button
@@ -417,7 +417,7 @@ export default function TodoDetailPage() {
  }
  }}
  title={isUnfocusing ? 'Click to cancel unfocus' : todo.is_focused ? 'Remove from Focus' : 'Add to Focus'}
- className={`text-xl leading-none transition-colors ${
+ className={`p-2 -m-2 text-xl leading-none transition-colors ${
  isUnfocusing
  ? 'text-warning dark:text-warning animate-pulse'
  : todo.is_focused

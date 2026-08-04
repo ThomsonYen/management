@@ -184,7 +184,7 @@ export default function TodosPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  const defaultImportance = selectedImportance || undefined
 
  return (
- <div className="p-6 max-w-4xl mx-auto">
+ <div className="p-4 md:p-6 max-w-4xl mx-auto">
  <div className="flex items-center justify-between mb-6">
  <h2 className="text-2xl font-bold text-fg">Todos</h2>
  <button

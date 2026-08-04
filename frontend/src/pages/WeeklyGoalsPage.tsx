@@ -8,6 +8,7 @@ import { useTimezone, useTheme, useHotkeys } from '../SettingsContext'
 import { getTodayString } from '../dateUtils'
 import MarkdownEditor from '../components/MarkdownEditor'
 import SaveIndicator, { type SaveState } from '../components/SaveIndicator'
+import { useIsDesktop } from '../hooks/useMediaQuery'
 import { config } from '../config'
 import { createMdEditorKeyHandler } from '../utils/mdEditorKeyHandler'
 
@@ -164,6 +165,7 @@ const HEADER_COLORS = [
 export default function WeeklyGoalsPage() {
  const { timezone } = useTimezone()
  const { theme } = useTheme()
+ const isDesktop = useIsDesktop()
  const { bindings } = useHotkeys()
  const editorKeyDown = useMemo(() => createMdEditorKeyHandler(bindings), [bindings])
  const todayStr = getTodayString(timezone)
@@ -332,8 +334,8 @@ export default function WeeklyGoalsPage() {
  'idle'
 
  return (
- <div className="p-6 max-w-[1400px] mx-auto">
- <div className="flex items-center justify-between mb-5">
+ <div className="p-4 md:p-6 max-w-[1400px] mx-auto">
+ <div className="flex flex-wrap items-center justify-between gap-y-2 mb-5">
  <div>
  <h2 className="text-2xl font-bold text-fg">Goals</h2>
  <p className="text-sm text-fg-muted mt-1">
@@ -344,7 +346,7 @@ export default function WeeklyGoalsPage() {
  </p>
  </div>
 
- <div className="flex items-center gap-2">
+ <div className="flex flex-wrap items-center gap-2 gap-y-2">
  <div className="flex items-center gap-1">
  <button onClick={() => shiftAnchor(-7)} className="px-2 py-1 rounded-md text-xs font-medium hover:bg-border-subtle dark:hover:bg-elevated text-fg-muted transition-colors">
  -1w
@@ -419,9 +421,9 @@ export default function WeeklyGoalsPage() {
  </div>
  </div>
 
- <div className="flex gap-5 items-start">
+ <div className="flex flex-col md:flex-row gap-5 md:items-start">
  {showEditor && (
- <div className="w-1/2 flex-shrink-0 sticky top-6">
+ <div className="w-full md:w-1/2 md:flex-shrink-0 md:sticky md:top-6">
  <div className="bg-surface rounded-xl border border-border shadow-sm flex flex-col max-h-[calc(100vh-140px)]" data-color-mode={theme} onKeyDownCapture={editorKeyDown}>
  <div className="flex items-center justify-between px-4 py-2 border-b border-border flex-shrink-0">
  <span className="text-xs font-medium text-fg-muted uppercase tracking-wide">Editor</span>
@@ -436,13 +438,13 @@ export default function WeeklyGoalsPage() {
  onChange={(val) => handleEditorChange(val ?? '')}
  preview="edit"
  visibleDragbar={false}
- height={500}
+ height={isDesktop ? 500 : 320}
  />
  </div>
  </div>
  )}
 
- <div className={`${showEditor ? 'w-1/2' : 'w-full'} min-w-0 space-y-3`}>
+ <div className={`w-full ${showEditor ? 'md:w-1/2' : ''} min-w-0 space-y-3`}>
  {dates.map((date, idx) => {
  const isAnchor = date === anchor
  const isCollapsed = collapsed.has(date)
@@ -514,7 +516,7 @@ export default function WeeklyGoalsPage() {
  <div className="relative bg-surface rounded-b-[10px]">
  <div
  className="px-4 py-3 min-h-[40px] overflow-y-auto"
- style={isExpanded ? undefined : { maxHeight: dayHeights.get(date) ?? config.goal_day_box_height_px }}
+ style={isExpanded ? undefined : { maxHeight: isDesktop ? (dayHeights.get(date) ?? config.goal_day_box_height_px) : Math.min(dayHeights.get(date) ?? config.goal_day_box_height_px, 320) }}
  >
  <MarkdownEditor
  value={content}
@@ -524,7 +526,7 @@ export default function WeeklyGoalsPage() {
  </div>
  {!isExpanded && (
  <div
- className="h-1.5 cursor-row-resize flex items-center justify-center hover:bg-inset dark:hover:bg-elevated transition-colors rounded-b-[10px]"
+ className="hidden md:flex h-1.5 cursor-row-resize items-center justify-center hover:bg-inset dark:hover:bg-elevated transition-colors rounded-b-[10px]"
  onMouseDown={(e) => {
  e.preventDefault()
  const startY = e.clientY

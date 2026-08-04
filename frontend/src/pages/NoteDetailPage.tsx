@@ -253,9 +253,9 @@ export default function NoteDetailPage() {
  }
 
  return (
- <div className="flex h-full">
+ <div className="block md:flex md:h-full">
  <div className="flex-1 flex flex-col min-w-0 overflow-auto">
- <div className="p-6 pb-3 flex items-center gap-3">
+ <div className="p-4 md:p-6 pb-3 md:pb-3 flex items-center gap-3">
  <button
  onClick={() => navigate(listPath)}
  className="p-1.5 rounded-lg text-fg-subtle hover:text-fg-muted dark:hover:text-fg hover:bg-inset dark:hover:bg-elevated transition-colors"
@@ -266,7 +266,7 @@ export default function NoteDetailPage() {
  value={title}
  onChange={(e) => handleTitleChange(e.target.value)}
  onBlur={handleTitleBlur}
- className="flex-1 text-xl font-bold bg-transparent border-none outline-none text-fg placeholder:text-fg-faint"
+ className="flex-1 min-w-0 text-xl font-bold bg-transparent border-none outline-none text-fg placeholder:text-fg-faint"
  placeholder={isMeeting ? 'Meeting title...' : 'Note title...'}
  />
  {isMeeting && (
@@ -340,7 +340,7 @@ export default function NoteDetailPage() {
  </div>
 
  {isMeeting && (
- <div className="w-72 border-l border-border bg-app overflow-y-auto flex-shrink-0 p-4 space-y-6">
+ <div className="w-full md:w-72 border-t md:border-t-0 md:border-l border-border bg-app overflow-y-auto flex-shrink-0 p-4 space-y-6">
  <div>
  <h3 className="text-xs font-semibold text-fg-muted uppercase tracking-wider mb-2 flex items-center gap-1.5">
  <Users size={12} /> Attendees
@@ -754,7 +754,7 @@ function TodoEditModal({
  />
  </div>
 
- <div className="grid grid-cols-2 gap-3">
+ <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
  <div>
  <label className="block text-xs font-medium text-fg-muted mb-1">Project</label>
  <select

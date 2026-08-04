@@ -382,7 +382,7 @@ export default function CommandPalette({ onClose, onNewTodo, onNewMeetingNote, o
 
  return (
  <div
- className="fixed inset-0 bg-black/50 backdrop-blur-[2px] z-[60] flex items-start justify-center pt-[12vh] px-4"
+ className="fixed inset-0 bg-black/50 backdrop-blur-[2px] z-[60] flex items-start justify-center pt-3 md:pt-[12vh] px-4"
  onClick={onClose}
  >
  <div

@@ -56,7 +56,7 @@ export default function BulkActionBar({ selectedIds, onClearSelection, queryKeys
  if (count === 0) return null
 
  return (
- <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 w-full max-w-3xl px-4">
+ <div className="fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom))] md:bottom-4 left-1/2 -translate-x-1/2 z-50 w-full max-w-3xl px-4">
  <div className="bg-accent dark:bg-accent-hover text-white rounded-xl shadow-2xl px-5 py-3 flex items-center gap-3 flex-wrap">
  <span className="text-sm font-semibold flex-shrink-0">
  {count} selected

@@ -264,8 +264,8 @@ export default function ProgressPage() {
  }
 
  return (
- <div className="p-6 max-w-[1400px] mx-auto">
- <div className="flex items-center justify-between mb-6">
+ <div className="p-4 md:p-6 max-w-[1400px] mx-auto">
+ <div className="flex flex-wrap items-center justify-between gap-y-2 mb-6">
  <h1 className="text-2xl font-bold text-fg dark:text-white">Progress</h1>
  <div className="flex items-center gap-4">
  {/* Period count */}
@@ -301,7 +301,7 @@ export default function ProgressPage() {
  </div>
 
  {/* Summary cards */}
- <div className="grid grid-cols-3 gap-4 mb-6">
+ <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
  <div className="bg-surface rounded-xl border border-border p-4">
  <p className="text-sm text-fg-muted">People</p>
  <p className="text-2xl font-bold text-fg dark:text-white">{progress.length}</p>

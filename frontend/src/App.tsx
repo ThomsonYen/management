@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react'
 import { Navigate, NavLink, Route, Routes, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, CheckSquare, FolderKanban, Users, CheckCircle2, Crosshair, Settings, ChevronsLeft, ChevronsRight, FileText, Target, BarChart3, Square, Trash2, NotebookPen, Sun, Moon } from 'lucide-react'
+import { LayoutDashboard, Settings, ChevronsLeft, ChevronsRight, Square, Sun, Moon } from 'lucide-react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { updateTodo, createNote } from './api'
 import { useResizableSidebar } from './hooks/useResizableSidebar'
@@ -29,19 +29,9 @@ import InstallHint from './components/mobile/InstallHint'
 import RequireAuth from './components/RequireAuth'
 import LoginPage from './pages/LoginPage'
 
-const navItems = [
-  { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
-  { to: '/focus', label: 'Focus', icon: Crosshair, end: false, isDropTarget: true },
-  { to: '/todos', label: 'Todos', icon: CheckSquare, end: false },
-  { to: '/projects', label: 'Projects', icon: FolderKanban, end: false },
-  { to: '/people', label: 'People', icon: Users, end: false },
-  { to: '/meeting-notes', label: 'Meetings', icon: FileText, end: false },
-  { to: '/notes', label: 'Notes', icon: NotebookPen, end: false },
-  { to: '/weekly-goals', label: 'Weekly Goals', icon: Target, end: false },
-  { to: '/progress', label: 'Progress', icon: BarChart3, end: false },
-  { to: '/done', label: 'Recently Done', icon: CheckCircle2, end: false },
-  { to: '/deleted', label: 'Recently Deleted', icon: Trash2, end: false },
-]
+import { navItems } from './navItems'
+import MobileHeader from './components/mobile/MobileHeader'
+import MobileTabBar from './components/mobile/MobileTabBar'
 
 function AppShell() {
   const navigate = useNavigate()
@@ -142,7 +132,7 @@ function AppShell() {
       {/* Sidebar */}
       <aside
         style={{ width: sidebarCollapsed ? 56 : sidebarWidth }}
-        className="bg-surface border-r border-border text-fg flex flex-col flex-shrink-0 relative transition-[width] duration-200"
+        className="bg-surface border-r border-border text-fg hidden md:flex flex-col flex-shrink-0 relative transition-[width] duration-200"
       >
         <div className={`py-5 border-b border-border ${sidebarCollapsed ? 'px-2' : 'px-5'}`}>
           <div className="flex items-center gap-2.5 justify-center">
@@ -276,7 +266,11 @@ function AppShell() {
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 overflow-auto bg-app">
+      <main className="flex-1 overflow-auto bg-app pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-0">
+        <MobileHeader
+          onNewTodo={() => setShowNewTodoModal(true)}
+          onOpenSearch={() => setShowCommandPalette(true)}
+        />
         <Routes>
           <Route path="/" element={<Dashboard onOpenTodo={(id) => navigate(`/todos/${id}`)} />} />
           <Route path="/focus" element={<FocusPage onOpenTodo={(id) => navigate(`/todos/${id}`)} />} />
@@ -296,6 +290,8 @@ function AppShell() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
+
+      <MobileTabBar />
 
       {/* Global new todo modal */}
       {showNewTodoModal && (

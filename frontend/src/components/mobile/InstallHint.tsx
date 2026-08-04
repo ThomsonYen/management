@@ -25,7 +25,7 @@ export default function InstallHint() {
   }
 
   return (
-    <div className="fixed bottom-0 inset-x-0 z-50 pb-[env(safe-area-inset-bottom)] bg-elevated border-t border-border shadow-lg">
+    <div className="fixed bottom-[calc(4rem+env(safe-area-inset-bottom))] md:bottom-0 inset-x-0 z-50 md:pb-[env(safe-area-inset-bottom)] bg-elevated border-t border-border shadow-lg">
       <div className="flex items-center gap-3 px-4 py-3 text-sm text-fg">
         <Share size={18} className="text-accent flex-shrink-0" />
         <span>

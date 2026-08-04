@@ -3,7 +3,8 @@ import { useSearchParams } from 'react-router-dom'
 import { useResizableSidebar } from '../hooks/useResizableSidebar'
 import { useHotkey } from '../hooks/useHotkey'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ChevronsLeft, ChevronsRight } from 'lucide-react'
+import { ChevronLeft, ChevronsLeft, ChevronsRight } from 'lucide-react'
+import { useIsDesktop } from '../hooks/useMediaQuery'
 import ProjectNotes from '../components/ProjectNotes'
 import { fetchProjectTree, fetchProjects, fetchTodos, fetchPersons, createProject, createTodo, deleteProject, restoreProject, updateProject, reorderProjects } from '../api'
 import { useToast } from '../ToastContext'
@@ -331,6 +332,7 @@ function AddTodoCard({ projectId, queryKeys }: { projectId: number; queryKeys: u
 export default function ProjectsPage({ onOpenTodo }: { onOpenTodo: (id: number) => void }) {
  const queryClient = useQueryClient()
  const { width: panelWidth, collapsed: panelCollapsed, startResize: startPanelResize, toggleCollapsed: togglePanel } = useResizableSidebar('projectsPanelWidth', 256)
+ const isDesktop = useIsDesktop()
  const { bindings } = useHotkeys()
  const stableTogglePanel = useCallback(() => togglePanel(), [togglePanel])
  useHotkey(bindings.toggleSecondarySidebar, stableTogglePanel)
@@ -518,12 +520,14 @@ export default function ProjectsPage({ onOpenTodo }: { onOpenTodo: (id: number) 
 
  return (
  <div className="flex h-full">
- {/* Left panel */}
+ {/* Left panel — below md it becomes the list view of a list→detail flow */}
  <div
- style={{ width: panelCollapsed ? 40 : panelWidth }}
- className="relative bg-surface border-r border-border flex flex-col flex-shrink-0 transition-[width] duration-200"
+ style={isDesktop ? { width: panelCollapsed ? 40 : panelWidth } : undefined}
+ className={`relative bg-surface md:border-r border-border flex-col flex-shrink-0 transition-[width] duration-200 ${
+ selectedProjectId != null ? 'hidden md:flex' : 'flex w-full md:w-auto'
+ }`}
  >
- {panelCollapsed ? (
+ {panelCollapsed && isDesktop ? (
  <div className="flex flex-col items-center flex-1 justify-end py-3">
  <button
  onClick={togglePanel}
@@ -578,7 +582,7 @@ export default function ProjectsPage({ onOpenTodo }: { onOpenTodo: (id: number) 
  ))
  )}
  </div>
- <div className="px-2 py-2 border-t border-border">
+ <div className="hidden md:block px-2 py-2 border-t border-border">
  <button
  onClick={togglePanel}
  className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm text-fg-subtle hover:bg-inset dark:hover:bg-elevated hover:text-fg-muted dark:hover:text-fg transition-colors"
@@ -590,14 +594,22 @@ export default function ProjectsPage({ onOpenTodo }: { onOpenTodo: (id: number) 
  </div>
  <div
  onMouseDown={startPanelResize}
- className="absolute top-0 right-0 w-1.5 h-full cursor-col-resize hover:bg-accent-hover/50 active:bg-accent/50 transition-colors"
+ className="hidden md:block absolute top-0 right-0 w-1.5 h-full cursor-col-resize hover:bg-accent-hover/50 active:bg-accent/50 transition-colors"
  />
  </>
  )}
  </div>
 
- {/* Right panel */}
- <div className="flex-1 overflow-y-auto p-6">
+ {/* Right panel — hidden below md until a project is selected */}
+ <div className={`flex-1 overflow-y-auto p-4 md:p-6 ${selectedProjectId == null ? 'hidden md:block' : ''}`}>
+ {selectedProjectId != null && (
+ <button
+ onClick={() => setSelectedProjectId(null)}
+ className="md:hidden mb-3 flex items-center gap-1 text-sm font-medium text-accent"
+ >
+ <ChevronLeft size={16} /> Projects
+ </button>
+ )}
  {!selectedProjectId ? (
  <div className="flex items-center justify-center h-64 text-fg-subtle text-sm">
  Select a project to view its todos

@@ -18,7 +18,7 @@ export default function TagSidebar({ kind }: Props) {
  })
 
  return (
- <aside className="w-56 flex-shrink-0 border-l border-border bg-app overflow-y-auto p-4">
+ <aside className="w-full md:w-56 flex-shrink-0 border-t md:border-t-0 md:border-l border-border bg-app overflow-y-auto p-4">
  <h3 className="text-xs font-semibold text-fg-muted uppercase tracking-wider mb-3 flex items-center gap-1.5">
  <Hash size={12} /> Tags
  </h3>
@@ -29,7 +29,7 @@ export default function TagSidebar({ kind }: Props) {
  No tags yet. Type <code className="font-mono text-[10px]">#foo</code> in a note.
  </p>
  ) : (
- <ul className="space-y-0.5">
+ <ul className="flex flex-wrap gap-1 md:block md:space-y-0.5">
  {activeTag && (
  <li>
  <Link

@@ -290,7 +290,7 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
  style={{ opacity: isDying ? 0 : 1, transition: `opacity ${config.todo_done_fade_seconds}s ease` }}
  >
  {/* Header */}
- <div className="px-5 py-4">
+ <div className="px-4 py-3 md:px-5 md:py-4">
  <div className="flex items-start gap-3">
  {/* Focus toggle */}
  <button
@@ -310,7 +310,7 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
  }
  }}
  title={isUnfocusing ? 'Click to cancel unfocus' : todo.is_focused ? 'Remove from Focus' : 'Add to Focus'}
- className={`mt-0.5 text-lg leading-none flex-shrink-0 transition-colors ${
+ className={`p-2 -m-2 mt-[-6px] text-lg leading-none flex-shrink-0 transition-colors ${
  isUnfocusing
  ? 'text-warning dark:text-warning animate-pulse'
  : todo.is_focused
@@ -412,7 +412,7 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
  title="Open todo page"
  className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium text-accent bg-accent-1 hover:bg-accent-2 border border-accent-2 transition-colors"
  >
- <span>↗</span> Open
+ <span>↗</span><span className="hidden md:inline"> Open</span>
  </button>
  )}
  <button
@@ -430,7 +430,7 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
 
  {/* Info row (spans full card width so fields like "1h" aren't
    squeezed by the actions column on the right) */}
- <div className="flex flex-wrap gap-3 mt-1.5 text-xs text-fg-muted pl-[52px]">
+ <div className="flex flex-wrap gap-3 mt-1.5 text-xs text-fg-muted pl-0 md:pl-[52px]">
  {/* Assignee */}
  {editingField === 'assignee_id' ? (
  <select

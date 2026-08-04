@@ -278,7 +278,7 @@ export default function PersonProjectBoard({
  </button>
  </div>
  ) : (
- <div className="grid grid-cols-[repeat(auto-fill,180px)] auto-rows-[minmax(140px,1fr)] gap-2 h-full overflow-y-auto overflow-x-hidden content-start">
+ <div className="grid grid-cols-2 md:grid-cols-[repeat(auto-fill,180px)] auto-rows-[minmax(140px,1fr)] gap-2 h-full overflow-y-auto overflow-x-hidden content-start">
  {visibleProjects.map((proj) => {
  const alreadyMember =
  dragPerson?.project_ids.includes(proj.id) ?? false
@@ -363,7 +363,7 @@ function FloatingNotes({
  onClose: () => void
 }) {
  return (
- <div className="absolute top-0 left-full ml-2 w-[360px] max-w-[80vw] max-h-[60vh] z-30 flex flex-col bg-surface rounded-xl shadow-2xl border border-border">
+ <div className="fixed inset-x-3 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] md:absolute md:inset-x-auto md:bottom-auto md:top-0 md:left-full md:ml-2 w-auto md:w-[360px] md:max-w-[80vw] max-h-[60vh] z-30 flex flex-col bg-surface rounded-xl shadow-2xl border border-border">
  <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-border">
  <h3
  className="text-sm font-semibold text-fg truncate"
