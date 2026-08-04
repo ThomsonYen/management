@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { updateTodo } from '../api'
 import { useToast } from '../ToastContext'
 import type { Todo } from '../types'
+import { patchTodoCaches, restoreTodoCaches, snapshotTodoCaches } from '../utils/optimisticTodo'
 
 interface Props {
  todo: Todo
@@ -21,7 +22,13 @@ export default function MarkDoneButton({ todo, queryKeys }: Props) {
 
  const updateMutation = useMutation({
  mutationFn: (data: Parameters<typeof updateTodo>[1]) => updateTodo(todo.id, data),
- onSuccess: invalidate,
+ onMutate: async (data) => {
+ const snapshot = await snapshotTodoCaches(queryClient, todo.id)
+ patchTodoCaches(queryClient, todo.id, data as Partial<Todo>)
+ return snapshot
+ },
+ onError: (_err, _vars, snapshot) => restoreTodoCaches(queryClient, todo.id, snapshot),
+ onSettled: invalidate,
  })
 
  const markDone = () => {

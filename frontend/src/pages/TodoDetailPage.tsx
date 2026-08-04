@@ -24,6 +24,14 @@ import { useTimezone, useHotkeys } from '../SettingsContext'
 import { isOverdue as checkOverdue } from '../dateUtils'
 import { useHotkey } from '../hooks/useHotkey'
 import { todoToMarkdown } from '../utils/todoMarkdown'
+import {
+ buildTodoPatch,
+ patchSubtodoCaches,
+ patchTodoCaches,
+ restoreTodoCaches,
+ snapshotTodoCaches,
+ type TodoCachesSnapshot,
+} from '../utils/optimisticTodo'
 
 import { importanceBadgeClass } from '../utils/badgeClasses'
 
@@ -162,9 +170,20 @@ export default function TodoDetailPage() {
  queryClient.invalidateQueries({ queryKey: ['recently-done'] })
  }
 
+ // Edits update the caches immediately and sync in the background; onError
+ // restores the pre-mutation snapshot, onSettled resyncs with the server.
+ const rollback = (_err: unknown, _vars: unknown, snapshot?: TodoCachesSnapshot) =>
+ restoreTodoCaches(queryClient, todoId, snapshot)
+
  const updateMutation = useMutation({
  mutationFn: (data: Parameters<typeof updateTodo>[1]) => updateTodo(todoId, data),
- onSuccess: invalidate,
+ onMutate: async (data) => {
+ const snapshot = await snapshotTodoCaches(queryClient, todoId)
+ patchTodoCaches(queryClient, todoId, buildTodoPatch(data, persons, projects))
+ return snapshot
+ },
+ onError: rollback,
+ onSettled: invalidate,
  })
 
  const { showToast } = useToast()
@@ -246,29 +265,66 @@ export default function TodoDetailPage() {
  const toggleSubTodo = useMutation({
  mutationFn: ({ id, done }: { id: number; done: boolean }) =>
  updateSubTodo(id, { done }),
- onSuccess: invalidate,
+ onMutate: async ({ id, done }) => {
+ const snapshot = await snapshotTodoCaches(queryClient, todoId)
+ patchSubtodoCaches(queryClient, todoId, (subs) =>
+ subs.map((s) => (s.id === id ? { ...s, done } : s))
+ )
+ return snapshot
+ },
+ onError: rollback,
+ onSettled: invalidate,
  })
 
  const addSubTodo = useMutation({
  mutationFn: (title: string) =>
  createSubTodo(todoId, { title, order: todo?.subtodos.length ?? 0 }),
- onSuccess: () => {
- setNewSubtodoTitle('')
- invalidate()
+ onMutate: async (title) => {
+ setNewSubtodoTitle('') // clear the input right away so typing the next subtask isn't blocked
+ const snapshot = await snapshotTodoCaches(queryClient, todoId)
+ patchSubtodoCaches(queryClient, todoId, (subs) => [
+ ...subs,
+ { id: -Date.now(), title, done: false, order: subs.length }, // placeholder until refetch delivers the server row
+ ])
+ return snapshot
  },
+ onError: rollback,
+ onSettled: invalidate,
  })
 
  const removeSubTodo = useMutation({
  mutationFn: (id: number) => deleteSubTodo(id),
- onSuccess: invalidate,
+ onMutate: async (id) => {
+ const snapshot = await snapshotTodoCaches(queryClient, todoId)
+ patchSubtodoCaches(queryClient, todoId, (subs) => subs.filter((s) => s.id !== id))
+ return snapshot
+ },
+ onError: rollback,
+ onSettled: invalidate,
  })
 
  const reorderMutation = useMutation({
  mutationFn: async (subtodos: SubTodo[]) => {
- await Promise.all(subtodos.map((s, i) => updateSubTodo(s.id, { order: i })))
+ await Promise.all(
+ subtodos.map((s, i) => (s.order === i ? null : updateSubTodo(s.id, { order: i })))
+ )
  },
- onSuccess: invalidate,
+ onMutate: async (subtodos) => {
+ const snapshot = await snapshotTodoCaches(queryClient, todoId)
+ patchSubtodoCaches(queryClient, todoId, () => subtodos.map((s, i) => ({ ...s, order: i })))
+ return snapshot
+ },
+ onError: rollback,
+ onSettled: invalidate,
  })
+
+ const saveSubTitle = (id: number, title: string) => {
+ patchSubtodoCaches(queryClient, todoId, (subs) =>
+ subs.map((s) => (s.id === id ? { ...s, title } : s))
+ )
+ // sync in the background; invalidate either way so an error resyncs the cache
+ updateSubTodo(id, { title }).catch(() => {}).then(invalidate)
+ }
 
  if (isLoading || !todo) {
  return (
@@ -643,12 +699,12 @@ export default function TodoDetailPage() {
  value={editingSubTitle}
  onChange={(e) => setEditingSubTitle(e.target.value)}
  onBlur={() => {
- if (editingSubTitle.trim()) updateSubTodo(s.id, { title: editingSubTitle.trim() }).then(invalidate)
+ if (editingSubTitle.trim()) saveSubTitle(s.id, editingSubTitle.trim())
  setEditingSubId(null)
  }}
  onKeyDown={(e) => {
  if (e.key === 'Enter' && editingSubTitle.trim()) {
- updateSubTodo(s.id, { title: editingSubTitle.trim() }).then(invalidate)
+ saveSubTitle(s.id, editingSubTitle.trim())
  setEditingSubId(null)
  }
  if (e.key === 'Escape') setEditingSubId(null)
@@ -698,7 +754,7 @@ export default function TodoDetailPage() {
  />
  <button
  onClick={handleAddSubtodo}
- disabled={!newSubtodoTitle.trim() || addSubTodo.isPending}
+ disabled={!newSubtodoTitle.trim()}
  className="px-4 py-2 bg-accent text-white text-sm font-medium rounded-lg hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
  >
  Add
@@ -758,7 +814,11 @@ export default function TodoDetailPage() {
  todo={blocked}
  allTodos={allTodos}
  onOpenTodo={onOpenTodo}
- onRemove={() => updateTodo(blocked.id, { blocked_by_ids: blocked.blocked_by_ids.filter((id) => id !== todoId) }).then(invalidate)}
+ onRemove={() => {
+ const blocked_by_ids = blocked.blocked_by_ids.filter((id) => id !== todoId)
+ patchTodoCaches(queryClient, blocked.id, { blocked_by_ids })
+ updateTodo(blocked.id, { blocked_by_ids }).catch(() => {}).then(invalidate)
+ }}
  visited={new Set([todoId])}
  />
  ))}
@@ -768,7 +828,11 @@ export default function TodoDetailPage() {
  allTodos={allTodos}
  excludeId={todoId}
  selectedIds={blocking.map((t) => t.id)}
- onSelect={(t) => updateTodo(t.id, { blocked_by_ids: [...t.blocked_by_ids, todoId] }).then(invalidate)}
+ onSelect={(t) => {
+ const blocked_by_ids = [...t.blocked_by_ids, todoId]
+ patchTodoCaches(queryClient, t.id, { blocked_by_ids })
+ updateTodo(t.id, { blocked_by_ids }).catch(() => {}).then(invalidate)
+ }}
  onCreate={(title) => createTodo({ title, blocked_by_ids: [todoId] }).then(() => invalidate())}
  />
  </div>

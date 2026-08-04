@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { fetchPersons, fetchProjects, updateTodo } from '../api'
-import type { Person, Project } from '../types'
+import type { Person, Project, Todo } from '../types'
 import DatePicker from './DatePicker'
+import { buildTodoPatch } from '../utils/optimisticTodo'
 
 interface BulkActionBarProps {
  selectedIds: Set<number>
@@ -18,19 +19,38 @@ export default function BulkActionBar({ selectedIds, onClearSelection, queryKeys
  const { data: persons = [] } = useQuery<Person[]>({ queryKey: ['persons'], queryFn: fetchPersons })
  const { data: projects = [] } = useQuery<Project[]>({ queryKey: ['projects'], queryFn: fetchProjects })
 
+ // The ids are captured into the mutation variables so the selection can be
+ // cleared immediately; the caches update optimistically and sync in the
+ // background, with onError restoring the pre-mutation snapshot.
  const bulkUpdate = useMutation({
- mutationFn: async (data: Record<string, unknown>) => {
- await Promise.all(Array.from(selectedIds).map((id) => updateTodo(id, data)))
+ mutationFn: async ({ ids, data }: { ids: number[]; data: Record<string, unknown> }) => {
+ await Promise.all(ids.map((id) => updateTodo(id, data)))
  },
- onSuccess: () => {
- queryKeys.forEach((k) => queryClient.invalidateQueries({ queryKey: k as string[] }))
- queryClient.invalidateQueries({ queryKey: ['reminders'] })
- queryClient.invalidateQueries({ queryKey: ['recently-done'] })
+ onMutate: async ({ ids, data }) => {
  onClearSelection()
  setActiveAction(null)
  setDeadlineValue('')
+ await queryClient.cancelQueries({ queryKey: ['todos'] })
+ const previous = queryClient.getQueriesData<Todo[]>({ queryKey: ['todos'] })
+ const patch = buildTodoPatch(data, persons, projects)
+ const idSet = new Set(ids)
+ queryClient.setQueriesData<Todo[]>({ queryKey: ['todos'] }, (old) =>
+ old?.map((t) => (idSet.has(t.id) ? { ...t, ...patch } : t))
+ )
+ return { previous }
+ },
+ onError: (_err, _vars, context) => {
+ context?.previous.forEach(([key, data]) => queryClient.setQueryData(key, data))
+ },
+ onSettled: () => {
+ queryKeys.forEach((k) => queryClient.invalidateQueries({ queryKey: k as string[] }))
+ queryClient.invalidateQueries({ queryKey: ['reminders'] })
+ queryClient.invalidateQueries({ queryKey: ['recently-done'] })
  },
  })
+
+ const runBulk = (data: Record<string, unknown>) =>
+ bulkUpdate.mutate({ ids: Array.from(selectedIds), data })
 
  const count = selectedIds.size
  if (count === 0) return null
@@ -51,7 +71,7 @@ export default function BulkActionBar({ selectedIds, onClearSelection, queryKeys
  onChange={(e) => {
  const val = e.target.value
  if (val === '') return
- bulkUpdate.mutate({ assignee_id: val === '__none__' ? null : parseInt(val) })
+ runBulk({ assignee_id: val === '__none__' ? null : parseInt(val) })
  }}
  onBlur={() => setActiveAction(null)}
  className="text-sm bg-white text-fg rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-white"
@@ -79,7 +99,7 @@ export default function BulkActionBar({ selectedIds, onClearSelection, queryKeys
  onChange={(e) => {
  const val = e.target.value
  if (val === '') return
- bulkUpdate.mutate({ project_id: val === '__none__' ? null : parseInt(val) })
+ runBulk({ project_id: val === '__none__' ? null : parseInt(val) })
  }}
  onBlur={() => setActiveAction(null)}
  className="text-sm bg-white text-fg rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-white"
@@ -106,7 +126,7 @@ export default function BulkActionBar({ selectedIds, onClearSelection, queryKeys
  value={deadlineValue}
  onChange={(v) => {
  setDeadlineValue(v)
- if (v) bulkUpdate.mutate({ deadline: v })
+ if (v) runBulk({ deadline: v })
  }}
  variant="input"
  triggerClassName="!bg-white !text-fg !px-3 !py-1.5 !text-sm !rounded-lg"

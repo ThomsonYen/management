@@ -6,6 +6,13 @@ import { ListTodo, CheckCircle2, ShieldAlert, ExternalLink, type LucideIcon } fr
 import { BlockerTreeNode } from '../components/BlockerTree'
 import DatePicker from '../components/DatePicker'
 import { ImportanceBadge } from '../components/ui'
+import {
+ buildTodoPatch,
+ patchTodoCaches,
+ restoreTodoCaches,
+ snapshotTodoCaches,
+ type TodoCachesSnapshot,
+} from '../utils/optimisticTodo'
 
 const STATUS_OPTIONS = ['todo', 'done', 'blocked']
 const IMPORTANCE_OPTIONS = ['low', 'medium', 'high', 'critical']
@@ -33,12 +40,41 @@ function ScheduleCard({ item, allTodos, persons, onOpenTodo }: { item: ScheduleS
 
  const updateMutation = useMutation({
  mutationFn: (data: Parameters<typeof updateTodo>[1]) => updateTodo(item.todo_id, data),
- onSuccess: invalidate,
+ onMutate: async (data) => {
+ const snapshot = await snapshotTodoCaches(queryClient, item.todo_id)
+ await queryClient.cancelQueries({ queryKey: ['reminders'] })
+ const reminders = queryClient.getQueryData<ScheduleStatus[]>(['reminders'])
+ patchTodoCaches(queryClient, item.todo_id, buildTodoPatch(data, persons, []))
+ // the card itself renders from the reminders query, so patch its fields there too
+ queryClient.setQueryData<ScheduleStatus[]>(['reminders'], (old) =>
+ old?.map((r) => {
+ if (r.todo_id !== item.todo_id) return r
+ const next = { ...r }
+ if ('assignee_id' in data) next.assignee_name = persons.find((p) => p.id === data.assignee_id)?.name ?? ''
+ if (typeof data.deadline === 'string') next.deadline = data.deadline
+ if (typeof data.estimated_hours === 'number') next.estimated_hours = data.estimated_hours
+ return next
+ })
+ )
+ return { snapshot, reminders }
+ },
+ onError: (_err, _vars, context) => {
+ restoreTodoCaches(queryClient, item.todo_id, context?.snapshot)
+ if (context?.reminders) queryClient.setQueryData(['reminders'], context.reminders)
+ },
+ onSettled: invalidate,
  })
 
  const toggleFocus = useMutation({
  mutationFn: () => updateTodo(item.todo_id, { is_focused: !isFocused }),
- onSuccess: invalidate,
+ onMutate: async () => {
+ const snapshot = await snapshotTodoCaches(queryClient, item.todo_id)
+ patchTodoCaches(queryClient, item.todo_id, { is_focused: !isFocused })
+ return snapshot
+ },
+ onError: (_err, _vars, snapshot?: TodoCachesSnapshot) =>
+ restoreTodoCaches(queryClient, item.todo_id, snapshot),
+ onSettled: invalidate,
  })
 
  const saveField = (field: string, value: unknown) => {

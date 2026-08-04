@@ -11,6 +11,14 @@ import { useTimezone } from '../SettingsContext'
 import { isOverdue as checkOverdue, getTodayString } from '../dateUtils'
 import { todoToMarkdown } from '../utils/todoMarkdown'
 import { importanceBadgeClass } from '../utils/badgeClasses'
+import {
+ buildTodoPatch,
+ patchSubtodoCaches,
+ patchTodoCaches,
+ restoreTodoCaches,
+ snapshotTodoCaches,
+ type TodoCachesSnapshot,
+} from '../utils/optimisticTodo'
 
 const IMPORTANCE_OPTIONS = ['low', 'medium', 'high', 'critical']
 
@@ -144,9 +152,15 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
  const invalidate = () => {
  const keys = queryKeys || [['todos']]
  keys.forEach((k) => queryClient.invalidateQueries({ queryKey: k as string[] }))
+ queryClient.invalidateQueries({ queryKey: ['todo', todo.id] })
  queryClient.invalidateQueries({ queryKey: ['reminders'] })
  queryClient.invalidateQueries({ queryKey: ['recently-done'] })
  }
+
+ // Edits update the caches immediately and sync in the background; onError
+ // restores the pre-mutation snapshot, onSettled resyncs with the server.
+ const rollback = (_err: unknown, _vars: unknown, snapshot?: TodoCachesSnapshot) =>
+ restoreTodoCaches(queryClient, todo.id, snapshot)
 
  const handleDoneCheck = (checked: boolean) => {
  if (checked && todo.status !== 'done') {
@@ -182,18 +196,50 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
 
  const updateMutation = useMutation({
  mutationFn: (data: Parameters<typeof updateTodo>[1]) => updateTodo(todo.id, data),
- onSuccess: invalidate,
+ onMutate: async (data) => {
+ const snapshot = await snapshotTodoCaches(queryClient, todo.id)
+ patchTodoCaches(queryClient, todo.id, buildTodoPatch(data, persons, projects))
+ return snapshot
+ },
+ onError: rollback,
+ onSettled: invalidate,
  })
 
  const toggleSubTodo = useMutation({
  mutationFn: ({ id, done }: { id: number; done: boolean }) => updateSubTodo(id, { done }),
- onSuccess: invalidate,
+ onMutate: async ({ id, done }) => {
+ const snapshot = await snapshotTodoCaches(queryClient, todo.id)
+ patchSubtodoCaches(queryClient, todo.id, (subs) =>
+ subs.map((s) => (s.id === id ? { ...s, done } : s))
+ )
+ return snapshot
+ },
+ onError: rollback,
+ onSettled: invalidate,
  })
 
  const addSubTodo = useMutation({
  mutationFn: (title: string) => createSubTodo(todo.id, { title, order: todo.subtodos.length }),
- onSuccess: () => { invalidate(); setNewSubTitle('') },
+ onMutate: async (title) => {
+ setNewSubTitle('') // clear the input right away so typing the next sub-task isn't blocked
+ const snapshot = await snapshotTodoCaches(queryClient, todo.id)
+ patchSubtodoCaches(queryClient, todo.id, (subs) => [
+ ...subs,
+ { id: -Date.now(), title, done: false, order: subs.length }, // placeholder until refetch delivers the server row
+ ])
+ return snapshot
+ },
+ onError: rollback,
+ onSettled: invalidate,
  })
+
+ const saveSubTitle = (id: number, title: string) => {
+ patchSubtodoCaches(queryClient, todo.id, (subs) =>
+ subs.map((s) => (s.id === id ? { ...s, title } : s))
+ )
+ // sync in the background; invalidate either way so an error resyncs the cache
+ updateSubTodo(id, { title }).catch(() => {}).then(invalidate)
+ }
 
  const saveField = (field: string, value: unknown) => {
  updateMutation.mutate({ [field]: value } as Parameters<typeof updateTodo>[1])
@@ -430,7 +476,7 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
  ref={autoOpenSelect}
  value={todo.project_id?.toString() || ''}
  onChange={(e) =>
- saveField('project_id', e.target.value ? parseInt(e.target.value) : undefined)
+ saveField('project_id', e.target.value ? parseInt(e.target.value) : null)
  }
  onBlur={() => setEditingField(null)}
  onClick={(e) => e.stopPropagation()}
@@ -563,10 +609,17 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
  const reordered = sorted.filter((x) => x.id !== draggedId)
  const insertAt = dropIndex > fromIdx ? dropIndex - 1 : dropIndex
  reordered.splice(insertAt, 0, sorted[fromIdx])
- reordered.forEach((item, i) => {
- if (item.order !== i) updateSubTodo(item.id, { order: i })
+ const changed = reordered.filter((item, i) => item.order !== i)
+ patchSubtodoCaches(queryClient, todo.id, (subs) =>
+ subs.map((s) => {
+ const i = reordered.findIndex((r) => r.id === s.id)
+ return i === -1 || s.order === i ? s : { ...s, order: i }
  })
- invalidate()
+ )
+ // sync in the background; invalidate after all writes land so the refetch can't race them
+ Promise.all(changed.map((item) => updateSubTodo(item.id, { order: reordered.indexOf(item) })))
+ .catch(() => {})
+ .then(invalidate)
  }
  const dropLine = (
  <div className="h-0.5 bg-accent-hover rounded-full mx-1 transition-all" />
@@ -617,13 +670,13 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
  value={editingSubTitle}
  onChange={(e) => setEditingSubTitle(e.target.value)}
  onBlur={() => {
- if (editingSubTitle.trim()) updateSubTodo(s.id, { title: editingSubTitle.trim() }).then(invalidate)
+ if (editingSubTitle.trim()) saveSubTitle(s.id, editingSubTitle.trim())
  setEditingSubId(null)
  }}
  onKeyDown={(e) => {
  if (e.key === 'Enter' && !e.shiftKey && editingSubTitle.trim()) {
  e.preventDefault()
- updateSubTodo(s.id, { title: editingSubTitle.trim() }).then(invalidate)
+ saveSubTitle(s.id, editingSubTitle.trim())
  setEditingSubId(null)
  }
  if (e.key === 'Escape') setEditingSubId(null)
@@ -651,13 +704,12 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
  value={newSubTitle}
  onChange={(e) => setNewSubTitle(e.target.value)}
  onKeyDown={(e) => {
- if (e.key === 'Enter' && newSubTitle.trim() && !addSubTodo.isPending) {
+ if (e.key === 'Enter' && newSubTitle.trim()) {
  addSubTodo.mutate(newSubTitle.trim())
  }
  }}
- placeholder={addSubTodo.isPending ? 'Adding...' : '+ Add sub-task...'}
- disabled={addSubTodo.isPending}
- className="mt-2 w-full text-sm border border-dashed border-border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent placeholder:text-fg-faint dark:placeholder:text-fg-faint disabled:opacity-50 dark:bg-transparent "
+ placeholder="+ Add sub-task..."
+ className="mt-2 w-full text-sm border border-dashed border-border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent placeholder:text-fg-faint dark:placeholder:text-fg-faint dark:bg-transparent "
  />
  </div>
 
