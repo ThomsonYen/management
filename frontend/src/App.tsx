@@ -25,6 +25,7 @@ import WeeklyGoalsPage from './pages/WeeklyGoalsPage'
 import ProgressPage from './pages/ProgressPage'
 import TodoModal from './components/TodoModal'
 import CommandPalette from './components/CommandPalette'
+import InstallHint from './components/mobile/InstallHint'
 import RequireAuth from './components/RequireAuth'
 import LoginPage from './pages/LoginPage'
 
@@ -137,7 +138,7 @@ function AppShell() {
   }
 
   return (
-    <div className="flex h-screen bg-app overflow-hidden">
+    <div className="flex h-dvh bg-app overflow-hidden">
       {/* Sidebar */}
       <aside
         style={{ width: sidebarCollapsed ? 56 : sidebarWidth }}
@@ -318,6 +319,9 @@ function AppShell() {
           onNewPersonalNote={startNewPersonalNote}
         />
       )}
+
+      {/* iOS Safari (non-installed) — how to Add to Home Screen */}
+      <InstallHint />
     </div>
   )
 }

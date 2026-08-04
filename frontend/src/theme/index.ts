@@ -89,7 +89,29 @@ export function applyTheme(name: ThemeName): void {
 
   // 4) mark active theme on <html> (useful for third-party integrations / debugging)
   document.documentElement.dataset.theme = name
+
+  // 5) keep the PWA status-bar area (meta theme-color) matching the app background
+  updateThemeColorMeta()
 }
+
+// ─── PWA theme-color ─────────────────────────────────────────────────────────
+// The standalone iOS status-bar area is painted with <meta name="theme-color">;
+// it must track both the active preset and the light/dark class.
+
+function updateThemeColorMeta(): void {
+  const name = (document.documentElement.dataset.theme as ThemeName) ?? DEFAULT_THEME
+  const preset = THEMES[name] ?? THEMES[DEFAULT_THEME]
+  const dark = document.documentElement.classList.contains('dark')
+  const bgApp = dark ? preset.colors.dark.bgApp : preset.colors.light.bgApp
+  const meta = document.querySelector('meta[name="theme-color"]')
+  if (meta) meta.setAttribute('content', `rgb(${bgApp})`)
+}
+
+// The dark class is toggled by SettingsContext; observe it so the meta follows.
+new MutationObserver(updateThemeColorMeta).observe(document.documentElement, {
+  attributes: true,
+  attributeFilter: ['class'],
+})
 
 export function getSavedTheme(): ThemeName {
   try {

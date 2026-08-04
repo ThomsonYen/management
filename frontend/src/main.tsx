@@ -12,6 +12,19 @@ import { RecordingProvider } from './RecordingContext'
 import { ToastProvider } from './ToastContext'
 import './theme'      // applies saved theme CSS variables synchronously
 import './index.css'
+import { registerSW } from 'virtual:pwa-register'
+
+// Auto-updating service worker (precached app shell; /api is never cached).
+// iOS aggressively restores suspended PWAs, so also check for a new deploy
+// whenever the app returns to the foreground.
+registerSW({
+  onRegisteredSW(_swUrl, registration) {
+    if (!registration) return
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') registration.update()
+    })
+  },
+})
 
 const CACHE_MAX_AGE = 24 * 60 * 60 * 1000 // keep last-known data for a day
 

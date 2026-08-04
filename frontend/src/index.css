@@ -12,6 +12,9 @@
 html {
   font-feature-settings: var(--font-feature-settings, normal);
   color-scheme: light;
+  /* iOS: keep text size stable in landscape/PWA, drop the grey tap flash */
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
 }
 
 html.dark {

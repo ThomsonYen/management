@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { VitePWA } from 'vite-plugin-pwa'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -41,8 +42,47 @@ function hstsPlugin() {
 const DEV_HOST = 'dev.localhost'
 const DEV_PORT = 5173
 
+// Precache the app shell aggressively; never SW-cache /api — live data belongs
+// to TanStack Query, and SW-cached authed JSON would go stale and leak across logins.
+const pwaPlugin = VitePWA({
+  registerType: 'autoUpdate',
+  manifest: {
+    name: 'Management',
+    short_name: 'Management',
+    display: 'standalone',
+    start_url: '/',
+    scope: '/',
+    background_color: '#fafaf9', // linear-emerald light bgApp
+    theme_color: '#fafaf9',
+    icons: [
+      { src: '/pwa-192.png', sizes: '192x192', type: 'image/png' },
+      { src: '/pwa-512.png', sizes: '512x512', type: 'image/png' },
+      { src: '/pwa-512-maskable.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+    ],
+  },
+  workbox: {
+    // The single SPA bundle is ~2.1 MB; it must be precached for offline launch.
+    maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
+    navigateFallback: '/index.html',
+    navigateFallbackDenylist: [/^\/api\//],
+    runtimeCaching: [
+      { urlPattern: /^\/api\//, handler: 'NetworkOnly' },
+      {
+        // Theme font stylesheets + font files (Google Fonts) — cache so the
+        // installed app keeps its typography offline.
+        urlPattern: /^https:\/\/fonts\.(googleapis|gstatic)\.com\/.*/,
+        handler: 'StaleWhileRevalidate',
+        options: {
+          cacheName: 'theme-fonts',
+          expiration: { maxEntries: 30, maxAgeSeconds: 60 * 60 * 24 * 365 },
+        },
+      },
+    ],
+  },
+})
+
 export default defineConfig({
-  plugins: [react(), ...(httpsConfig ? [hstsPlugin()] : [])],
+  plugins: [react(), pwaPlugin, ...(httpsConfig ? [hstsPlugin()] : [])],
   define: {
     __FRONTEND_CONFIG__: JSON.stringify(getFrontendConfig()),
     __APP_VERSION__: JSON.stringify(
