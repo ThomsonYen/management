@@ -18,6 +18,7 @@ import {
  Loader2,
  Check,
  Pencil,
+ AlertTriangle,
 } from 'lucide-react'
 import type { Person, Project } from '../types'
 import DatePicker from '../components/DatePicker'
@@ -141,8 +142,12 @@ export default function NoteDetailPage() {
  // Debounced content save (writes file + re-extracts tags on the backend)
  const contentTimerRef = useRef<ReturnType<typeof setTimeout>>()
  const pendingContentRef = useRef<string | null>(null)
+ const contentUnavailable = note?.content_unavailable ?? false
  const handleContentChange = useCallback(
  (val: string | undefined) => {
+ // The body could not be read, so `content` is blank rather than actual.
+ // Saving would truncate the real file the moment its vault reappears.
+ if (contentUnavailable) return
  const newContent = val ?? ''
  setContent(newContent)
  pendingContentRef.current = newContent
@@ -155,7 +160,7 @@ export default function NoteDetailPage() {
  })
  }, 1000)
  },
- [noteId, queryClient],
+ [noteId, queryClient, contentUnavailable],
  )
 
  // Flush pending content save on unmount
@@ -302,6 +307,20 @@ export default function NoteDetailPage() {
  </div>
  )}
 
+ {note?.content_unavailable && (
+ <div className="mx-6 mb-2 flex items-start gap-2 rounded border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+ <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+ <span>
+ This note&rsquo;s vault{note.vault_name ? ` (${note.vault_name})` : ''} is not
+ reachable from the server, so its content cannot be loaded. The note is
+ <strong> not empty</strong> &mdash; editing is disabled to avoid overwriting it.
+ {note.vault_root_path && (
+ <> Expected at <code className="font-mono">{note.vault_root_path}</code>.</>
+ )}
+ </span>
+ </div>
+ )}
+
  {localTags.length > 0 && (
  <div className="px-6 pb-2 flex flex-wrap gap-1.5">
  {localTags.map((t) => (
@@ -321,7 +340,7 @@ export default function NoteDetailPage() {
  onChange={handleContentChange}
  height="100%"
  style={{ minHeight: 500 }}
- preview="live"
+ preview={note?.content_unavailable ? 'preview' : 'live'}
  visibleDragbar={false}
  previewOptions={{ remarkPlugins: [remarkFixEmptyTasks, remarkHashtag] }}
  />

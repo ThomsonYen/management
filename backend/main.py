@@ -839,6 +839,7 @@ class NoteOut(BaseModel):
     vault_name: Optional[str] = None
     vault_root_path: Optional[str] = None
     relative_path: Optional[str] = None
+    content_unavailable: bool = False
     model_config = {"from_attributes": True}
 
 
@@ -1021,6 +1022,13 @@ def _require_accessible_vault(vault: Optional["Vault"]) -> None:
         raise HTTPException(
             409, f"Vault '{vault.name}' root is not accessible: {vault.root_path}"
         )
+
+
+def _vault_root_missing(note: "Note") -> bool:
+    """True when the note's vault root is unreachable, so its body cannot be
+    read at all. Distinct from a genuinely empty note: callers must not present
+    an unreadable note as blank, or a whole vault looks silently wiped."""
+    return note.vault is not None and not Path(note.vault.root_path).is_dir()
 
 
 def _read_note_body(note: "Note") -> str:
@@ -1219,6 +1227,7 @@ def note_to_out(n: Note) -> NoteOut:
         vault_name=n.vault.name if n.vault else None,
         vault_root_path=n.vault.root_path if n.vault else None,
         relative_path=n.relative_path,
+        content_unavailable=_vault_root_missing(n),
     )
 
 
@@ -1527,9 +1536,24 @@ async def lifespan(_app: FastAPI):
         # Full scan of every vault on startup; picks up out-of-band edits.
         for v in db.query(Vault).all():
             try:
-                _scan_vault(db, v)
+                stats = _scan_vault(db, v)
             except Exception:
                 log.exception("startup scan failed for vault id=%s", v.id)
+                continue
+            if stats.get("error"):
+                # An unreachable root makes every note in the vault read as an
+                # empty body, which looks like data loss rather than a fault.
+                # Say so loudly: root_path is absolute and machine-specific, so
+                # it goes stale whenever the DB moves (laptop → Fly volume).
+                n_affected = (
+                    db.query(Note).filter(Note.vault_id == v.id).count()
+                )
+                log.error(
+                    "Vault '%s' (id=%s) root is NOT accessible: %s — %d notes "
+                    "will read as empty. Re-point vaults.root_path at a path on "
+                    "this machine.",
+                    v.name, v.id, v.root_path, n_affected,
+                )
         _backfill_meeting_notes_tag(db)
         _resync_all_note_tags(db)
         db.commit()

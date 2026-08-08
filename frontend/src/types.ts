@@ -96,6 +96,7 @@ export interface Note {
   vault_name?: string | null
   vault_root_path?: string | null
   relative_path?: string | null
+  content_unavailable?: boolean
 }
 
 export interface NoteSummary {
