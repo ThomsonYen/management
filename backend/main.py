@@ -28,7 +28,7 @@ from backup.scheduler import backup_loop
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from openai import OpenAI
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import (
     Boolean,
     Column,
@@ -124,6 +124,20 @@ def get_user_timezone() -> str:
     except Exception:
         return "UTC"
 
+
+def today_in_user_tz() -> str:
+    """Today's calendar date (YYYY-MM-DD) in the user's configured timezone."""
+    from zoneinfo import ZoneInfo
+    try:
+        now = datetime.now(ZoneInfo(get_user_timezone()))
+    except Exception:
+        now = datetime.now().astimezone()
+    return now.strftime("%Y-%m-%d")
+
+
+# Fallback check-in cadence for persons created before the column existed.
+DEFAULT_CHECK_IN_INTERVAL_DAYS = 2
+
 MEETING_NOTES_DIR = DATA_DIR / "meeting_notes"
 MEETING_TEMPLATES_DIR = DATA_DIR / "meeting_templates"
 MEETING_AUDIO_DIR = DATA_DIR / "meeting_audio"
@@ -213,6 +227,11 @@ class Person(Base):
     notes = Column(Text, nullable=True)
     display_order = Column(Integer, default=0, nullable=False)
     deleted_at = Column(String, nullable=True)
+    # Check-in cadence tracking. Only direct reports raise dashboard warnings, but
+    # last_check_in_date (YYYY-MM-DD) is recorded for everyone.
+    is_direct_report = Column(Boolean, default=False, nullable=False)
+    check_in_interval_days = Column(Integer, default=2, nullable=False)
+    last_check_in_date = Column(String, nullable=True)  # YYYY-MM-DD
     todos = relationship("Todo", back_populates="assignee")
     projects = relationship(
         "Project",
@@ -458,6 +477,16 @@ with engine.connect() as _conn:
             "UPDATE persons SET display_order = id WHERE display_order = 0"
         ))
         _conn.commit()
+    # Check-in cadence tracking (last_check_in_date is backfilled in lifespan()).
+    if "is_direct_report" not in _person_cols:
+        _conn.execute(text("ALTER TABLE persons ADD COLUMN is_direct_report INTEGER NOT NULL DEFAULT 0"))
+        _conn.commit()
+    if "check_in_interval_days" not in _person_cols:
+        _conn.execute(text("ALTER TABLE persons ADD COLUMN check_in_interval_days INTEGER NOT NULL DEFAULT 2"))
+        _conn.commit()
+    if "last_check_in_date" not in _person_cols:
+        _conn.execute(text("ALTER TABLE persons ADD COLUMN last_check_in_date TEXT"))
+        _conn.commit()
     # Phase 4: vault metadata on notes
     _note_cols = [c["name"] for c in _insp.get_columns("notes")]
     for _col, _ddl in (
@@ -540,6 +569,9 @@ class PersonCreate(BaseModel):
     email: Optional[str] = None
     notes: Optional[str] = None
     project_ids: Optional[List[int]] = None
+    is_direct_report: Optional[bool] = None
+    check_in_interval_days: Optional[int] = Field(None, ge=1)
+    last_check_in_date: Optional[str] = Field(None, pattern=r"^\d{4}-\d{2}-\d{2}$")
 
 
 class PersonUpdate(BaseModel):
@@ -547,6 +579,9 @@ class PersonUpdate(BaseModel):
     email: Optional[str] = None
     notes: Optional[str] = None
     project_ids: Optional[List[int]] = None
+    is_direct_report: Optional[bool] = None
+    check_in_interval_days: Optional[int] = Field(None, ge=1)
+    last_check_in_date: Optional[str] = Field(None, pattern=r"^\d{4}-\d{2}-\d{2}$")
 
 
 class PersonOut(BaseModel):
@@ -558,6 +593,9 @@ class PersonOut(BaseModel):
     deleted_at: Optional[str] = None
     project_ids: List[int] = []
     project_names: List[str] = []
+    is_direct_report: bool = False
+    check_in_interval_days: int = 2
+    last_check_in_date: Optional[str] = None
     model_config = {"from_attributes": True}
 
 
@@ -577,6 +615,9 @@ def person_to_out(p: Person) -> PersonOut:
         deleted_at=p.deleted_at,
         project_ids=[pr.id for pr in active_projects],
         project_names=[pr.name for pr in active_projects],
+        is_direct_report=bool(p.is_direct_report),
+        check_in_interval_days=p.check_in_interval_days or DEFAULT_CHECK_IN_INTERVAL_DAYS,
+        last_check_in_date=p.last_check_in_date,
     )
 
 
@@ -593,6 +634,41 @@ def _set_person_projects(db: Session, person_id: int, project_ids: List[int]) ->
         db.execute(person_projects.insert().values(
             person_id=person_id, project_id=pid, display_order=i,
         ))
+
+
+def _bump_check_ins_for_meeting(note: "Note", meeting_date: Optional[str]) -> None:
+    """Advance attendees' last_check_in_date to this meeting's date.
+
+    A watermark, never rolled backwards: re-dating a meeting into the past or
+    dropping an attendee leaves the recorded value alone. Future-dated meetings
+    are ignored — a scheduled 1:1 is not a check-in that already happened.
+    """
+    if note.kind != "meeting" or note.hidden or not meeting_date:
+        return
+    if meeting_date > today_in_user_tz():
+        return
+    for person in note.attendees:
+        if person.last_check_in_date is None or meeting_date > person.last_check_in_date:
+            person.last_check_in_date = meeting_date
+
+
+def _backfill_person_check_ins(db: Session) -> None:
+    """Seed last_check_in_date from existing meeting notes (nulls only, so this
+    is a no-op on every boot after the first and never clobbers manual edits)."""
+    db.execute(text(
+        """
+        UPDATE persons SET last_check_in_date = (
+            SELECT MAX(md.date)
+            FROM note_attendees na
+            JOIN notes n ON n.id = na.note_id
+            JOIN meeting_details md ON md.note_id = n.id
+            WHERE na.person_id = persons.id
+              AND n.hidden = 0
+              AND md.date <= :today
+        )
+        WHERE last_check_in_date IS NULL
+        """
+    ), {"today": today_in_user_tz()})
 
 
 PROJECT_IMPORTANCE_VALUES = {"low", "medium", "high"}
@@ -1556,6 +1632,7 @@ async def lifespan(_app: FastAPI):
                 )
         _backfill_meeting_notes_tag(db)
         _resync_all_note_tags(db)
+        _backfill_person_check_ins(db)
         db.commit()
     task = None
     if os.environ.get("BACKUP_LOOP_ENABLED", "1") == "1":
@@ -2715,6 +2792,8 @@ def create_note(data: NoteCreate, db: Session = Depends(get_db)):
     if data.todo_ids:
         n.todos = db.query(Todo).filter(Todo.id.in_(data.todo_ids)).all()
 
+    _bump_check_ins_for_meeting(n, data.date)
+
     db.commit()
     db.refresh(n)
     return note_to_out(n)
@@ -2750,6 +2829,11 @@ def update_note(note_id: int, data: NoteUpdate, db: Session = Depends(get_db)):
         n.projects = db.query(Project).filter(Project.id.in_(project_ids)).all()
     if todo_ids is not None:
         n.todos = db.query(Todo).filter(Todo.id.in_(todo_ids)).all()
+    # Run unconditionally for meeting notes so editing either the date or the
+    # attendee list refreshes the roster's check-in watermarks.
+    _bump_check_ins_for_meeting(
+        n, new_date if new_date is not None else (n.meeting_details.date if n.meeting_details else None)
+    )
     if transcript is not None:
         _write_transcript(n.id, transcript)
 

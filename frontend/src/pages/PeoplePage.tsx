@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useResizableSidebar } from '../hooks/useResizableSidebar'
-import { useHotkeys } from '../SettingsContext'
+import { useHotkeys, useTimezone } from '../SettingsContext'
 import { useHotkey } from '../hooks/useHotkey'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Archive, ChevronLeft, ChevronsLeft, ChevronsRight, ChevronDown, ChevronRight, LayoutGrid, List, Maximize2, Minimize2, Plus, RotateCcw, Trash2, X } from 'lucide-react'
@@ -24,11 +24,13 @@ import type { Person, Project, Todo, ScheduleStatus } from '../types'
 import TodoCard from '../components/TodoCard'
 import TodoModal from '../components/TodoModal'
 import BulkActionBar from '../components/BulkActionBar'
+import CheckInButton from '../components/CheckInButton'
 import MarkdownEditor from '../components/MarkdownEditor'
 import PersonProjectBoard from '../components/PersonProjectBoard'
 import SaveIndicator, { type SaveState } from '../components/SaveIndicator'
 import { useDebouncedFn } from '../hooks/useDebouncedFn'
 import { useToast } from '../ToastContext'
+import { DEFAULT_CHECK_IN_INTERVAL, describeCheckIn, getCheckInState } from '../utils/checkIn'
 
 const STATUS_ORDER = ['todo', 'blocked']
 
@@ -180,6 +182,80 @@ function PersonNotes({ person }: { person: Person }) {
  className="mt-2 w-full border border-border rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-accent resize-y"
  />
  )}
+ </div>
+ )
+}
+
+/** Last-contact display, check-in button, and cadence settings for one person. */
+function PersonCheckInRow({ person }: { person: Person }) {
+ const queryClient = useQueryClient()
+ const { timezone } = useTimezone()
+ const currentInterval = person.check_in_interval_days ?? DEFAULT_CHECK_IN_INTERVAL
+ const [intervalDraft, setIntervalDraft] = useState(String(currentInterval))
+
+ useEffect(() => {
+ setIntervalDraft(String(currentInterval))
+ }, [person.id, currentInterval])
+
+ const save = useMutation({
+ mutationFn: (data: Parameters<typeof updatePerson>[1]) => updatePerson(person.id, data),
+ onSuccess: () => queryClient.invalidateQueries({ queryKey: ['persons'] }),
+ })
+
+ const { state } = getCheckInState(person, timezone)
+ const tone = !person.is_direct_report
+ ? 'text-fg-muted'
+ : state === 'due'
+ ? 'text-warning font-medium'
+ : state === 'ok'
+ ? 'text-fg-muted'
+ : 'text-danger font-medium'
+
+ const commitInterval = () => {
+ const parsed = Math.round(Number(intervalDraft))
+ if (!Number.isFinite(parsed) || parsed < 1) {
+ setIntervalDraft(String(currentInterval))
+ return
+ }
+ setIntervalDraft(String(parsed))
+ if (parsed !== currentInterval) save.mutate({ check_in_interval_days: parsed })
+ }
+
+ return (
+ <div className="mt-2 pt-2 border-t border-border-subtle flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+ <div className="flex items-center gap-2 min-w-0">
+ <span className={`text-xs truncate ${tone}`}>{describeCheckIn(person, timezone)}</span>
+ <CheckInButton person={person} size="xs" />
+ </div>
+ <div className="flex items-center gap-3 text-xs text-fg-muted">
+ <label className="flex items-center gap-1.5 cursor-pointer select-none">
+ <input
+ type="checkbox"
+ checked={!!person.is_direct_report}
+ onChange={(e) => save.mutate({ is_direct_report: e.target.checked })}
+ className="accent-accent"
+ />
+ Direct report
+ </label>
+ {person.is_direct_report && (
+ <span className="flex items-center gap-1">
+ every
+ <input
+ type="number"
+ min={1}
+ value={intervalDraft}
+ onChange={(e) => setIntervalDraft(e.target.value)}
+ onBlur={commitInterval}
+ onKeyDown={(e) => {
+ if (e.key === 'Enter') e.currentTarget.blur()
+ if (e.key === 'Escape') setIntervalDraft(String(currentInterval))
+ }}
+ className="w-12 border border-border rounded px-1.5 py-0.5 text-xs text-fg bg-surface focus:outline-none focus:ring-2 focus:ring-accent"
+ />
+ days
+ </span>
+ )}
+ </div>
  </div>
  )
 }
@@ -386,6 +462,7 @@ export default function PeoplePage({ onOpenTodo }: { onOpenTodo: (id: number) =>
  const renderedPanelWidth = panelExpanded ? Math.max(panelWidth, 380) : panelWidth
  const isDesktop = useIsDesktop()
  const { bindings } = useHotkeys()
+ const { timezone } = useTimezone()
  const stableTogglePanel = useCallback(() => togglePanel(), [togglePanel])
  useHotkey(bindings.toggleSecondarySidebar, stableTogglePanel)
  const [searchParams, setSearchParams] = useSearchParams()
@@ -586,6 +663,8 @@ export default function PeoplePage({ onOpenTodo }: { onOpenTodo: (id: number) =>
  ) : (
  persons.map((person, index) => {
  const count = todoCountByPerson[person.id] || 0
+ const checkInDue =
+ !!person.is_direct_report && getCheckInState(person, timezone).state !== 'ok'
  const hasAlerts = reminders.some((r) => {
  const t = allTodos.find((t) => t.id === r.todo_id)
  return t?.assignee_id === person.id
@@ -653,6 +732,12 @@ export default function PeoplePage({ onOpenTodo }: { onOpenTodo: (id: number) =>
  )}
  </div>
  <div className="flex items-center gap-1.5 flex-shrink-0">
+ {checkInDue && (
+ <span
+ className="w-1.5 h-1.5 rounded-full bg-warning"
+ title="Check-in due"
+ ></span>
+ )}
  {hasAlerts && (
  <span className="w-1.5 h-1.5 rounded-full bg-danger"></span>
  )}
@@ -809,6 +894,7 @@ export default function PeoplePage({ onOpenTodo }: { onOpenTodo: (id: number) =>
  </div>
  </div>
  </div>
+ <PersonCheckInRow person={selectedPerson} />
  </div>
  )}
 

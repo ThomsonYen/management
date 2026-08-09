@@ -7,6 +7,10 @@ export interface Person {
   deleted_at?: string
   project_ids: number[]
   project_names: string[]
+  is_direct_report?: boolean
+  check_in_interval_days?: number
+  /** YYYY-MM-DD */
+  last_check_in_date?: string | null
 }
 
 export interface Project {

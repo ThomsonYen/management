@@ -27,6 +27,29 @@ export function getStartOfToday(timezone: string): Date {
   return new Date(y, m - 1, d)
 }
 
+/**
+ * Whole calendar days between a YYYY-MM-DD date and today in the given timezone.
+ * Positive when the date is in the past. Diffed via Date.UTC so DST transitions
+ * can never shift the result by a day.
+ */
+export function daysSinceDate(dateStr: string, timezone: string): number {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  const [ty, tm, td] = getTodayString(timezone).split('-').map(Number)
+  return Math.round((Date.UTC(ty, tm - 1, td) - Date.UTC(y, m - 1, d)) / 86400000)
+}
+
+/** Format a YYYY-MM-DD date for display, e.g. "Aug 5". Year is added if not the current one. */
+export function formatDayLabel(dateStr: string, timezone: string): string {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  const currentYear = Number(getTodayString(timezone).slice(0, 4))
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString(undefined, {
+    timeZone: 'UTC',
+    month: 'short',
+    day: 'numeric',
+    ...(y === currentYear ? {} : { year: 'numeric' }),
+  })
+}
+
 /** Get the day string (YYYY-MM-DD) for a given ISO timestamp in the configured timezone */
 export function getDateString(iso: string, timezone: string): string {
   const d = new Date(iso)

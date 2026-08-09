@@ -1,11 +1,15 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { fetchReminders, fetchRecentlyDone, fetchTodos, fetchPersons, updateTodo } from '../api'
 import type { ScheduleStatus, Todo, Person } from '../types'
 import { ListTodo, CheckCircle2, ShieldAlert, ExternalLink, type LucideIcon } from 'lucide-react'
 import { BlockerTreeNode } from '../components/BlockerTree'
+import CheckInButton from '../components/CheckInButton'
 import DatePicker from '../components/DatePicker'
 import { ImportanceBadge } from '../components/ui'
+import { useTimezone } from '../SettingsContext'
+import { compareCheckInUrgency, describeCheckIn, getCheckInState } from '../utils/checkIn'
 import {
  buildTodoPatch,
  patchTodoCaches,
@@ -295,6 +299,40 @@ function ScheduleCard({ item, allTodos, persons, onOpenTodo }: { item: ScheduleS
  )
 }
 
+function CheckInCard({ person, timezone, onOpen }: { person: Person; timezone: string; onOpen: () => void }) {
+ const { state, interval } = getCheckInState(person, timezone)
+ const isOverdue = state === 'overdue' || state === 'never'
+ return (
+ <div
+ className={`rounded-lg border-l-4 px-4 py-3 flex items-center justify-between gap-3 ${
+ isOverdue ? 'bg-danger-bg border-danger' : 'bg-warning-bg border-warning'
+ }`}
+ >
+ <button onClick={onOpen} className="flex items-center gap-3 min-w-0 text-left group">
+ <div className="w-8 h-8 rounded-full bg-accent-2 text-accent-fg flex items-center justify-center text-sm font-bold flex-shrink-0">
+ {person.name.charAt(0).toUpperCase()}
+ </div>
+ <div className="min-w-0">
+ <p className="font-medium text-fg truncate group-hover:underline">{person.name}</p>
+ <p className="text-[11px] text-fg-muted truncate">
+ {describeCheckIn(person, timezone)} · every {interval} day{interval === 1 ? '' : 's'}
+ </p>
+ </div>
+ </button>
+ <div className="flex items-center gap-2 flex-shrink-0">
+ <span
+ className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+ isOverdue ? 'bg-danger-bg text-danger' : 'bg-warning-bg text-warning'
+ }`}
+ >
+ {isOverdue ? 'OVERDUE' : 'DUE'}
+ </span>
+ <CheckInButton person={person} size="xs" />
+ </div>
+ </div>
+ )
+}
+
 function StatCard({ label, value, color, icon: Icon }: { label: string; value: number; color: string; icon: LucideIcon }) {
  return (
  <div className={`rounded-xl p-5 text-white ${color}`}>
@@ -334,8 +372,20 @@ export default function Dashboard({ onOpenTodo }: { onOpenTodo: (id: number) => 
  queryFn: fetchPersons,
  })
 
+ const navigate = useNavigate()
+ const { timezone } = useTimezone()
+
  const behindCount = reminders.filter((r) => r.status === 'behind').length
  const warningCount = reminders.filter((r) => r.status === 'warning').length
+
+ const directReports = persons.filter((p) => p.is_direct_report)
+ const dueCheckIns = directReports
+ .filter((p) => getCheckInState(p, timezone).state !== 'ok')
+ .sort((a, b) => compareCheckInUrgency(a, b, timezone))
+ const checkInOverdueCount = dueCheckIns.filter(
+ (p) => getCheckInState(p, timezone).state !== 'due',
+ ).length
+ const checkInDueCount = dueCheckIns.length - checkInOverdueCount
 
  const recentTodos = [...todos]
  .sort((a, b) => b.created_at.localeCompare(a.created_at))
@@ -351,6 +401,41 @@ export default function Dashboard({ onOpenTodo }: { onOpenTodo: (id: number) => 
  <StatCard label="Completed (past 7 days)" value={recentlyDone.length} color="bg-info" icon={CheckCircle2} />
  <StatCard label="Blocked" value={todos.filter((t) => t.is_blocked).length} color="bg-fg-subtle" icon={ShieldAlert} />
  </div>
+
+ {/* Check-ins with direct reports */}
+ {directReports.length > 0 && (
+ <div className="mb-8">
+ <div className="flex items-center gap-3 mb-3">
+ <h3 className="text-lg font-semibold text-fg">Check-ins</h3>
+ {checkInOverdueCount > 0 && (
+ <span className="bg-danger-bg text-danger text-xs font-bold px-2 py-0.5 rounded-full">
+ {checkInOverdueCount} overdue
+ </span>
+ )}
+ {checkInDueCount > 0 && (
+ <span className="bg-warning-bg text-warning text-xs font-bold px-2 py-0.5 rounded-full">
+ {checkInDueCount} due today
+ </span>
+ )}
+ </div>
+ {dueCheckIns.length === 0 ? (
+ <div className="bg-success-bg border border-success/30 rounded-lg p-4 text-success text-sm">
+ All check-ins are up to date!
+ </div>
+ ) : (
+ <div className="space-y-3">
+ {dueCheckIns.map((p) => (
+ <CheckInCard
+ key={p.id}
+ person={p}
+ timezone={timezone}
+ onOpen={() => navigate(`/people?person=${p.id}`)}
+ />
+ ))}
+ </div>
+ )}
+ </div>
+ )}
 
  {/* Schedule alerts */}
  <div className="mb-8">

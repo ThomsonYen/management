@@ -41,13 +41,31 @@ export const logout = (): Promise<void> =>
 export const fetchPersons = (): Promise<Person[]> =>
   api.get('/persons').then((r) => r.data)
 
-export const createPerson = (data: { name: string; email?: string; notes?: string; project_ids?: number[] }): Promise<Person> =>
-  api.post('/persons', data).then((r) => r.data)
+export const createPerson = (data: {
+  name: string
+  email?: string
+  notes?: string
+  project_ids?: number[]
+  is_direct_report?: boolean
+  check_in_interval_days?: number
+}): Promise<Person> => api.post('/persons', data).then((r) => r.data)
 
 export const updatePerson = (
   id: number,
-  data: { name?: string; email?: string; notes?: string; project_ids?: number[] },
+  data: {
+    name?: string
+    email?: string
+    notes?: string
+    project_ids?: number[]
+    is_direct_report?: boolean
+    check_in_interval_days?: number
+    last_check_in_date?: string | null
+  },
 ): Promise<Person> => api.put(`/persons/${id}`, data).then((r) => r.data)
+
+/** Record a check-in with a person. Pass `null` to clear (undo). */
+export const checkInPerson = (id: number, date: string | null): Promise<Person> =>
+  updatePerson(id, { last_check_in_date: date })
 
 export const deletePerson = (id: number): Promise<void> =>
   api.delete(`/persons/${id}`).then((r) => r.data)
