@@ -663,8 +663,8 @@ export default function PeoplePage({ onOpenTodo }: { onOpenTodo: (id: number) =>
  ) : (
  persons.map((person, index) => {
  const count = todoCountByPerson[person.id] || 0
- const checkInDue =
- !!person.is_direct_report && getCheckInState(person, timezone).state !== 'ok'
+ const isDirectReport = !!person.is_direct_report
+ const checkInState = isDirectReport ? getCheckInState(person, timezone).state : 'ok'
  const hasAlerts = reminders.some((r) => {
  const t = allTodos.find((t) => t.id === r.todo_id)
  return t?.assignee_id === person.id
@@ -708,9 +708,14 @@ export default function PeoplePage({ onOpenTodo }: { onOpenTodo: (id: number) =>
  )}
  <button
  onClick={() => setSelectedPersonId(person.id)}
- className={`group w-full px-3 py-1 text-sm transition-colors ${
+ title={isDirectReport ? `${person.name} — direct report` : undefined}
+ className={`group w-full px-3 py-1 text-sm transition-colors border-l-2 ${
+ isDirectReport ? 'border-accent' : 'border-transparent'
+ } ${
  isSelected
  ? 'bg-accent-2 text-accent-fg dark:bg-accent-1 dark:text-accent-fg font-semibold'
+ : isDirectReport
+ ? 'text-fg bg-accent-1/40 dark:bg-accent-1/25 hover:bg-inset dark:hover:bg-elevated'
  : 'text-fg hover:bg-inset dark:hover:bg-elevated'
  }`}
  >
@@ -720,7 +725,9 @@ export default function PeoplePage({ onOpenTodo }: { onOpenTodo: (id: number) =>
  <div className="w-5 h-5 rounded-full bg-accent-2 text-accent-fg flex items-center justify-center text-[10px] font-bold flex-shrink-0">
  {person.name.charAt(0).toUpperCase()}
  </div>
- <span className="truncate">{person.name}</span>
+ <span className={`truncate ${isDirectReport && !isSelected ? 'font-semibold' : ''}`}>
+ {person.name}
+ </span>
  {!panelExpanded && person.project_names.length > 0 && (
  <span
  className={`text-[11px] truncate ${isSelected ? 'text-accent' : 'text-fg-subtle'}`}
@@ -732,14 +739,16 @@ export default function PeoplePage({ onOpenTodo }: { onOpenTodo: (id: number) =>
  )}
  </div>
  <div className="flex items-center gap-1.5 flex-shrink-0">
- {checkInDue && (
+ {checkInState !== 'ok' && (
  <span
- className="w-1.5 h-1.5 rounded-full bg-warning"
- title="Check-in due"
+ className={`w-1.5 h-1.5 rounded-full ${
+ checkInState === 'due' ? 'bg-warning' : 'bg-danger'
+ }`}
+ title={checkInState === 'due' ? 'Check-in due today' : 'Check-in overdue'}
  ></span>
  )}
  {hasAlerts && (
- <span className="w-1.5 h-1.5 rounded-full bg-danger"></span>
+ <span className="w-1.5 h-1.5 rounded-full bg-danger" title="Has schedule alerts"></span>
  )}
  <span className="text-[11px] text-fg-subtle font-normal tabular-nums">{count}</span>
  </div>
