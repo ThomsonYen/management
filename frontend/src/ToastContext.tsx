@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
+import { config } from './config'
 
 export interface ToastAction {
   label: string
@@ -43,7 +44,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
   const showToast = useCallback((opts: ToastOptions) => {
     const id = ++idRef.current
-    const durationMs = opts.durationMs ?? 6000
+    const durationMs = opts.durationMs ?? config.undo_toast_seconds * 1000
     const expiresAt = Date.now() + durationMs
     const record: ToastRecord = {
       id,

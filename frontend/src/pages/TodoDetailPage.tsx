@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
@@ -19,7 +19,6 @@ import type { SubTodo, Todo, Person, Project } from '../types'
 import DatePicker from '../components/DatePicker'
 import TodoModal from '../components/TodoModal'
 import { BlockerTreeNode, BlockingTreeNode } from '../components/BlockerTree'
-import { config } from '../config'
 import { useTimezone, useHotkeys } from '../SettingsContext'
 import { isOverdue as checkOverdue } from '../dateUtils'
 import { useHotkey } from '../hooks/useHotkey'
@@ -125,23 +124,6 @@ export default function TodoDetailPage() {
  const [editValue, setEditValue] = useState('')
  const [editingSubId, setEditingSubId] = useState<number | null>(null)
  const [editingSubTitle, setEditingSubTitle] = useState('')
- const [isDying, setIsDying] = useState(false)
- const dyingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
- const [isUnfocusing, setIsUnfocusing] = useState(false)
- const unfocusingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
- useEffect(() => {
- return () => {
- if (dyingTimeoutRef.current) {
- clearTimeout(dyingTimeoutRef.current)
- updateTodo(todoId, { status: 'done' })
- }
- if (unfocusingTimeoutRef.current) {
- clearTimeout(unfocusingTimeoutRef.current)
- updateTodo(todoId, { is_focused: false })
- }
- }
- }, [todoId])
 
  const { data: todo, isLoading } = useQuery<Todo>({
  queryKey: ['todo', todoId],
@@ -208,16 +190,32 @@ export default function TodoDetailPage() {
  },
  })
 
+ // Done / unfocus apply immediately; the toast offers an Undo for a few seconds.
  const handleDoneCheck = (checked: boolean) => {
- if (checked && todo?.status !== 'done') {
- setIsDying(true)
- dyingTimeoutRef.current = setTimeout(() => {
+ if (!todo) return
+ if (checked && todo.status !== 'done') {
+ const previousStatus = todo.status
  updateMutation.mutate({ status: 'done' })
- }, config.todo_done_fade_seconds * 1000)
- } else if (!checked) {
- if (dyingTimeoutRef.current) clearTimeout(dyingTimeoutRef.current)
- setIsDying(false)
- if (todo?.status === 'done') updateMutation.mutate({ status: 'todo' })
+ showToast({
+ message: `Marked "${todo.title}" done`,
+ tone: 'success',
+ action: { label: 'Undo', onClick: () => updateMutation.mutate({ status: previousStatus }) },
+ })
+ } else if (!checked && todo.status === 'done') {
+ updateMutation.mutate({ status: 'todo' })
+ }
+ }
+
+ const handleFocusToggle = () => {
+ if (!todo) return
+ if (todo.is_focused) {
+ updateMutation.mutate({ is_focused: false })
+ showToast({
+ message: `Removed "${todo.title}" from Focus`,
+ action: { label: 'Undo', onClick: () => updateMutation.mutate({ is_focused: true }) },
+ })
+ } else {
+ updateMutation.mutate({ is_focused: true })
  }
  }
 
@@ -230,9 +228,8 @@ export default function TodoDetailPage() {
  }, [todo]))
 
  useHotkey(bindings.toggleFocus, useCallback(() => {
- if (!todo) return
- updateMutation.mutate({ is_focused: !todo.is_focused })
- }, [todo, updateMutation]))
+ handleFocusToggle()
+ }, [todo]))
 
  useHotkey(bindings.editTodo, useCallback(() => {
  if (!todo) return
@@ -384,10 +381,7 @@ export default function TodoDetailPage() {
  }
 
  return (
- <div
- className="p-4 md:p-6 max-w-3xl mx-auto"
- style={{ opacity: isDying ? 0 : 1, transition: `opacity ${config.todo_done_fade_seconds}s ease` }}
- >
+ <div className="p-4 md:p-6 max-w-3xl mx-auto">
  {/* Back */}
  <button
  onClick={onBack}
@@ -402,30 +396,15 @@ export default function TodoDetailPage() {
  <div className="flex-1 min-w-0">
  <div className="flex flex-wrap gap-2 mb-3 items-center">
  <button
- onClick={() => {
- if (todo.is_focused && !isUnfocusing) {
- setIsUnfocusing(true)
- unfocusingTimeoutRef.current = setTimeout(() => {
- updateMutation.mutate({ is_focused: false })
- setIsUnfocusing(false)
- }, config.unfocus_fade_seconds * 1000)
- } else if (isUnfocusing) {
- if (unfocusingTimeoutRef.current) clearTimeout(unfocusingTimeoutRef.current)
- setIsUnfocusing(false)
- } else {
- updateMutation.mutate({ is_focused: true })
- }
- }}
- title={isUnfocusing ? 'Click to cancel unfocus' : todo.is_focused ? 'Remove from Focus' : 'Add to Focus'}
+ onClick={handleFocusToggle}
+ title={todo.is_focused ? 'Remove from Focus' : 'Add to Focus'}
  className={`p-2 -m-2 text-xl leading-none transition-colors ${
- isUnfocusing
- ? 'text-warning dark:text-warning animate-pulse'
- : todo.is_focused
+ todo.is_focused
  ? 'text-warning hover:text-warning'
  : 'text-fg-faint dark:text-fg-muted hover:text-warning'
  }`}
  >
- {todo.is_focused || isUnfocusing ? '★' : '☆'}
+ {todo.is_focused ? '★' : '☆'}
  </button>
  {editingField === 'importance' ? (
  <select
@@ -478,7 +457,6 @@ export default function TodoDetailPage() {
  ) : (
  <button
  onClick={() => handleDoneCheck(true)}
- disabled={isDying}
  className={`${ACTION_BASE} bg-success-bg text-success border-success/30 hover:bg-success hover:text-white`}
  >
  ✓ Mark done

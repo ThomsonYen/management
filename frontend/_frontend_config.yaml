@@ -1,12 +1,8 @@
 # Frontend configuration
 
-# How many seconds a todo fades before it is marked as done.
-# During this window the user can uncheck to cancel.
-todo_done_fade_seconds: 2
-
-# How many seconds before an unfocused todo is actually removed from Focus.
-# During this window the user can click again to cancel.
-unfocus_fade_seconds: 2.5
+# How many seconds a toast (e.g. "Marked done", "Deleted", "Removed from Focus")
+# stays visible with its Undo button before it disappears.
+undo_toast_seconds: 5
 
 # Default max height (px) for each day's content box on the Goals page.
 # Content that exceeds this height becomes scrollable.

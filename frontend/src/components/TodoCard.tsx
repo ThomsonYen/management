@@ -6,7 +6,6 @@ import { createTodo, createSubTodo, deleteTodo, restoreTodo, updateSubTodo, upda
 import { useToast } from '../ToastContext'
 import DatePicker from './DatePicker'
 import type { Todo, Person, Project } from '../types'
-import { config } from '../config'
 import { useTimezone } from '../SettingsContext'
 import { isOverdue as checkOverdue, getTodayString } from '../dateUtils'
 import { todoToMarkdown } from '../utils/todoMarkdown'
@@ -121,10 +120,6 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
  const [subDropIdx, setSubDropIdx] = useState<number | null>(null)
  const [editingSubId, setEditingSubId] = useState<number | null>(null)
  const [editingSubTitle, setEditingSubTitle] = useState('')
- const [isDying, setIsDying] = useState(false)
- const dyingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
- const [isUnfocusing, setIsUnfocusing] = useState(false)
- const unfocusingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
  const [duplicatedId, setDuplicatedId] = useState<number | null>(null)
  const duplicateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
  const queryClient = useQueryClient()
@@ -133,17 +128,9 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
 
  useEffect(() => {
  return () => {
- if (dyingTimeoutRef.current) {
- clearTimeout(dyingTimeoutRef.current)
- updateTodo(todo.id, { status: 'done' })
- }
- if (unfocusingTimeoutRef.current) {
- clearTimeout(unfocusingTimeoutRef.current)
- updateTodo(todo.id, { is_focused: false })
- }
  if (duplicateTimerRef.current) clearTimeout(duplicateTimerRef.current)
  }
- }, [todo.id])
+ }, [])
 
  const { data: persons = [] } = useQuery<Person[]>({ queryKey: ['persons'], queryFn: fetchPersons })
  const { data: projects = [] } = useQuery<Project[]>({ queryKey: ['projects'], queryFn: fetchProjects })
@@ -162,16 +149,30 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
  const rollback = (_err: unknown, _vars: unknown, snapshot?: TodoCachesSnapshot) =>
  restoreTodoCaches(queryClient, todo.id, snapshot)
 
+ // Done / unfocus apply immediately; the toast offers an Undo for a few seconds.
  const handleDoneCheck = (checked: boolean) => {
  if (checked && todo.status !== 'done') {
- setIsDying(true)
- dyingTimeoutRef.current = setTimeout(() => {
+ const previousStatus = todo.status
  updateMutation.mutate({ status: 'done' })
- }, config.todo_done_fade_seconds * 1000)
- } else if (!checked) {
- if (dyingTimeoutRef.current) clearTimeout(dyingTimeoutRef.current)
- setIsDying(false)
- if (todo.status === 'done') updateMutation.mutate({ status: 'todo' })
+ showToast({
+ message: `Marked "${todo.title}" done`,
+ tone: 'success',
+ action: { label: 'Undo', onClick: () => updateMutation.mutate({ status: previousStatus }) },
+ })
+ } else if (!checked && todo.status === 'done') {
+ updateMutation.mutate({ status: 'todo' })
+ }
+ }
+
+ const handleFocusToggle = () => {
+ if (todo.is_focused) {
+ updateMutation.mutate({ is_focused: false })
+ showToast({
+ message: `Removed "${todo.title}" from Focus`,
+ action: { label: 'Undo', onClick: () => updateMutation.mutate({ is_focused: true }) },
+ })
+ } else {
+ updateMutation.mutate({ is_focused: true })
  }
  }
 
@@ -287,7 +288,6 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
  onMouseDown={handleCardMouseDown}
  onClick={handleCardClick}
  className={`bg-surface rounded-xl shadow-sm border overflow-hidden cursor-grab active:cursor-grabbing ${isSelected ? 'border-accent ring-2 ring-accent/40 dark:ring-accent' : 'border-border'}`}
- style={{ opacity: isDying ? 0 : 1, transition: `opacity ${config.todo_done_fade_seconds}s ease` }}
  >
  {/* Header */}
  <div className="px-4 py-3 md:px-5 md:py-4">
@@ -296,34 +296,21 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
  <button
  onClick={(e) => {
  e.stopPropagation()
- if (todo.is_focused && !isUnfocusing) {
- setIsUnfocusing(true)
- unfocusingTimeoutRef.current = setTimeout(() => {
- updateMutation.mutate({ is_focused: false })
- setIsUnfocusing(false)
- }, config.unfocus_fade_seconds * 1000)
- } else if (isUnfocusing) {
- if (unfocusingTimeoutRef.current) clearTimeout(unfocusingTimeoutRef.current)
- setIsUnfocusing(false)
- } else {
- updateMutation.mutate({ is_focused: true })
- }
+ handleFocusToggle()
  }}
- title={isUnfocusing ? 'Click to cancel unfocus' : todo.is_focused ? 'Remove from Focus' : 'Add to Focus'}
+ title={todo.is_focused ? 'Remove from Focus' : 'Add to Focus'}
  className={`p-2 -m-2 mt-[-6px] text-lg leading-none flex-shrink-0 transition-colors ${
- isUnfocusing
- ? 'text-warning dark:text-warning animate-pulse'
- : todo.is_focused
+ todo.is_focused
  ? 'text-warning hover:text-warning'
  : 'text-fg-faint dark:text-fg-muted hover:text-warning'
  }`}
  >
- {todo.is_focused || isUnfocusing ? '★' : '☆'}
+ {todo.is_focused ? '★' : '☆'}
  </button>
  {/* Done checkbox */}
  <input
  type="checkbox"
- checked={isDying || todo.status === 'done'}
+ checked={todo.status === 'done'}
  onChange={(e) => handleDoneCheck(e.target.checked)}
  onClick={(e) => e.stopPropagation()}
  title="Mark as done"
