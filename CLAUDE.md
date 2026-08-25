@@ -47,6 +47,21 @@ There are no automated tests or linters configured.
 - Soft deletes for meeting notes (`hidden` flag)
 - Many-to-many association tables for meeting attendees, projects, and todos
 
+## Agent-facing API
+
+An operating agent (Claude on any device, with no checkout) uses this app **only through the REST API**, authenticated with a scoped bearer token (`Authorization: Bearer mgmt_pat_…`). Design and rationale: `claude_readmes/claude_agent_access_plan.md`.
+
+**API development must be agent-friendly:**
+- Every capability a human has in the UI is reachable as a plain JSON endpoint — no UI-only logic.
+- Multi-step UI actions get a composite endpoint so a caller doesn't need to know the sequence.
+- Responses are self-describing (ids with human labels, ISO dates, explicit enums); errors say *why* (`422` names the field, `403` names the missing scope).
+- Mutations are idempotent where possible and return the updated object.
+- Keep route `summary`/docstrings populated — `/openapi.json` is part of the contract.
+
+**Bearer auth is deny-by-default.** `_BEARER_ROUTE_SCOPES` in `backend/main.py` maps `(method, path)` → scope; anything unlisted is cookie-session-only. Handlers additionally restrict token callers where a route is shared (`update_person` field allow-list, notes `kind='personal'` only).
+
+**`backend/agent_manual.md` is the operator's only source of truth** and is served live at `GET /agent/manual`. Any change to an endpoint, field, scope, or convention must update that file **and** `_BEARER_ROUTE_SCOPES` in the same commit. Do not put API recipes in `CLAUDE.md` or in Claude's memory — they belong in the manual.
+
 ## Feature ideation
 
 Proposed features and usability improvements are tracked in `claude_readmes/features.md`. When the user brainstorms new ideas or directions, append them there as numbered sections following the existing format (title, description, bullet specifics, **Why:** line) and update the implementation order at the bottom. Treat this file as the living product backlog for this project.

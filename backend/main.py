@@ -26,7 +26,7 @@ from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response, U
 from backup.backup import run_backup_once
 from backup.scheduler import backup_loop
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from openai import OpenAI
 from pydantic import BaseModel, Field
 from sqlalchemy import (
@@ -436,6 +436,25 @@ class AuthSession(Base):
     last_seen_at = Column(String, nullable=False)
     expires_at = Column(String, nullable=False)
     user_agent = Column(String, default="")
+
+
+class ApiToken(Base):
+    """Personal access token for agents/scripts. Sent as `Authorization: Bearer`.
+
+    Scopes are a comma-separated subset of API_TOKEN_SCOPES; which endpoints
+    each scope unlocks is defined by _BEARER_ROUTE_SCOPES next to the auth
+    middleware. Revoked tokens are kept (revoked_at set) as a record.
+    """
+    __tablename__ = "api_tokens"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    name = Column(String, nullable=False)
+    token_hash = Column(String, unique=True, nullable=False, index=True)  # sha256(token)
+    scopes = Column(String, nullable=False, default="")
+    created_at = Column(String, nullable=False)
+    expires_at = Column(String, nullable=False)
+    last_used_at = Column(String, nullable=True)
+    revoked_at = Column(String, nullable=True)
 
 
 Base.metadata.create_all(bind=engine)
@@ -1695,6 +1714,119 @@ LOGIN_MAX_FAILURES = 5
 LOGIN_WINDOW_SECONDS = 15 * 60
 _login_failures: dict = defaultdict(deque)
 
+# ─── API tokens (bearer auth for agents) ─────────────────────────────────────
+#
+# Bearer tokens are deny-by-default: a request is allowed only if a
+# (method, path) rule below maps it to a scope the token holds. Anything not
+# listed — auth, config, vaults, backup, deletes, purges, transcription, audio
+# download, token management — stays cookie-session-only. Keep this table and
+# backend/agent_manual.md in sync.
+
+API_TOKEN_SCOPES = ("read", "write:todos", "write:persons", "write:notes", "write:daily")
+API_TOKEN_PREFIX = "mgmt_pat_"
+API_TOKEN_DEFAULT_DAYS = 90
+API_TOKEN_MAX_DAYS = 365
+API_TOKEN_USED_REFRESH = timedelta(hours=1)  # throttle last_used_at writes
+BEARER_MAX_FAILURES = 10
+BEARER_WINDOW_SECONDS = 15 * 60
+_bearer_failures: dict = defaultdict(deque)
+
+_ID = r"\d+"
+_DATE = r"\d{4}-\d{2}-\d{2}"
+_BEARER_ROUTE_SCOPES = [
+    (m, re.compile(f"^{p}$"), s)
+    for m, p, s in (
+        # read
+        ("GET", r"/agent/manual", "read"),
+        ("GET", r"/agent/digest", "read"),
+        ("GET", r"/openapi\.json", "read"),
+        ("GET", r"/auth/me", "read"),
+        ("GET", r"/todos", "read"),
+        ("GET", r"/todos/deleted", "read"),
+        ("GET", r"/todos/recently-done", "read"),
+        ("GET", rf"/todos/{_ID}", "read"),
+        ("GET", r"/projects", "read"),
+        ("GET", r"/projects/tree", "read"),
+        ("GET", r"/projects/deleted", "read"),
+        ("GET", r"/persons", "read"),
+        ("GET", r"/persons/progress", "read"),
+        ("GET", r"/persons/deleted", "read"),
+        ("GET", rf"/must-do/{_DATE}", "read"),
+        ("GET", r"/daily-goals", "read"),
+        ("GET", r"/schedule/reminders", "read"),
+        ("GET", r"/tags", "read"),
+        ("GET", r"/notes", "read"),
+        ("GET", r"/notes/search", "read"),
+        ("GET", r"/notes-hidden", "read"),
+        ("GET", r"/notes-hidden/search", "read"),
+        ("GET", rf"/notes/{_ID}", "read"),
+        ("GET", rf"/notes/{_ID}/audio", "read"),
+        # write:todos
+        ("POST", r"/todos", "write:todos"),
+        ("PUT", r"/todos/reorder-focus", "write:todos"),
+        ("PUT", rf"/todos/{_ID}", "write:todos"),
+        ("POST", rf"/todos/{_ID}/restore", "write:todos"),
+        ("POST", rf"/todos/{_ID}/subtodos", "write:todos"),
+        ("PUT", rf"/subtodos/{_ID}", "write:todos"),
+        # write:persons — handler additionally restricts fields for token auth
+        ("PUT", rf"/persons/{_ID}", "write:persons"),
+        # write:notes — handlers additionally restrict to kind='personal'
+        ("POST", r"/notes", "write:notes"),
+        ("PUT", rf"/notes/{_ID}", "write:notes"),
+        ("POST", rf"/notes/{_ID}/restore", "write:notes"),
+        # write:daily
+        ("PUT", rf"/daily-goals/{_DATE}", "write:daily"),
+        ("POST", rf"/must-do/{_DATE}", "write:daily"),
+        ("PUT", rf"/must-do/items/{_ID}", "write:daily"),
+    )
+]
+
+
+def _bearer_required_scope(method: str, path: str) -> Optional[str]:
+    for m, pat, scope in _BEARER_ROUTE_SCOPES:
+        if m == method and pat.match(path):
+            return scope
+    return None
+
+
+def _resolve_api_token(db: Session, raw: str):
+    """Return (user, scopes) for a valid, unexpired, unrevoked token, else (None, [])."""
+    if not raw.startswith(API_TOKEN_PREFIX):
+        return None, []
+    row = db.query(ApiToken).filter(ApiToken.token_hash == _hash_token(raw)).first()
+    if not row or row.revoked_at:
+        return None, []
+    now = datetime.now(timezone.utc)
+    if _parse_iso(row.expires_at) <= now:
+        return None, []
+    scopes = [s for s in row.scopes.split(",") if s]
+    # Commit before loading the user: commit expires loaded attributes, and the
+    # expunged user must stay readable after this session closes.
+    if not row.last_used_at or now - _parse_iso(row.last_used_at) > API_TOKEN_USED_REFRESH:
+        row.last_used_at = now.isoformat()
+        db.commit()
+    user = db.query(User).filter(User.id == row.user_id, User.is_active == True).first()
+    if not user:
+        return None, []
+    db.expunge(user)
+    return user, scopes
+
+
+def _is_token_auth(request: Request) -> bool:
+    return getattr(request.state, "auth_kind", None) == "token"
+
+
+def _client_ip(request: Request) -> str:
+    return request.client.host if request.client else "unknown"
+
+
+def _rate_limited(bucket: dict, ip: str, max_failures: int, window: int) -> bool:
+    now_mono = time.monotonic()
+    failures = bucket[ip]
+    while failures and now_mono - failures[0] > window:
+        failures.popleft()
+    return len(failures) >= max_failures
+
 
 def _hash_token(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
@@ -1756,6 +1888,41 @@ async def require_auth(request: Request, call_next):
         path = path[len(root_path):] or "/"
     if request.method == "OPTIONS" or path in PUBLIC_PATHS:
         return await call_next(request)
+    # Bearer branch: an Authorization header means token auth, never cookie
+    # auth. No ambient credential is involved, so the Origin check is skipped;
+    # the scope table is the guard instead (deny-by-default).
+    auth_header = request.headers.get("authorization")
+    if auth_header:
+        ip = _client_ip(request)
+        if _rate_limited(_bearer_failures, ip, BEARER_MAX_FAILURES, BEARER_WINDOW_SECONDS):
+            return JSONResponse(
+                {"detail": "Too many invalid tokens. Try again later."},
+                status_code=429,
+                headers={"Retry-After": str(BEARER_WINDOW_SECONDS)},
+            )
+        scheme, _, raw = auth_header.partition(" ")
+        user, scopes = None, []
+        if scheme.lower() == "bearer" and raw.strip():
+            with SessionLocal() as db:
+                user, scopes = _resolve_api_token(db, raw.strip())
+        if user is None:
+            _bearer_failures[ip].append(time.monotonic())
+            return JSONResponse({"detail": "Invalid or expired API token"}, status_code=401)
+        needed = _bearer_required_scope(request.method, path)
+        if needed is None:
+            return JSONResponse(
+                {"detail": f"{request.method} {path} is not available to API tokens"},
+                status_code=403,
+            )
+        if needed not in scopes:
+            return JSONResponse(
+                {"detail": f"Token lacks required scope '{needed}'", "required_scope": needed},
+                status_code=403,
+            )
+        request.state.user = user
+        request.state.auth_kind = "token"
+        request.state.token_scopes = scopes
+        return await call_next(request)
     # CSRF backstop on top of SameSite=Lax: mutating cross-origin requests are
     # rejected even if a cookie somehow rides along.
     if request.method not in ("GET", "HEAD"):
@@ -1768,6 +1935,7 @@ async def require_auth(request: Request, call_next):
     if user is None:
         return JSONResponse({"detail": "Not authenticated"}, status_code=401)
     request.state.user = user
+    request.state.auth_kind = "session"
     response = await call_next(request)
     if refreshed:
         _set_session_cookie(response, token)
@@ -1803,12 +1971,10 @@ def auth_login(
     response: Response,
     db: Session = Depends(get_db),
 ):
-    ip = request.client.host if request.client else "unknown"
+    ip = _client_ip(request)
     now_mono = time.monotonic()
     failures = _login_failures[ip]
-    while failures and now_mono - failures[0] > LOGIN_WINDOW_SECONDS:
-        failures.popleft()
-    if len(failures) >= LOGIN_MAX_FAILURES:
+    if _rate_limited(_login_failures, ip, LOGIN_MAX_FAILURES, LOGIN_WINDOW_SECONDS):
         raise HTTPException(
             429,
             "Too many failed login attempts. Try again later.",
@@ -1861,6 +2027,109 @@ def auth_logout(request: Request, response: Response, db: Session = Depends(get_
 @app.get("/auth/me", response_model=AuthUserOut)
 def auth_me(user: User = Depends(get_current_user)):
     return {"id": user.id, "username": user.username}
+
+
+# ─── API tokens (management is cookie-session-only; see _BEARER_ROUTE_SCOPES) ──
+
+
+class ApiTokenCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=80)
+    scopes: List[str] = Field(..., min_length=1)
+    expires_in_days: int = Field(API_TOKEN_DEFAULT_DAYS, ge=1, le=API_TOKEN_MAX_DAYS)
+
+
+class ApiTokenOut(BaseModel):
+    id: int
+    name: str
+    scopes: List[str]
+    created_at: str
+    expires_at: str
+    last_used_at: Optional[str] = None
+    revoked_at: Optional[str] = None
+
+
+class ApiTokenCreated(ApiTokenOut):
+    token: str  # shown exactly once
+
+
+def _api_token_out(t: ApiToken) -> dict:
+    return {
+        "id": t.id,
+        "name": t.name,
+        "scopes": [s for s in t.scopes.split(",") if s],
+        "created_at": t.created_at,
+        "expires_at": t.expires_at,
+        "last_used_at": t.last_used_at,
+        "revoked_at": t.revoked_at,
+    }
+
+
+@app.get("/api-tokens", response_model=List[ApiTokenOut])
+def list_api_tokens(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    rows = db.query(ApiToken).filter(ApiToken.user_id == user.id).order_by(ApiToken.id.desc()).all()
+    return [_api_token_out(t) for t in rows]
+
+
+@app.post("/api-tokens", response_model=ApiTokenCreated)
+def create_api_token(
+    data: ApiTokenCreate, user: User = Depends(get_current_user), db: Session = Depends(get_db)
+):
+    bad = sorted(set(data.scopes) - set(API_TOKEN_SCOPES))
+    if bad:
+        raise HTTPException(422, f"Unknown scopes: {', '.join(bad)}. Valid: {', '.join(API_TOKEN_SCOPES)}")
+    scopes = [s for s in API_TOKEN_SCOPES if s in data.scopes]
+    raw = API_TOKEN_PREFIX + secrets.token_urlsafe(32)
+    now = datetime.now(timezone.utc)
+    row = ApiToken(
+        user_id=user.id,
+        name=data.name.strip(),
+        token_hash=_hash_token(raw),
+        scopes=",".join(scopes),
+        created_at=now.isoformat(),
+        expires_at=(now + timedelta(days=data.expires_in_days)).isoformat(),
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return {**_api_token_out(row), "token": raw}
+
+
+@app.delete("/api-tokens/{token_id}", response_model=ApiTokenOut)
+def revoke_api_token(
+    token_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)
+):
+    row = db.query(ApiToken).filter(ApiToken.id == token_id, ApiToken.user_id == user.id).first()
+    if not row:
+        raise HTTPException(404, "Token not found")
+    if not row.revoked_at:
+        row.revoked_at = datetime.now(timezone.utc).isoformat()
+        db.commit()
+        db.refresh(row)
+    return _api_token_out(row)
+
+
+# ─── Agent surface ───────────────────────────────────────────────────────────
+
+AGENT_MANUAL_PATH = Path(__file__).parent / "agent_manual.md"
+
+
+@app.get("/agent/manual", summary="Operator manual for agents (markdown)")
+def agent_manual():
+    """The living manual describing how an agent should operate this API.
+
+    Served from the deployed code so what an agent reads always matches the
+    API it is calling. `X-Manual-Version` is a content hash for change detection.
+    """
+    try:
+        body = AGENT_MANUAL_PATH.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        raise HTTPException(404, "agent_manual.md is missing from this deployment")
+    version = hashlib.sha256(body.encode()).hexdigest()[:12]
+    return PlainTextResponse(
+        body,
+        media_type="text/markdown; charset=utf-8",
+        headers={"X-Manual-Version": version, "Cache-Control": "no-store"},
+    )
 
 
 # ─── Persons ─────────────────────────────────────────────────────────────────
@@ -1918,12 +2187,24 @@ def reorder_persons(items: List[PersonOrderItem], db: Session = Depends(get_db))
     return {"ok": True}
 
 
+TOKEN_PERSON_FIELDS = {"last_check_in_date", "notes"}
+
+
 @app.put("/persons/{person_id}", response_model=PersonOut)
-def update_person(person_id: int, data: PersonUpdate, db: Session = Depends(get_db)):
+def update_person(
+    person_id: int, data: PersonUpdate, request: Request, db: Session = Depends(get_db)
+):
     p = db.query(Person).get(person_id)
     if not p:
         raise HTTPException(404, "Person not found")
     payload = data.model_dump(exclude_unset=True)
+    if _is_token_auth(request):
+        extra = sorted(set(payload) - TOKEN_PERSON_FIELDS)
+        if extra:
+            raise HTTPException(
+                403,
+                f"API tokens may only update {sorted(TOKEN_PERSON_FIELDS)} on a person; got {extra}",
+            )
     project_ids = payload.pop("project_ids", None)
     for k, v in payload.items():
         setattr(p, k, v)
@@ -2728,7 +3009,9 @@ def get_note(note_id: int, db: Session = Depends(get_db)):
 
 
 @app.post("/notes", response_model=NoteOut)
-def create_note(data: NoteCreate, db: Session = Depends(get_db)):
+def create_note(data: NoteCreate, request: Request, db: Session = Depends(get_db)):
+    if _is_token_auth(request) and data.kind != "personal":
+        raise HTTPException(403, "API tokens may only create notes with kind='personal'")
     if data.kind == "meeting" and not data.date:
         raise HTTPException(400, "Meeting notes require a 'date'")
 
@@ -2800,11 +3083,16 @@ def create_note(data: NoteCreate, db: Session = Depends(get_db)):
 
 
 @app.put("/notes/{note_id}", response_model=NoteOut)
-def update_note(note_id: int, data: NoteUpdate, db: Session = Depends(get_db)):
+def update_note(note_id: int, data: NoteUpdate, request: Request, db: Session = Depends(get_db)):
     n = db.query(Note).get(note_id)
     if not n:
         raise HTTPException(404, "Note not found")
     update_data = data.model_dump(exclude_unset=True)
+    if _is_token_auth(request):
+        if n.kind != "personal":
+            raise HTTPException(403, "API tokens may only edit notes with kind='personal'")
+        if "transcript" in update_data:
+            raise HTTPException(403, "API tokens may not edit transcripts")
     content = update_data.pop("content", None)
     new_date = update_data.pop("date", None)
     attendee_ids = update_data.pop("attendee_ids", None)
@@ -2892,10 +3180,12 @@ def delete_note(note_id: int, db: Session = Depends(get_db)):
 
 
 @app.post("/notes/{note_id}/restore")
-def restore_note(note_id: int, db: Session = Depends(get_db)):
+def restore_note(note_id: int, request: Request, db: Session = Depends(get_db)):
     n = db.query(Note).get(note_id)
     if not n:
         raise HTTPException(404, "Note not found")
+    if _is_token_auth(request) and n.kind != "personal":
+        raise HTTPException(403, "API tokens may only restore notes with kind='personal'")
     n.hidden = False
     n.updated_at = datetime.now(timezone.utc).isoformat()
     try:
