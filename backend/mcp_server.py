@@ -16,6 +16,11 @@ Two halves, both built on the existing bearer-token infrastructure:
    Claude Code (`claude mcp add --transport http … --header`) and the
    `static_headers` connector mode work without OAuth.
 
+   Tokens and connectors are owner-only for now: consent refuses member
+   logins, `main._resolve_api_token` rejects member tokens, and `_viewer()`
+   below re-checks the role before any tool runs. Handlers that take a
+   `viewer` get it passed explicitly so MCP and REST share one scoping path.
+
 Routes (all at the ORIGIN ROOT, not under /api — RFC 8414 well-known paths
 must live at the root): /mcp, /authorize, /token, /register, /revoke,
 /oauth/consent, /.well-known/oauth-authorization-server,
@@ -156,6 +161,11 @@ def _active_api_token(db: Session, api_token_id: int) -> Optional[M.ApiToken]:
     row = db.query(M.ApiToken).get(api_token_id)
     if not row or row.revoked_at or M._parse_iso(row.expires_at) <= _now():
         return None
+    # The grant dies with the account: a disabled user's OAuth access/refresh
+    # tokens must stop working even though the api_tokens row still exists.
+    user = db.query(M.User).get(row.user_id)
+    if user is None or not user.is_active or user.role != "owner":
+        return None
     return row
 
 
@@ -266,7 +276,7 @@ class MgmtAuthProvider(OAuthAuthorizationServerProvider[AuthorizationCode, Refre
                 if user is None:
                     return None
                 return AccessToken(token=token, client_id=f"api_token:{token_id}", scopes=scopes,
-                                   subject=user.username, claims={"api_token_id": token_id})
+                                   subject=user.username, claims={"api_token_id": token_id, "user_id": user.id})
             row = db.query(OAuthGrantToken).filter_by(token_hash=M._hash_token(token), kind="access").first()
             if not row or row.revoked_at or M._parse_iso(row.expires_at) <= _now():
                 return None
@@ -278,7 +288,7 @@ class MgmtAuthProvider(OAuthAuthorizationServerProvider[AuthorizationCode, Refre
                 db.commit()
             # client_id must be the OAuth client so /revoke's ownership check passes.
             return AccessToken(token=token, client_id=row.client_id, scopes=[s for s in tok.scopes.split(",") if s],
-                               expires_at=_epoch(row.expires_at), claims={"api_token_id": tok.id})
+                               expires_at=_epoch(row.expires_at), claims={"api_token_id": tok.id, "user_id": tok.user_id})
 
     async def revoke_token(self, token: AccessToken | RefreshToken) -> None:
         with M.SessionLocal() as db:
@@ -373,6 +383,8 @@ async def consent(request: Request):
             M._login_failures[ip].append(time.monotonic())
             time.sleep(0.5)
             return _render_consent(req_id, client, params, "Invalid username or password.")
+        if user.role != "owner":
+            return _render_consent(req_id, client, params, "Connectors are available to the workspace owner only.")
         if not scopes:
             return _render_consent(req_id, client, params, "Pick at least one scope.")
         now = _now()
@@ -413,19 +425,31 @@ mcp = MCPServer(
 )
 
 
-def _token_ctx() -> tuple[int, list[str]]:
+def _token_ctx() -> tuple[int, list[str], int]:
     at = get_access_token()
     if at is None:
         raise ToolError("Not authenticated")
-    token_id = int((at.claims or {}).get("api_token_id", 0))
-    return token_id, at.scopes
+    claims = at.claims or {}
+    return int(claims.get("api_token_id", 0)), at.scopes, int(claims.get("user_id", 0))
 
 
 def _need(scope: str) -> int:
-    token_id, scopes = _token_ctx()
+    token_id, scopes, _ = _token_ctx()
     if scope not in scopes:
         raise ToolError(f"Token lacks required scope '{scope}'")
     return token_id
+
+
+def _viewer(db: Session) -> M.Viewer:
+    """The Viewer for the token's user, passed explicitly to every handler
+    that takes one (FastAPI resolves it via Depends on the REST side)."""
+    _, _, user_id = _token_ctx()
+    user = db.query(M.User).get(user_id)
+    if user is None or not user.is_active:
+        raise ToolError("Not authenticated")
+    if user.role != "owner":
+        raise ToolError("Owner only")
+    return M.viewer_for_user(db, user)
 
 
 def _out(obj: Any) -> Any:
@@ -478,8 +502,9 @@ def list_todos(project_id: Optional[int] = None, assignee_id: Optional[int] = No
     """List todos. status: 'todo' | 'done'. Defaults to open todos only."""
     _need("read")
     with M.SessionLocal() as db:
+        v = _viewer(db)
         return _read(lambda: _out(M.list_todos(assignee_id=assignee_id, project_id=project_id, status=status,
-                                               exclude_done=exclude_done, is_focused=is_focused, db=db)))
+                                               exclude_done=exclude_done, is_focused=is_focused, db=db, viewer=v)))
 
 
 @mcp.tool()
@@ -487,7 +512,8 @@ def get_todo(todo_id: int) -> dict:
     """Full todo with subtodos and blockers."""
     _need("read")
     with M.SessionLocal() as db:
-        return _read(lambda: _out(M.get_todo(todo_id, db)))
+        v = _viewer(db)
+        return _read(lambda: _out(M.get_todo(todo_id, db, viewer=v)))
 
 
 @mcp.tool()
@@ -499,7 +525,8 @@ def create_todo(title: str, description: Optional[str] = None, project_id: Optio
     args = dict(title=title, description=description, project_id=project_id, assignee_id=assignee_id,
                 deadline=deadline, importance=importance, estimated_hours=estimated_hours, is_focused=is_focused)
     with M.SessionLocal() as db:
-        return _audited(tid, "create_todo", args, lambda: _out(M.create_todo(M.TodoCreate(**args), db)))
+        v = _viewer(db)
+        return _audited(tid, "create_todo", args, lambda: _out(M.create_todo(M.TodoCreate(**args), db, viewer=v)))
 
 
 @mcp.tool()
@@ -513,8 +540,9 @@ def update_todo(todo_id: int, title: Optional[str] = None, description: Optional
                                     importance=importance, project_id=project_id, assignee_id=assignee_id,
                                     estimated_hours=estimated_hours, is_focused=is_focused).items() if v is not None}
     with M.SessionLocal() as db:
+        v = _viewer(db)
         return _audited(tid, "update_todo", {"todo_id": todo_id, **fields},
-                        lambda: _out(M.update_todo(todo_id, M.TodoUpdate(**fields), db)))
+                        lambda: _out(M.update_todo(todo_id, M.TodoUpdate(**fields), db, viewer=v)))
 
 
 @mcp.tool()
@@ -556,7 +584,8 @@ def search_notes(q: str) -> list:
     """Full-text search over notes (personal and meeting)."""
     _need("read")
     with M.SessionLocal() as db:
-        return _read(lambda: _out(M.search_notes(q=q, kind=None, db=db)))
+        v = _viewer(db)
+        return _read(lambda: _out(M.search_notes(q=q, kind=None, db=db, viewer=v)))
 
 
 @mcp.tool()
@@ -564,7 +593,8 @@ def get_note(note_id: int) -> dict:
     """A note with its full markdown content."""
     _need("read")
     with M.SessionLocal() as db:
-        return _read(lambda: _out(M.get_note(note_id, db)))
+        v = _viewer(db)
+        return _read(lambda: _out(M.get_note(note_id, db, viewer=v)))
 
 
 @mcp.tool()
@@ -581,8 +611,10 @@ def append_note(note_id: int, text: str) -> dict:
     """Append text to a personal note (adds a blank line first). Never overwrites."""
     tid = _need("write:notes")
     with M.SessionLocal() as db:
+        v = _viewer(db)
+
         def run():
-            current = M.get_note(note_id, db)
+            current = M.get_note(note_id, db, viewer=v)
             body = (current.content or "").rstrip() + "\n\n" + text
             return _out(M.update_note(note_id, M.NoteUpdate(content=body), _TOKEN_REQUEST, db))
         return _audited(tid, "append_note", {"note_id": note_id, "text_len": len(text)}, run)

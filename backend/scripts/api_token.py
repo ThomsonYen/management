@@ -5,6 +5,7 @@
     python scripts/api_token.py revoke <name|id>
 
 The raw token is printed once on create; store it in a keychain, never in a file.
+Tokens always belong to the owner account; member accounts cannot use the API.
 In production run via `fly ssh console -C "python3 scripts/api_token.py ..."`.
 """
 
@@ -38,9 +39,10 @@ def cmd_create(args: argparse.Namespace) -> None:
     raw = API_TOKEN_PREFIX + secrets.token_urlsafe(32)
     now = datetime.now(timezone.utc)
     with SessionLocal() as db:
-        user = db.query(User).filter(User.is_active == True).order_by(User.id).first()
+        # Tokens are owner-only (main._resolve_api_token rejects any other user).
+        user = db.query(User).filter(User.is_active == True, User.role == "owner").order_by(User.id).first()
         if not user:
-            sys.exit("No active user. Run scripts/create_user.py first.")
+            sys.exit("No active owner account. Run scripts/create_user.py first.")
         username = user.username
         db.add(
             ApiToken(

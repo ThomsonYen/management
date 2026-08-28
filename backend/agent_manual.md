@@ -15,7 +15,7 @@ You are operating a single-user personal productivity app (todos, projects, peop
 
 Never put the token in a URL, a log line, a file in a repo, or a message. If a command fails, print only the response body, never the request headers.
 
-Check the connection: `GET /auth/me` → `{"id":1,"username":"…"}`.
+Check the connection: `GET /auth/me` → `{"id":1,"username":"…","role":"owner",…}`. `role` is always `owner` for a token — see *Users & visibility*.
 
 The Claude Code skills (`mgmt-operator` with the `mgmt` wrapper and `report` renderer, plus `/daily-report`, `/weekly-report`, `/checkins` workflows) are served at `GET /agent/skill` as a `.tar.gz`; unpack it into `~/.claude/skills/`. With it installed: `~/.claude/skills/mgmt-operator/mgmt GET /agent/digest`.
 
@@ -26,6 +26,12 @@ The same capabilities are exposed as MCP tools at **`https://management-wxisjq.f
 - **claude.ai / Desktop / mobile** — Settings → Connectors → Add custom connector → URL above. Claude registers itself (OAuth + PKCE) and sends you to a sign-in page on the app; you log in with the app password and pick scopes. The grant appears in Settings → API tokens as `connector: <client>` and can be revoked there.
 - **Claude Code** — `claude mcp add --transport http management https://management-wxisjq.fly.dev/mcp` (OAuth prompt on first use), or `--header "Authorization: Bearer mgmt_pat_…"` to use a plain API token.
 - Access tokens last 8 h and refresh silently; refresh tokens 90 d. Revoking the token in Settings kills the connector immediately.
+
+## Users & visibility
+
+The workspace has exactly one **owner** — you always act on their behalf — and may have **member** accounts: people from `/persons` who signed up through an invite link and see only the todos assigned to their person, plus whatever the owner granted (a project subtree, a single note, meetings they attended). Members edit their own todos from a separate "My items" UI; every change they make is logged and shown to the owner under People → App access.
+
+Nothing changes for you: tokens and connectors belong to the owner only (a member cannot create one, and the connector sign-in page refuses member credentials), so every read and write you make runs with the owner's full visibility. Accounts, invites and grants are managed in the UI (`/admin/*`, `/auth/invite/*`) and are **not reachable with a token** — if the user asks to invite someone or change what a member can see, point them to People → App access.
 
 ## Scopes
 
