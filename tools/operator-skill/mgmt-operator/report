@@ -1,0 +1,136 @@
+#!/usr/bin/env python3
+"""Render a report draft from GET /agent/digest as a POST /notes payload.
+
+    report daily            -> {"title": "Daily report YYYY-MM-DD", "kind": "personal", "content": ...}
+    report weekly           -> {"title": "Weekly report YYYY-Www", ...}
+    report daily --md       -> just the markdown, for showing the user
+    report weekly --json FILE  use a saved digest instead of fetching
+
+Deterministic: same digest in, same draft out. Edit the markdown before
+posting if the user wants changes; the payload is plain JSON.
+
+Tag conventions (segments must start with a letter; no hyphens):
+    daily   #report/daily  #report/d<yyyymmdd>
+    weekly  #report/weekly #report/w<yyyy>_<ww>
+"""
+
+import datetime as dt
+import json
+import os
+import subprocess
+import sys
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+
+
+def fetch_digest() -> dict:
+    out = subprocess.run([os.path.join(HERE, "mgmt"), "GET", "/agent/digest"], capture_output=True, text=True)
+    if out.returncode != 0:
+        sys.exit(out.stdout or out.stderr)
+    return json.loads(out.stdout)
+
+
+def bullets(items, fmt=lambda t: t["title"]):
+    return "\n".join(f"- {fmt(t)}" for t in items) or "- (none)"
+
+
+def todo_line(t):
+    s = t["title"]
+    if t.get("project_name"):
+        s += f" _({t['project_name']})_"
+    if t.get("deadline"):
+        s += f" — due {t['deadline']}"
+    return s
+
+
+def by_project(todos):
+    groups = {}
+    for t in todos:
+        groups.setdefault(t.get("project_name") or "No project", []).append(t)
+    return "\n\n".join(f"**{p}**\n{bullets(ts)}" for p, ts in groups.items()) or "- (none)"
+
+
+def people(ps):
+    return bullets(
+        ps,
+        lambda p: f"{p['name']} — "
+        + ("never checked in" if p["days_since_check_in"] is None else f"{p['days_since_check_in']}d since last")
+        + f" (cadence {p['check_in_interval_days']}d)",
+    )
+
+
+def render_daily(d: dict):
+    today = dt.date.fromisoformat(d["today"])
+    yesterday = (today - dt.timedelta(days=1)).isoformat()
+    done_recent = [t for t in d["recently_done"] if (t.get("done_at") or "")[:10] >= yesterday]
+    must = d["must_do_today"]
+    goal = d["daily_goal_today"]
+    content = f"""#report/daily #report/d{today.strftime('%Y%m%d')}
+
+_Drafted by the operator agent from `GET /agent/digest` on {d['today']}. Edit freely._
+
+## Today's goal
+{goal['content'].strip() if goal else '- (none set — consider `PUT /daily-goals/' + d['today'] + '`)'}
+
+## Must-do today ({sum(1 for m in must if m['done'])}/{len(must)} done)
+{bullets(must, lambda m: ('[x] ' if m['done'] else '[ ] ') + m['text'])}
+
+## Due today
+{bullets(d['due_today_todos'], todo_line)}
+
+## Focus
+{bullets(d['focused_todos'], todo_line)}
+
+## Overdue ({len(d['overdue_todos'])})
+{bullets(d['overdue_todos'], todo_line)}
+
+## Done since yesterday ({len(done_recent)})
+{bullets(done_recent, todo_line)}
+
+## People to check in with
+{people(d['overdue_check_ins'])}
+"""
+    return f"Daily report {d['today']}", content
+
+
+def render_weekly(d: dict):
+    today = dt.date.fromisoformat(d["today"])
+    year, week, _ = today.isocalendar()
+    content = f"""#report/weekly #report/w{year}_{week:02d}
+
+_Drafted by the operator agent from `GET /agent/digest` on {d['today']}. Edit freely._
+
+## Done this week ({len(d['recently_done'])})
+{by_project(d['recently_done'])}
+
+## Focus going into next week
+{bullets(d['focused_todos'], todo_line)}
+
+## Overdue ({len(d['overdue_todos'])})
+{bullets(d['overdue_todos'], todo_line)}
+
+## People to check in with
+{people(d['overdue_check_ins'])}
+"""
+    return f"Weekly report {year}-W{week:02d}", content
+
+
+def main():
+    args = sys.argv[1:]
+    if not args or args[0] not in ("daily", "weekly"):
+        sys.exit(__doc__.strip())
+    kind = args[0]
+    md_only = "--md" in args
+    digest = None
+    if "--json" in args:
+        digest = json.load(open(args[args.index("--json") + 1]))
+    d = digest or fetch_digest()
+    title, content = (render_daily if kind == "daily" else render_weekly)(d)
+    if md_only:
+        print(content)
+    else:
+        print(json.dumps({"title": title, "kind": "personal", "content": content}, ensure_ascii=False))
+
+
+if __name__ == "__main__":
+    main()

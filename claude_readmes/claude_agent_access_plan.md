@@ -56,7 +56,7 @@ Served by the API:
 
 ### `tools/operator-skill/` — the operator bootstrap skill
 
-Canonical copy of the ~15-line skill that gets installed as `~/.claude/skills/mgmt-operator/` on each operating device. Contents: `SKILL.md` (where the token is, the wrapper invocation, "run `GET /agent/manual` and follow it", never cache the manual across sessions) and `mgmt` (the wrapper script from §5). Installing on a new device = fetch `GET /agent/skill`, unpack into `~/.claude/skills/`, add the keychain entry. The skill is deliberately dumb so it rarely changes; all real knowledge is in the served manual.
+Canonical copy of the Claude Code skills installed under `~/.claude/skills/` on each operating device — one subfolder per skill: `mgmt-operator/` (`SKILL.md`, the `mgmt` wrapper from §5, and `report`, a deterministic digest→markdown renderer), `daily-report/`, `weekly-report/`, `checkins/`. Installing on a new device = fetch `GET /agent/skill`, unpack into `~/.claude/skills/`, add the keychain entry. The bootstrap skill is deliberately dumb ("run `GET /agent/manual` and follow it"); the workflow skills are short step lists that always end in a user confirmation before a write. All API knowledge stays in the served manual.
 
 ## Security design
 
@@ -98,7 +98,7 @@ A ~50-line script (Python or zsh) so Claude never types a token or a raw `curl`:
 mgmt GET  /agent/digest
 mgmt GET  '/todos?is_focused=true'
 mgmt PUT  /todos/42 '{"status":"done"}'
-mgmt POST /notes '{"title":"Weekly report 2026-W34","content":"#report/2026-w34\n..."}'
+mgmt POST /notes '{"title":"Weekly report 2026-W34","content":"#report/w2026_34\n..."}'
 ```
 
 Behaviour: reads token from Keychain, sets `Authorization`, sends JSON, prints only the response body (never headers, never the token — even on error), non-zero exit on 4xx/5xx with the `detail` message. Supports `--dry-run` (prints the request without sending).
@@ -146,11 +146,12 @@ Inside the app, ping = `POST /persons/{id}/check-in`. Actually messaging someone
 ## Phases
 
 1. ✅ **Backend PATs + docs rules** (done 2026-08-24, not yet deployed) — `api_tokens` table (DDL in the `inspect()`-guarded block), bearer branch in `require_auth`, scope map, deny-by-default, invalid-bearer rate limit, `POST/GET/DELETE /api-tokens` (cookie-only). Add the agent-friendly-API principle and the "update `backend/agent_manual.md` with every endpoint change" rule to `CLAUDE.md`; create the first `backend/agent_manual.md` and `GET /agent/manual`. Verify with `curl -H "Authorization: Bearer …"` against dev: read OK, `DELETE /todos/1` → 403, no header → 401.
-2. **Audit log + Settings UI** — `api_audit`, prune in `lifespan()`, token management page with one-time reveal and audit tail. Deploy (`fly deploy`), mint the prod token, store in Keychain.
-3. **Wrapper + read path** — `tools/operator-skill/` (`SKILL.md` + `mgmt` wrapper), `GET /agent/skill`, `GET /agent/digest`, install the skill globally on the Mac, permission rules for `GET`. Exit: "what should I focus on today?" answers from live data with zero prompts.
-4. **Write path** — `PUT /todos/focus`, `POST /persons/{id}/check-in`; recipes in `backend/agent_manual.md` for create/edit/complete todo, move focus, check in, write report, append to note; ask-rules. Exit: Claude drafts a weekly report into a `#report/…` note and reorders focus after confirmation.
-5. **Workflows** — repo skills `/weekly-report` (digest → draft → `POST /notes`) and `/checkins` (overdue → Slack draft → check-in). Optional: cloud routine with its own token.
-6. **Optional** — WireGuard-only bearer listener; token IP binding; OpenAPI-generated MCP server if a non-Claude-Code host ever needs typed tools.
+2. ✅ **Audit log + Settings UI** (done 2026-08-25; denied 403 attempts are audited too) — `api_audit`, prune in `lifespan()`, token management page with one-time reveal and audit tail. Deploy (`fly deploy`), mint the prod token, store in Keychain.
+3. ✅ **Wrapper + read path** (done 2026-08-25; skill installed on the Mac from `GET /agent/skill`, permission rules in `.claude/settings.json`) — `tools/operator-skill/` (`SKILL.md` + `mgmt` wrapper), `GET /agent/skill`, `GET /agent/digest`, install the skill globally on the Mac, permission rules for `GET`. Exit: "what should I focus on today?" answers from live data with zero prompts.
+4. ✅ **Write path** (done 2026-08-25; `PUT /todos/focus`, `POST /persons/{id}/check-in`; first agent-written report is note 120) — `PUT /todos/focus`, `POST /persons/{id}/check-in`; recipes in `backend/agent_manual.md` for create/edit/complete todo, move focus, check in, write report, append to note; ask-rules. Exit: Claude drafts a weekly report into a `#report/…` note and reorders focus after confirmation.
+5. ✅ **Workflows** (done 2026-08-25) — skills `/daily-report`, `/weekly-report` (digest → `report` renderer → user edits → `POST /notes`) and `/checkins` (overdue → drafts → send via connected tool → `POST /persons/{id}/check-in`), all shipped in `tools/operator-skill/` as sibling skill folders and served by `GET /agent/skill`. Optional, not done: cloud routine with its own token.
+6. ✅ **Hosted MCP for claude.ai / Desktop chat / mobile** (done 2026-08-25) — `backend/mcp_server.py`: streamable-HTTP MCP at `/mcp` (origin root) with a curated tool layer over the existing handlers (same scopes via `_need()`, same audit via `_audited()`), plus an OAuth 2.1 authorization server (DCR + PKCE; consent page = app login + scope picker; each grant is an `api_tokens` row named `connector: <client>`, so Settings → API tokens lists and revokes connectors; access tokens 8 h / refresh 90 d, rotated on refresh). Plain `mgmt_pat_` tokens also work as bearer on `/mcp` (Claude Code `--header`, `static_headers`). Reasoning: claude.ai custom connectors require OAuth-DCR out of the box; static headers are an admin-only beta. This is a hand-curated tool list rather than OpenAPI-generated — it stays thin because tools delegate to the handlers, and the CLAUDE.md rule now covers it.
+   Still optional / not done: WireGuard-only bearer listener; token IP binding.
 
 ## Open decisions
 

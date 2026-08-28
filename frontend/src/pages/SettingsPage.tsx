@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Moon, Sun, FolderOpen, Plus, RefreshCw, Trash2, Loader2, Mic, LogOut } from 'lucide-react'
+import { Moon, Sun, FolderOpen, Plus, RefreshCw, Trash2, Loader2, Mic, LogOut, KeyRound, Copy, Check, ChevronDown, ChevronRight, Ban } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
  getSystemAudioDevice,
@@ -20,7 +20,12 @@ import {
  type HotkeyBindings,
  type FontSize,
 } from '../SettingsContext'
-import { fetchPersons, fetchVaults, createVault, deleteVault, rescanVault, logout, type AuthUser } from '../api'
+import {
+ fetchPersons, fetchVaults, createVault, deleteVault, rescanVault, logout,
+ fetchApiTokens, createApiToken, revokeApiToken, fetchApiTokenAudit,
+ type AuthUser,
+} from '../api'
+import type { ApiToken, ApiTokenScope } from '../types'
 import { listThemes, type ThemeName } from '../theme'
 import { Select } from '../components/ui'
 
@@ -373,6 +378,250 @@ function VaultsSection() {
  )
 }
 
+const SCOPE_OPTIONS: { value: ApiTokenScope; label: string; hint: string }[] = [
+ { value: 'read', label: 'read', hint: 'List and read todos, projects, people, goals, notes, the operator manual' },
+ { value: 'write:todos', label: 'write:todos', hint: 'Create, edit, complete, focus todos and subtodos' },
+ { value: 'write:persons', label: 'write:persons', hint: 'Record check-ins and person notes only' },
+ { value: 'write:notes', label: 'write:notes', hint: 'Create and edit personal notes (reports)' },
+ { value: 'write:daily', label: 'write:daily', hint: 'Daily goals and must-do items' },
+]
+
+const inputCls = 'w-full px-3 py-2 text-sm border border-border rounded-lg bg-surface text-fg focus:outline-none focus:ring-2 focus:ring-accent'
+
+function tokenState(t: ApiToken): { label: string; cls: string } {
+ if (t.revoked_at) return { label: 'Revoked', cls: 'bg-inset text-fg-subtle' }
+ if (new Date(t.expires_at) <= new Date()) return { label: 'Expired', cls: 'bg-warning-bg text-warning' }
+ return { label: 'Active', cls: 'bg-success-bg text-success' }
+}
+
+function ApiTokenAudit({ tokenId }: { tokenId: number }) {
+ const { data: rows = [], isLoading } = useQuery({
+ queryKey: ['api-token-audit', tokenId],
+ queryFn: () => fetchApiTokenAudit(tokenId),
+ })
+ if (isLoading) return <p className="text-xs text-fg-subtle px-4 pb-3">Loading…</p>
+ if (rows.length === 0) return <p className="text-xs text-fg-subtle px-4 pb-3">No writes recorded with this token.</p>
+ return (
+ <ul className="px-4 pb-3 space-y-1 max-h-64 overflow-y-auto">
+ {rows.map((r) => (
+ <li key={r.id} className="text-xs font-mono flex items-start gap-2">
+ <span className="text-fg-subtle whitespace-nowrap">{new Date(r.ts).toLocaleString()}</span>
+ <span className={r.status >= 400 ? 'text-danger' : 'text-success'}>{r.status}</span>
+ <span className="text-fg whitespace-nowrap">{r.method} {r.path}</span>
+ {r.body && <span className="text-fg-muted truncate" title={r.body}>{r.body}</span>}
+ </li>
+ ))}
+ </ul>
+ )
+}
+
+function ApiTokensSection() {
+ const queryClient = useQueryClient()
+ const { data: tokens = [], isLoading } = useQuery({ queryKey: ['api-tokens'], queryFn: fetchApiTokens })
+ const [showAdd, setShowAdd] = useState(false)
+ const [name, setName] = useState('')
+ const [scopes, setScopes] = useState<ApiTokenScope[]>(['read'])
+ const [days, setDays] = useState(90)
+ const [error, setError] = useState<string | null>(null)
+ const [revealed, setRevealed] = useState<{ name: string; token: string } | null>(null)
+ const [copied, setCopied] = useState(false)
+ const [openAudit, setOpenAudit] = useState<number | null>(null)
+
+ const createMutation = useMutation({
+ mutationFn: createApiToken,
+ onSuccess: (t) => {
+ setRevealed({ name: t.name, token: t.token })
+ setCopied(false)
+ setShowAdd(false)
+ setName('')
+ setScopes(['read'])
+ setDays(90)
+ setError(null)
+ queryClient.invalidateQueries({ queryKey: ['api-tokens'] })
+ },
+ onError: (e: any) => setError(e?.response?.data?.detail ?? e.message ?? 'Failed to create token'),
+ })
+
+ const revokeMutation = useMutation({
+ mutationFn: revokeApiToken,
+ onSuccess: () => queryClient.invalidateQueries({ queryKey: ['api-tokens'] }),
+ })
+
+ const toggleScope = (s: ApiTokenScope) =>
+ setScopes((prev) => (prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]))
+
+ const copyToken = async () => {
+ if (!revealed) return
+ try {
+ await navigator.clipboard.writeText(revealed.token)
+ setCopied(true)
+ } catch {
+ setCopied(false)
+ }
+ }
+
+ return (
+ <div className="bg-surface rounded-xl shadow-sm border border-border">
+ <div className="px-6 py-5">
+ <div className="flex items-center justify-between mb-4">
+ <div>
+ <h2 className="text-sm font-semibold text-fg flex items-center gap-2">
+ <KeyRound size={16} /> API tokens
+ </h2>
+ <p className="text-sm text-fg-muted mt-0.5">
+ Let an agent or script use the API with a scoped, revocable token. Deletes, config, vaults and backups are never reachable with a token.
+ </p>
+ </div>
+ {!showAdd && (
+ <button
+ onClick={() => { setShowAdd(true); setRevealed(null) }}
+ className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-accent text-white rounded-lg hover:bg-accent-hover transition-colors"
+ >
+ <Plus size={14} /> New token
+ </button>
+ )}
+ </div>
+
+ {revealed && (
+ <div className="mb-4 p-4 border border-success/40 bg-success-bg rounded-lg space-y-2">
+ <p className="text-xs font-medium text-fg">
+ Token <span className="font-mono">{revealed.name}</span> created. Copy it now — it will not be shown again.
+ </p>
+ <div className="flex items-center gap-2">
+ <code className="flex-1 min-w-0 px-3 py-2 text-xs font-mono bg-surface border border-border rounded-lg break-all select-all">{revealed.token}</code>
+ <button
+ onClick={copyToken}
+ className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium bg-accent text-white rounded-lg hover:bg-accent-hover transition-colors flex-shrink-0"
+ >
+ {copied ? <Check size={12} /> : <Copy size={12} />} {copied ? 'Copied' : 'Copy'}
+ </button>
+ </div>
+ <p className="text-xs text-fg-muted">
+ On a Mac: <code className="font-mono">security add-generic-password -U -s management-api -a claude -w '&lt;token&gt;'</code>
+ </p>
+ <button onClick={() => setRevealed(null)} className="text-xs text-fg-muted hover:text-fg underline">Dismiss</button>
+ </div>
+ )}
+
+ {showAdd && (
+ <div className="mb-4 p-4 border border-border rounded-lg space-y-3 bg-app/30">
+ <div>
+ <label className="block text-xs font-medium text-fg-muted mb-1">Name</label>
+ <input value={name} onChange={(e) => setName(e.target.value)} placeholder="claude-mac" className={inputCls} />
+ </div>
+ <div>
+ <label className="block text-xs font-medium text-fg-muted mb-1">Scopes</label>
+ <div className="space-y-1.5">
+ {SCOPE_OPTIONS.map((o) => (
+ <label key={o.value} className="flex items-start gap-2 text-sm text-fg cursor-pointer">
+ <input
+ type="checkbox"
+ checked={scopes.includes(o.value)}
+ onChange={() => toggleScope(o.value)}
+ className="mt-0.5 h-4 w-4 rounded border-border"
+ />
+ <span>
+ <span className="font-mono text-xs">{o.label}</span>
+ <span className="block text-xs text-fg-muted">{o.hint}</span>
+ </span>
+ </label>
+ ))}
+ </div>
+ </div>
+ <div>
+ <label className="block text-xs font-medium text-fg-muted mb-1">Expires in (days)</label>
+ <input
+ type="number"
+ min={1}
+ max={365}
+ value={days}
+ onChange={(e) => setDays(Math.max(1, Math.min(365, Number(e.target.value) || 1)))}
+ className={`${inputCls} md:w-32`}
+ />
+ </div>
+ {error && (
+ <div className="text-xs text-danger bg-danger-bg border border-danger/30 rounded px-3 py-2">{error}</div>
+ )}
+ <div className="flex items-center gap-2">
+ <button
+ onClick={() => createMutation.mutate({ name: name.trim(), scopes, expires_in_days: days })}
+ disabled={!name.trim() || scopes.length === 0 || createMutation.isPending}
+ className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-accent text-white rounded-lg hover:bg-accent-hover disabled:opacity-50 transition-colors"
+ >
+ {createMutation.isPending ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
+ Create token
+ </button>
+ <button
+ onClick={() => { setShowAdd(false); setError(null) }}
+ className="px-3 py-1.5 text-xs font-medium text-fg-muted hover:bg-inset rounded-lg transition-colors"
+ >
+ Cancel
+ </button>
+ </div>
+ </div>
+ )}
+
+ {isLoading ? (
+ <p className="text-xs text-fg-subtle">Loading…</p>
+ ) : tokens.length === 0 ? (
+ <p className="text-xs text-fg-subtle">No tokens yet.</p>
+ ) : (
+ <ul className="space-y-2">
+ {tokens.map((t) => {
+ const state = tokenState(t)
+ const auditOpen = openAudit === t.id
+ return (
+ <li key={t.id} className="border border-border rounded-lg bg-app/30">
+ <div className="flex items-center justify-between gap-3 px-4 py-3">
+ <div className="min-w-0">
+ <div className="flex items-center gap-2 flex-wrap">
+ <span className="text-sm font-medium text-fg font-mono">{t.name}</span>
+ <span className={`text-[10px] px-1.5 py-0.5 rounded-full uppercase tracking-wider ${state.cls}`}>{state.label}</span>
+ {t.scopes.map((s) => (
+ <span key={s} className="text-[10px] px-1.5 py-0.5 rounded-full bg-accent-1 text-accent-fg font-mono">{s}</span>
+ ))}
+ </div>
+ <p className="text-[11px] text-fg-subtle mt-0.5">
+ Expires {new Date(t.expires_at).toLocaleDateString()}
+ {' · '}
+ {t.last_used_at ? `Last used ${new Date(t.last_used_at).toLocaleString()}` : 'Never used'}
+ {t.revoked_at && ` · Revoked ${new Date(t.revoked_at).toLocaleString()}`}
+ </p>
+ </div>
+ <div className="flex items-center gap-1 flex-shrink-0">
+ <button
+ onClick={() => setOpenAudit(auditOpen ? null : t.id)}
+ className="flex items-center gap-1 px-2 py-1.5 text-xs text-fg-subtle hover:text-fg hover:bg-inset rounded transition-colors"
+ title="Show writes made with this token"
+ >
+ {auditOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />} Audit
+ </button>
+ {!t.revoked_at && (
+ <button
+ onClick={() => {
+ if (confirm(`Revoke "${t.name}"? Anything using it will stop working immediately.`)) {
+ revokeMutation.mutate(t.id)
+ }
+ }}
+ className="p-1.5 text-fg-subtle hover:text-danger hover:bg-danger-bg rounded transition-colors"
+ title="Revoke token"
+ >
+ <Ban size={14} />
+ </button>
+ )}
+ </div>
+ </div>
+ {auditOpen && <ApiTokenAudit tokenId={t.id} />}
+ </li>
+ )
+ })}
+ </ul>
+ )}
+ </div>
+ </div>
+ )
+}
+
 
 function getAvailableTimezones(): string[] {
  try {
@@ -556,6 +805,8 @@ export default function SettingsPage() {
  <RecordingSection />
 
  <VaultsSection />
+
+ <ApiTokensSection />
 
  {/* Meeting Notes */}
  <div className="bg-surface rounded-xl shadow-sm border border-border">

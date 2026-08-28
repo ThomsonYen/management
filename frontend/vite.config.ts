@@ -64,7 +64,21 @@ const pwaPlugin = VitePWA({
     // The single SPA bundle is ~2.1 MB; it must be precached for offline launch.
     maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
     navigateFallback: '/index.html',
-    navigateFallbackDenylist: [/^\/api\//],
+    // Everything the backend serves at the origin root must be denylisted, or
+    // the SW swallows the navigation and serves the SPA shell instead. This
+    // broke the MCP connector OAuth flow: /authorize → /oauth/consent opened
+    // the dashboard (index.html from precache) in any browser with the SW
+    // installed, and the consent form never rendered.
+    navigateFallbackDenylist: [
+      /^\/api\//,
+      /^\/mcp\b/,
+      /^\/authorize\b/,
+      /^\/token\b/,
+      /^\/register\b/,
+      /^\/revoke\b/,
+      /^\/oauth\//,
+      /^\/\.well-known\//,
+    ],
     runtimeCaching: [
       { urlPattern: /^\/api\//, handler: 'NetworkOnly' },
       {

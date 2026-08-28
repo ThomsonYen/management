@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { Person, PersonProgress, Project, ProjectTree, Todo, SubTodo, ScheduleStatus, AudioFileInfo, Note, NoteKind, NoteSummary, NoteSearchResult, TagOut, Vault } from './types'
+import type { Person, PersonProgress, Project, ProjectTree, Todo, SubTodo, ScheduleStatus, AudioFileInfo, Note, NoteKind, NoteSummary, NoteSearchResult, TagOut, Vault, ApiToken, ApiTokenCreated, ApiTokenScope, ApiAuditEntry } from './types'
 
 const api = axios.create({
   baseURL: '/api',
@@ -407,6 +407,20 @@ export const fetchSettings = (): Promise<UserSettings> =>
 
 export const updateSettings = (patch: UserSettingsPatch): Promise<UserSettings> =>
   api.put('/config/settings', patch).then((r) => r.data)
+
+// ─── API tokens (bearer auth for agents; cookie-session only) ──────────────
+
+export const fetchApiTokens = (): Promise<ApiToken[]> =>
+  api.get('/api-tokens').then((r) => r.data)
+
+export const createApiToken = (data: { name: string; scopes: ApiTokenScope[]; expires_in_days: number }): Promise<ApiTokenCreated> =>
+  api.post('/api-tokens', data).then((r) => r.data)
+
+export const revokeApiToken = (id: number): Promise<ApiToken> =>
+  api.delete(`/api-tokens/${id}`).then((r) => r.data)
+
+export const fetchApiTokenAudit = (id: number, limit = 50): Promise<ApiAuditEntry[]> =>
+  api.get(`/api-tokens/${id}/audit`, { params: { limit } }).then((r) => r.data)
 
 // ─── Backup ────────────────────────────────────────────────────────────────
 

@@ -3,3 +3,7 @@
 /backend/meeting_audio
 /backend/user_settings.json
 /backend/notes
+.claude/
+# Build caches / stray local files
+*.tsbuildinfo
+/management.db

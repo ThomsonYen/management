@@ -17,6 +17,16 @@ Never put the token in a URL, a log line, a file in a repo, or a message. If a c
 
 Check the connection: `GET /auth/me` → `{"id":1,"username":"…"}`.
 
+The Claude Code skills (`mgmt-operator` with the `mgmt` wrapper and `report` renderer, plus `/daily-report`, `/weekly-report`, `/checkins` workflows) are served at `GET /agent/skill` as a `.tar.gz`; unpack it into `~/.claude/skills/`. With it installed: `~/.claude/skills/mgmt-operator/mgmt GET /agent/digest`.
+
+## MCP (claude.ai, Claude Desktop, mobile, Claude Code)
+
+The same capabilities are exposed as MCP tools at **`https://management-wxisjq.fly.dev/mcp`** (origin root, not `/api`). Tools: `get_manual`, `get_digest`, `list_todos`, `get_todo`, `create_todo`, `update_todo`, `set_focus`, `list_projects`, `list_persons`, `check_in`, `search_notes`, `get_note`, `create_note`, `append_note`, `set_daily_goal`. Same scopes, same restrictions (personal notes only, no deletes), same audit log (`MCP tool:<name>` rows).
+
+- **claude.ai / Desktop / mobile** — Settings → Connectors → Add custom connector → URL above. Claude registers itself (OAuth + PKCE) and sends you to a sign-in page on the app; you log in with the app password and pick scopes. The grant appears in Settings → API tokens as `connector: <client>` and can be revoked there.
+- **Claude Code** — `claude mcp add --transport http management https://management-wxisjq.fly.dev/mcp` (OAuth prompt on first use), or `--header "Authorization: Bearer mgmt_pat_…"` to use a plain API token.
+- Access tokens last 8 h and refresh silently; refresh tokens 90 d. Revoking the token in Settings kills the connector immediately.
+
 ## Scopes
 
 Tokens carry a subset of these scopes. A `403` with `required_scope` tells you which one is missing. Endpoints not listed here **cannot be reached with a token at all** (deletes, purges, vaults, config, backup, transcription, audio download, token management) — do not try; ask the user to do it in the UI.
@@ -32,17 +42,20 @@ Tokens carry a subset of these scopes. A `403` with `required_scope` tells you w
 ## Conventions
 
 - Dates are `YYYY-MM-DD` strings; timestamps are ISO-8601 UTC. Use the local date of the device you run on as "today" (the user is in one timezone).
-- Todo `status` is `todo` or `done` (nothing else). `importance` is `low` | `medium` | `high`.
+- Todo `status` is `todo` or `done` (nothing else). `importance` is `low` | `medium` | `high` | `critical`.
 - Focus: a todo is "in focus" when `is_focused=true`; `focus_order` (ascending) is its rank. Moving focus = setting these on the affected todos, or one call to `PUT /todos/reorder-focus`.
-- Check-in ("ping"): each person may be a direct report with `check_in_interval_days` and `last_check_in_date`. A person is **overdue** when `today − last_check_in_date > check_in_interval_days` (or there is no date). Recording a check-in = `PUT /persons/{id}` with `{"last_check_in_date":"YYYY-MM-DD"}`. The date is a watermark: only ever send today's date, never move it backwards.
-- Tags: inline `#tag` / `#tag/sub` in a note body are indexed automatically. Reports use `#report/<yyyy>-w<ww>`.
+- Check-in ("ping"): each person may be a direct report with `check_in_interval_days` and `last_check_in_date`. A person is **overdue** when `today − last_check_in_date > check_in_interval_days` (or there is no date). Recording a check-in = `POST /persons/{id}/check-in`; the server keeps the date forward-only.
+- Tags: inline `#tag` / `#tag/sub` in a note body are indexed automatically. Tag segments must start with a letter and contain only letters, digits, `_` (no hyphens) — `#report/2026-w35` would index as just `report`. Reports: weekly `#report/weekly #report/w<yyyy>_<ww>` (e.g. `#report/w2026_35`); daily `#report/daily #report/d<yyyymmdd>`. The bundled `report daily|weekly` helper renders these from the digest.
 - Soft deletes: never delete. If something should go away, tell the user.
+- Every mutating request you make is logged (method, path, status, body) and visible to the user in Settings → API tokens. Act as if the user will read it.
 - Every mutation returns the updated object — show the user a before/after for anything non-trivial. Prefer one-at-a-time updates; confirm with the user before touching more than ~10 items.
 
 ## Recipes
 
 Read the situation (most tasks start here):
 ```
+GET /agent/digest                     ONE call: today, focused/overdue/due-today todos, overdue check-ins,
+                                      today's must-do + goal, done in last 7 days
 GET /todos?is_focused=true            focused todos, in focus_order
 GET /todos                            todos (filters: project_id, assignee_id, status, exclude_done, is_focused)
 GET /todos/recently-done              done in the last few days
@@ -70,21 +83,20 @@ PUT /todos/{id}   {"status":"done"}        complete
 PUT /todos/{id}   {"status":"todo"}        reopen
 ```
 
-Move focus:
+Move focus (preferred — one idempotent call, returns the resulting list):
 ```
-PUT /todos/{id}   {"is_focused":true,"focus_order":0}      put one todo at the top
-PUT /todos/{id}   {"is_focused":false}                      drop from focus
-PUT /todos/reorder-focus   [{"id":12,"focus_order":0},{"id":7,"focus_order":1}]   set the whole order
+PUT /todos/focus   {"todo_ids":[236,269,254]}    these become the focus list, in this order; everything else is unfocused
 ```
+Always read the current list first (`GET /agent/digest` → `focused_todos`) and send the full new order, not a delta. Max 30 ids; unknown ids → 404 and nothing changes. Single-todo fallbacks: `PUT /todos/{id} {"is_focused":true,"focus_order":0}` / `{"is_focused":false}`.
 
 Add a subtodo: `POST /todos/{id}/subtodos {"title":"…"}`; toggle it: `PUT /subtodos/{id} {"done":true}`.
 
-Record a check-in: `PUT /persons/{id} {"last_check_in_date":"YYYY-MM-DD"}`. Sending someone a message is **outside this API** — draft it in whatever messaging tool you have, get the user's approval, send, then record the check-in here.
+Record a check-in: `POST /persons/{id}/check-in` (empty body = today; or `{"date":"YYYY-MM-DD"}`). Forward-only and idempotent — older dates are ignored — so it is always safe to call. Returns the person. Sending someone a message is **outside this API** — draft it in whatever messaging tool you have, get the user's approval, send, then record the check-in here.
 
 Write a report (a personal note):
 ```
 POST /notes
-{"title":"Weekly report 2026-W35","kind":"personal","content":"#report/2026-w35\n\n## Done\n…\n\n## Focus next week\n…"}
+{"title":"Weekly report 2026-W35","kind":"personal","content":"#report/w2026_35\n\n## Done\n…\n\n## Focus next week\n…"}
 ```
 Append to an existing personal note: `GET /notes/{id}`, then `PUT /notes/{id} {"content": old_content + "\n\n…"}`. Never overwrite a note you have not just read.
 

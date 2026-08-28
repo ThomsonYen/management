@@ -62,6 +62,8 @@ An operating agent (Claude on any device, with no checkout) uses this app **only
 
 **`backend/agent_manual.md` is the operator's only source of truth** and is served live at `GET /agent/manual`. Any change to an endpoint, field, scope, or convention must update that file **and** `_BEARER_ROUTE_SCOPES` in the same commit. Do not put API recipes in `CLAUDE.md` or in Claude's memory — they belong in the manual.
 
+**MCP surface (`backend/mcp_server.py`)** mirrors the API as a curated tool list at `/mcp` (origin root; routes are attached in both `main.py` for dev and `serve.py` for prod) with its own OAuth 2.1 authorization server (DCR + PKCE, consent = app login, grants become `api_tokens` rows). A tool is a thin call into the same handler the REST route uses and must enforce the same scope via `_need()` and audit via `_audited()`. When an endpoint changes, update the matching tool in the same commit; when adding a capability an agent should have, add both the route and the tool.
+
 ## Feature ideation
 
 Proposed features and usability improvements are tracked in `claude_readmes/features.md`. When the user brainstorms new ideas or directions, append them there as numbered sections following the existing format (title, description, bullet specifics, **Why:** line) and update the implementation order at the bottom. Treat this file as the living product backlog for this project.
@@ -78,7 +80,7 @@ Proposed features and usability improvements are tracked in `claude_readmes/feat
 
 ## Database
 
-SQLite with SQLAlchemy 2.0. Core tables: `persons`, `projects`, `todos`, `subtodos`, `todo_blockers`, `must_do_items`, `daily_goals`, `meeting_notes` (plus association tables). Todo statuses: `todo`, `done` (`in_progress` is deprecated; legacy rows are backfilled to `todo` on startup and new writes of that value are rejected). Importance levels: `low`, `medium`, `high`.
+SQLite with SQLAlchemy 2.0. Core tables: `persons`, `projects`, `todos`, `subtodos`, `todo_blockers`, `must_do_items`, `daily_goals`, `meeting_notes` (plus association tables). Todo statuses: `todo`, `done` (`in_progress` is deprecated; legacy rows are backfilled to `todo` on startup and new writes of that value are rejected). Importance levels: `low`, `medium`, `high`, `critical`.
 
 Schema changes are ad-hoc, not Alembic: DDL goes in the `inspect()`-guarded `ALTER TABLE` block that runs at import right after `create_all()` (`backend/main.py`), and data backfills go in `lifespan()`.
 

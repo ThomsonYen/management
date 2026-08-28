@@ -129,6 +129,31 @@ export interface TagOut {
   note_count: number
 }
 
+export type ApiTokenScope = 'read' | 'write:todos' | 'write:persons' | 'write:notes' | 'write:daily'
+
+export interface ApiToken {
+  id: number
+  name: string
+  scopes: ApiTokenScope[]
+  created_at: string
+  expires_at: string
+  last_used_at: string | null
+  revoked_at: string | null
+}
+
+export interface ApiTokenCreated extends ApiToken {
+  token: string // shown once
+}
+
+export interface ApiAuditEntry {
+  id: number
+  ts: string
+  method: string
+  path: string
+  status: number
+  body: string
+}
+
 export interface Vault {
   id: number
   name: string

@@ -17,6 +17,7 @@ COPY backend/requirements.txt backend/
 RUN pip install --no-cache-dir -r backend/requirements.txt
 COPY project_config.yaml ./
 COPY backend/ backend/
+COPY tools/operator-skill/ tools/operator-skill/
 COPY --from=webbuild /build/frontend/dist frontend/dist
 WORKDIR /app/backend
 EXPOSE 8080

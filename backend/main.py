@@ -457,6 +457,21 @@ class ApiToken(Base):
     revoked_at = Column(String, nullable=True)
 
 
+class ApiAudit(Base):
+    """One row per mutating bearer-token request (what an agent did, and when).
+
+    Pruned after API_AUDIT_RETENTION_DAYS in lifespan().
+    """
+    __tablename__ = "api_audit"
+    id = Column(Integer, primary_key=True, index=True)
+    token_id = Column(Integer, ForeignKey("api_tokens.id"), nullable=False, index=True)
+    ts = Column(String, nullable=False)
+    method = Column(String, nullable=False)
+    path = Column(String, nullable=False)
+    status = Column(Integer, nullable=False)
+    body = Column(Text, default="")  # request JSON, truncated
+
+
 Base.metadata.create_all(bind=engine)
 
 # Migrate: add section column to must_do_items if missing
@@ -1624,6 +1639,9 @@ async def lifespan(_app: FastAPI):
         db.query(AuthSession).filter(
             AuthSession.expires_at <= datetime.now(timezone.utc).isoformat()
         ).delete(synchronize_session=False)
+        db.query(ApiAudit).filter(
+            ApiAudit.ts <= (datetime.now(timezone.utc) - timedelta(days=API_AUDIT_RETENTION_DAYS)).isoformat()
+        ).delete(synchronize_session=False)
         db.commit()
         _migrate_meeting_notes_to_unified_notes(db)
         managed_vault = _get_or_create_managed_vault(db)
@@ -1657,7 +1675,12 @@ async def lifespan(_app: FastAPI):
     if os.environ.get("BACKUP_LOOP_ENABLED", "1") == "1":
         task = asyncio.create_task(backup_loop(get_user_timezone))
     try:
-        yield
+        # The MCP streamable-HTTP session manager must be running for /mcp to
+        # serve requests (mcp_server is imported at the bottom of this module).
+        with SessionLocal() as db:
+            mcp_server.prune_orphan_clients(db)
+        async with mcp_server.session_manager.run():
+            yield
     finally:
         if task is not None:
             task.cancel()
@@ -1709,6 +1732,12 @@ SESSION_REFRESH_INTERVAL = timedelta(hours=1)
 COOKIE_SECURE = os.environ.get("COOKIE_SECURE", "1") == "1"
 
 PUBLIC_PATHS = {"/auth/login", "/healthz"}
+# Filled by mcp_server at import: /mcp and the OAuth endpoints enforce their
+# own bearer/OAuth auth, so the cookie middleware must let them through.
+MCP_PUBLIC_PATHS: set = set()
+# Public origin for OAuth issuer / resource URLs. APP_ORIGIN in prod; local dev
+# falls back to the uvicorn port from project_config.yaml.
+PUBLIC_ORIGIN = (os.environ.get("APP_ORIGIN") or f"http://localhost:{PROJECT_CONFIG.get('backend', {}).get('port', 8001)}").rstrip("/")
 
 LOGIN_MAX_FAILURES = 5
 LOGIN_WINDOW_SECONDS = 15 * 60
@@ -1727,6 +1756,8 @@ API_TOKEN_PREFIX = "mgmt_pat_"
 API_TOKEN_DEFAULT_DAYS = 90
 API_TOKEN_MAX_DAYS = 365
 API_TOKEN_USED_REFRESH = timedelta(hours=1)  # throttle last_used_at writes
+API_AUDIT_RETENTION_DAYS = 90
+API_AUDIT_BODY_MAX = 2000
 BEARER_MAX_FAILURES = 10
 BEARER_WINDOW_SECONDS = 15 * 60
 _bearer_failures: dict = defaultdict(deque)
@@ -1739,6 +1770,7 @@ _BEARER_ROUTE_SCOPES = [
         # read
         ("GET", r"/agent/manual", "read"),
         ("GET", r"/agent/digest", "read"),
+        ("GET", r"/agent/skill", "read"),
         ("GET", r"/openapi\.json", "read"),
         ("GET", r"/auth/me", "read"),
         ("GET", r"/todos", "read"),
@@ -1764,12 +1796,14 @@ _BEARER_ROUTE_SCOPES = [
         # write:todos
         ("POST", r"/todos", "write:todos"),
         ("PUT", r"/todos/reorder-focus", "write:todos"),
+        ("PUT", r"/todos/focus", "write:todos"),
         ("PUT", rf"/todos/{_ID}", "write:todos"),
         ("POST", rf"/todos/{_ID}/restore", "write:todos"),
         ("POST", rf"/todos/{_ID}/subtodos", "write:todos"),
         ("PUT", rf"/subtodos/{_ID}", "write:todos"),
         # write:persons — handler additionally restricts fields for token auth
         ("PUT", rf"/persons/{_ID}", "write:persons"),
+        ("POST", rf"/persons/{_ID}/check-in", "write:persons"),
         # write:notes — handlers additionally restrict to kind='personal'
         ("POST", r"/notes", "write:notes"),
         ("PUT", rf"/notes/{_ID}", "write:notes"),
@@ -1790,16 +1824,17 @@ def _bearer_required_scope(method: str, path: str) -> Optional[str]:
 
 
 def _resolve_api_token(db: Session, raw: str):
-    """Return (user, scopes) for a valid, unexpired, unrevoked token, else (None, [])."""
+    """Return (user, scopes, token_id) for a valid, unexpired, unrevoked token, else (None, [], None)."""
     if not raw.startswith(API_TOKEN_PREFIX):
-        return None, []
+        return None, [], None
     row = db.query(ApiToken).filter(ApiToken.token_hash == _hash_token(raw)).first()
     if not row or row.revoked_at:
-        return None, []
+        return None, [], None
     now = datetime.now(timezone.utc)
     if _parse_iso(row.expires_at) <= now:
-        return None, []
+        return None, [], None
     scopes = [s for s in row.scopes.split(",") if s]
+    token_id = row.id
     # Commit before loading the user: commit expires loaded attributes, and the
     # expunged user must stay readable after this session closes.
     if not row.last_used_at or now - _parse_iso(row.last_used_at) > API_TOKEN_USED_REFRESH:
@@ -1807,9 +1842,28 @@ def _resolve_api_token(db: Session, raw: str):
         db.commit()
     user = db.query(User).filter(User.id == row.user_id, User.is_active == True).first()
     if not user:
-        return None, []
+        return None, [], None
     db.expunge(user)
-    return user, scopes
+    return user, scopes, token_id
+
+
+def _record_api_audit(token_id: int, method: str, path: str, status: int, body: bytes) -> None:
+    text_body = body.decode("utf-8", errors="replace")[:API_AUDIT_BODY_MAX]
+    try:
+        with SessionLocal() as db:
+            db.add(
+                ApiAudit(
+                    token_id=token_id,
+                    ts=datetime.now(timezone.utc).isoformat(),
+                    method=method,
+                    path=path,
+                    status=status,
+                    body=text_body,
+                )
+            )
+            db.commit()
+    except Exception:
+        logger.exception("failed to write api audit row")
 
 
 def _is_token_auth(request: Request) -> bool:
@@ -1886,7 +1940,12 @@ async def require_auth(request: Request, call_next):
     root_path = request.scope.get("root_path", "")
     if root_path and path.startswith(root_path):
         path = path[len(root_path):] or "/"
-    if request.method == "OPTIONS" or path in PUBLIC_PATHS:
+    if (
+        request.method == "OPTIONS"
+        or path in PUBLIC_PATHS
+        or path in MCP_PUBLIC_PATHS
+        or path.startswith("/.well-known/")
+    ):
         return await call_next(request)
     # Bearer branch: an Authorization header means token auth, never cookie
     # auth. No ambient credential is involved, so the Origin check is skipped;
@@ -1901,20 +1960,24 @@ async def require_auth(request: Request, call_next):
                 headers={"Retry-After": str(BEARER_WINDOW_SECONDS)},
             )
         scheme, _, raw = auth_header.partition(" ")
-        user, scopes = None, []
+        user, scopes, token_id = None, [], None
         if scheme.lower() == "bearer" and raw.strip():
             with SessionLocal() as db:
-                user, scopes = _resolve_api_token(db, raw.strip())
+                user, scopes, token_id = _resolve_api_token(db, raw.strip())
         if user is None:
             _bearer_failures[ip].append(time.monotonic())
             return JSONResponse({"detail": "Invalid or expired API token"}, status_code=401)
         needed = _bearer_required_scope(request.method, path)
-        if needed is None:
-            return JSONResponse(
-                {"detail": f"{request.method} {path} is not available to API tokens"},
-                status_code=403,
-            )
-        if needed not in scopes:
+        if needed is None or needed not in scopes:
+            # Denied attempts are audited too: an agent probing beyond its
+            # scopes is exactly what the user wants to see.
+            if request.method not in ("GET", "HEAD"):
+                _record_api_audit(token_id, request.method, path, 403, await request.body())
+            if needed is None:
+                return JSONResponse(
+                    {"detail": f"{request.method} {path} is not available to API tokens"},
+                    status_code=403,
+                )
             return JSONResponse(
                 {"detail": f"Token lacks required scope '{needed}'", "required_scope": needed},
                 status_code=403,
@@ -1922,7 +1985,14 @@ async def require_auth(request: Request, call_next):
         request.state.user = user
         request.state.auth_kind = "token"
         request.state.token_scopes = scopes
-        return await call_next(request)
+        request.state.token_id = token_id
+        if request.method in ("GET", "HEAD"):
+            return await call_next(request)
+        # Starlette caches the body, so the handler can still read it.
+        body = await request.body()
+        response = await call_next(request)
+        _record_api_audit(token_id, request.method, path, response.status_code, body)
+        return response
     # CSRF backstop on top of SameSite=Lax: mutating cross-origin requests are
     # rejected even if a cookie somehow rides along.
     if request.method not in ("GET", "HEAD"):
@@ -2094,6 +2164,39 @@ def create_api_token(
     return {**_api_token_out(row), "token": raw}
 
 
+class ApiAuditOut(BaseModel):
+    id: int
+    ts: str
+    method: str
+    path: str
+    status: int
+    body: str
+
+
+@app.get("/api-tokens/{token_id}/audit", response_model=List[ApiAuditOut])
+def api_token_audit(
+    token_id: int,
+    limit: int = Query(50, ge=1, le=500),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Most recent mutating requests made with this token, newest first."""
+    tok = db.query(ApiToken).filter(ApiToken.id == token_id, ApiToken.user_id == user.id).first()
+    if not tok:
+        raise HTTPException(404, "Token not found")
+    rows = (
+        db.query(ApiAudit)
+        .filter(ApiAudit.token_id == token_id)
+        .order_by(ApiAudit.id.desc())
+        .limit(limit)
+        .all()
+    )
+    return [
+        {"id": r.id, "ts": r.ts, "method": r.method, "path": r.path, "status": r.status, "body": r.body or ""}
+        for r in rows
+    ]
+
+
 @app.delete("/api-tokens/{token_id}", response_model=ApiTokenOut)
 def revoke_api_token(
     token_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)
@@ -2130,6 +2233,100 @@ def agent_manual():
         media_type="text/markdown; charset=utf-8",
         headers={"X-Manual-Version": version, "Cache-Control": "no-store"},
     )
+
+
+OPERATOR_SKILL_DIR = Path(__file__).parent.parent / "tools" / "operator-skill"
+
+
+@app.get("/agent/skill", summary="Operator bootstrap skill as a .tar.gz")
+def agent_skill():
+    """Tarball of tools/operator-skill/: one folder per Claude Code skill
+    (mgmt-operator with the `mgmt` and `report` helpers, daily-report,
+    weekly-report, checkins).
+
+    Unpack into ~/.claude/skills/ on a new device:
+    `curl -H "Authorization: Bearer $T" .../agent/skill | tar xz -C ~/.claude/skills/`
+    """
+    if not OPERATOR_SKILL_DIR.is_dir():
+        raise HTTPException(404, "operator skill is missing from this deployment")
+    import tarfile
+
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w:gz") as tar:
+        for skill_dir in sorted(OPERATOR_SKILL_DIR.iterdir()):
+            if not skill_dir.is_dir() or skill_dir.name.startswith("."):
+                continue
+            for f in sorted(skill_dir.iterdir()):
+                if f.is_file() and not f.name.startswith("."):
+                    tar.add(f, arcname=f"{skill_dir.name}/{f.name}")
+    return Response(
+        buf.getvalue(),
+        media_type="application/gzip",
+        headers={
+            "Content-Disposition": 'attachment; filename="mgmt-operator.tar.gz"',
+            "Cache-Control": "no-store",
+        },
+    )
+
+
+@app.get("/agent/digest", summary="Everything an agent needs to plan the day, in one call")
+def agent_digest(db: Session = Depends(get_db)):
+    """Focused/overdue/due-today todos, overdue check-ins, today's must-do and goal, recently done.
+
+    Read-only: unlike GET /must-do/{date} this does not carry items over.
+    """
+    today = today_in_user_tz()
+    week_ago = (date.fromisoformat(today) - timedelta(days=7)).isoformat()
+    open_q = db.query(Todo).filter(Todo.deleted_at == None, Todo.status != "done")
+
+    focused = open_q.filter(Todo.is_focused == True).order_by(Todo.focus_order, Todo.id).all()
+    overdue = open_q.filter(Todo.deadline != None, Todo.deadline < today).order_by(Todo.deadline).all()
+    due_today = open_q.filter(Todo.deadline == today).order_by(Todo.importance.desc(), Todo.id).all()
+    recently_done = (
+        db.query(Todo)
+        .filter(Todo.status == "done", Todo.deleted_at == None, Todo.done_at >= week_ago)
+        .order_by(nullslast(Todo.done_at.desc()))
+        .limit(30)
+        .all()
+    )
+
+    today_d = date.fromisoformat(today)
+    overdue_check_ins = []
+    for p in (
+        db.query(Person)
+        .filter(Person.deleted_at == None, Person.is_direct_report == True)
+        .order_by(Person.display_order, Person.id)
+        .all()
+    ):
+        interval = p.check_in_interval_days or DEFAULT_CHECK_IN_INTERVAL_DAYS
+        if p.last_check_in_date:
+            days_since = (today_d - date.fromisoformat(p.last_check_in_date)).days
+        else:
+            days_since = None
+        if days_since is None or days_since > interval:
+            overdue_check_ins.append(
+                {
+                    "id": p.id,
+                    "name": p.name,
+                    "last_check_in_date": p.last_check_in_date,
+                    "check_in_interval_days": interval,
+                    "days_since_check_in": days_since,
+                }
+            )
+
+    must_do = db.query(MustDoItem).filter(MustDoItem.date == today).order_by(MustDoItem.order).all()
+    goal = db.query(DailyGoal).filter(DailyGoal.date == today).first()
+
+    return {
+        "today": today,
+        "focused_todos": [todo_to_out(t) for t in focused],
+        "overdue_todos": [todo_to_out(t) for t in overdue],
+        "due_today_todos": [todo_to_out(t) for t in due_today],
+        "overdue_check_ins": overdue_check_ins,
+        "must_do_today": [MustDoItemOut.model_validate(m) for m in must_do],
+        "daily_goal_today": DailyGoalOut.model_validate(goal) if goal else None,
+        "recently_done": [todo_to_out(t) for t in recently_done],
+    }
 
 
 # ─── Persons ─────────────────────────────────────────────────────────────────
@@ -2212,6 +2409,25 @@ def update_person(
         _set_person_projects(db, person_id, project_ids)
     db.commit()
     db.refresh(p)
+    return person_to_out(p)
+
+
+class CheckInIn(BaseModel):
+    date: Optional[str] = Field(None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+
+
+@app.post("/persons/{person_id}/check-in", response_model=PersonOut, summary="Record a check-in (forward-only)")
+def check_in_person(person_id: int, data: Optional[CheckInIn] = None, db: Session = Depends(get_db)):
+    """Advance last_check_in_date to `date` (default: today in the user's
+    timezone). Older dates are ignored, so this is safe to call repeatedly."""
+    p = db.query(Person).get(person_id)
+    if not p or p.deleted_at:
+        raise HTTPException(404, "Person not found")
+    new_date = (data.date if data and data.date else None) or today_in_user_tz()
+    if p.last_check_in_date is None or new_date > p.last_check_in_date:
+        p.last_check_in_date = new_date
+        db.commit()
+        db.refresh(p)
     return person_to_out(p)
 
 
@@ -2510,6 +2726,36 @@ def reorder_focus(items: List[FocusOrderItem], db: Session = Depends(get_db)):
             t.focus_order = item.focus_order
     db.commit()
     return {"ok": True}
+
+
+class FocusListIn(BaseModel):
+    todo_ids: List[int] = Field(..., max_length=30)
+
+
+@app.put("/todos/focus", response_model=List[TodoOut], summary="Set the whole focus list in one call")
+def set_focus_list(data: FocusListIn, db: Session = Depends(get_db)):
+    """The given ids become the focus list, in this order; every other open
+    todo is unfocused. Idempotent. Returns the resulting focus list."""
+    ids = list(dict.fromkeys(data.todo_ids))  # dedupe, keep order
+    todos = {t.id: t for t in db.query(Todo).filter(Todo.id.in_(ids), Todo.deleted_at == None).all()} if ids else {}
+    missing = [i for i in ids if i not in todos]
+    if missing:
+        raise HTTPException(404, f"Todo ids not found: {missing}")
+    for t in db.query(Todo).filter(Todo.is_focused == True, Todo.deleted_at == None).all():
+        if t.id not in todos:
+            t.is_focused = False
+            t.focus_order = 0
+    for order, i in enumerate(ids):
+        todos[i].is_focused = True
+        todos[i].focus_order = order
+    db.commit()
+    result = (
+        db.query(Todo)
+        .filter(Todo.is_focused == True, Todo.deleted_at == None)
+        .order_by(Todo.focus_order, Todo.id)
+        .all()
+    )
+    return [todo_to_out(t) for t in result]
 
 
 @app.get("/todos/{todo_id}", response_model=TodoOut)
@@ -3509,3 +3755,14 @@ async def run_backup_endpoint():
         log.exception("manual backup failed")
         raise HTTPException(500, f"backup failed: {e}")
     return BackupRunOut(**result)
+
+
+# ─── Hosted MCP endpoint (see mcp_server.py) ─────────────────────────────────
+# Imported last: mcp_server does `import main` and needs every model/handler
+# above to exist. Routes are added here for local dev (main:app at the root);
+# serve.py adds the same routes at the origin root in production.
+import mcp_server  # noqa: E402
+
+MCP_PUBLIC_PATHS.update(mcp_server.MCP_PUBLIC_PATHS)
+for _route in mcp_server.MCP_ROUTES:
+    app.router.routes.append(_route)

@@ -54,6 +54,14 @@ async def secure_headers(request, call_next):
 app.mount("/api", api_app)
 app.mount("/assets", StaticFiles(directory=DIST / "assets"), name="assets")
 
+# Hosted MCP endpoint + OAuth authorization server. These must live at the
+# origin root (/mcp, /authorize, /token, /.well-known/…), not under /api.
+# Registered before the SPA catch-all below so they take precedence.
+from mcp_server import MCP_ROUTES  # noqa: E402
+
+for _route in MCP_ROUTES:
+    app.router.routes.append(_route)
+
 
 @app.get("/{full_path:path}", include_in_schema=False)
 def spa(full_path: str):
