@@ -1,20 +1,29 @@
 import axios from 'axios'
-import type { Person, PersonProgress, Project, ProjectTree, Todo, SubTodo, ScheduleStatus, AudioFileInfo, Note, NoteKind, NoteSummary, NoteSearchResult, TagOut, Vault, ApiToken, ApiTokenCreated, ApiTokenScope, ApiAuditEntry } from './types'
+import type { Person, PersonProgress, Project, ProjectTree, Todo, SubTodo, ScheduleStatus, AudioFileInfo, Note, NoteKind, NoteSummary, NoteSearchResult, TagOut, Vault, ApiToken, ApiTokenCreated, ApiTokenScope, ApiAuditEntry, AccessGrant, AccessLevel, AppUser, GrantKind, InviteCreated, InvitePreview, Role, UsersOverview } from './types'
 
 const api = axios.create({
   baseURL: '/api',
 })
 
+// Pages that work without a session; a 401 there must not bounce to /login.
+const PUBLIC_PAGES = ['/login', '/invite/']
+
 // On session expiry mid-use, send the user to the login page. The /auth/*
-// calls are excluded: RequireAuth and LoginPage handle those outcomes inline.
+// calls are excluded: RequireAuth, LoginPage and the invite page handle those
+// outcomes inline. A 403 ("Owner only", read-only account, …) never redirects;
+// it is surfaced as a toast by ApiErrorToaster via the `api:forbidden` event.
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     const status = error?.response?.status
     const url: string = error?.config?.url ?? ''
-    if (status === 401 && !url.startsWith('/auth/') && window.location.pathname !== '/login') {
+    const onPublicPage = PUBLIC_PAGES.some((p) => window.location.pathname.startsWith(p))
+    if (status === 401 && !url.startsWith('/auth/') && !onPublicPage) {
       const next = window.location.pathname + window.location.search
       window.location.assign(`/login?next=${encodeURIComponent(next)}`)
+    }
+    if (status === 403) {
+      window.dispatchEvent(new CustomEvent('api:forbidden', { detail: error?.response?.data?.detail }))
     }
     return Promise.reject(error)
   },
@@ -25,16 +34,41 @@ api.interceptors.response.use(
 export interface AuthUser {
   id: number
   username: string
+  role: Role
+  person_id: number | null
+  person_name: string | null
+  access_level: AccessLevel
+  see_attended_meetings: boolean
 }
 
+// Defaults keep the UI working against a backend that predates member accounts.
+const normalizeUser = (raw: Partial<AuthUser> & { id: number; username: string }): AuthUser => ({
+  role: 'owner',
+  person_id: null,
+  person_name: null,
+  access_level: 'edit',
+  see_attended_meetings: false,
+  ...raw,
+})
+
 export const fetchMe = (): Promise<AuthUser> =>
-  api.get('/auth/me').then((r) => r.data)
+  api.get('/auth/me').then((r) => normalizeUser(r.data))
 
 export const login = (data: { username: string; password: string }): Promise<AuthUser> =>
-  api.post('/auth/login', data).then((r) => r.data)
+  api.post('/auth/login', data).then((r) => normalizeUser(r.data))
 
 export const logout = (): Promise<void> =>
   api.post('/auth/logout').then((r) => r.data)
+
+export const changePassword = (data: { current_password: string; new_password: string }): Promise<void> =>
+  api.post('/auth/change-password', data).then((r) => r.data)
+
+// Invite flow (public). The token travels in the body, never the URL.
+export const lookupInvite = (token: string): Promise<InvitePreview> =>
+  api.post('/auth/invite/lookup', { token }).then((r) => r.data)
+
+export const acceptInvite = (data: { token: string; username: string; password: string }): Promise<AuthUser> =>
+  api.post('/auth/invite/accept', data).then((r) => normalizeUser(r.data))
 
 // ─── Persons ─────────────────────────────────────────────────────────────────
 
@@ -421,6 +455,37 @@ export const revokeApiToken = (id: number): Promise<ApiToken> =>
 
 export const fetchApiTokenAudit = (id: number, limit = 50): Promise<ApiAuditEntry[]> =>
   api.get(`/api-tokens/${id}/audit`, { params: { limit } }).then((r) => r.data)
+
+// ─── Members & access (owner only; cookie-session only) ────────────────────
+
+export const fetchUsers = (): Promise<UsersOverview> =>
+  api.get('/admin/users').then((r) => r.data)
+
+export const updateUser = (
+  id: number,
+  data: { access_level?: AccessLevel; see_attended_meetings?: boolean; is_active?: boolean },
+): Promise<AppUser> => api.put(`/admin/users/${id}`, data).then((r) => r.data)
+
+export const resetUserPassword = (id: number, new_password: string): Promise<AppUser> =>
+  api.post(`/admin/users/${id}/reset-password`, { new_password }).then((r) => r.data)
+
+export const deleteUser = (id: number): Promise<void> =>
+  api.delete(`/admin/users/${id}`).then((r) => r.data)
+
+export const addUserGrant = (id: number, data: { kind: GrantKind; target_id: number }): Promise<AccessGrant> =>
+  api.post(`/admin/users/${id}/grants`, data).then((r) => r.data)
+
+export const removeUserGrant = (id: number, grantId: number): Promise<void> =>
+  api.delete(`/admin/users/${id}/grants/${grantId}`).then((r) => r.data)
+
+export const fetchUserAudit = (id: number, limit = 50): Promise<ApiAuditEntry[]> =>
+  api.get(`/admin/users/${id}/audit`, { params: { limit } }).then((r) => r.data)
+
+export const createInvite = (data: { person_id: number; expires_in_days?: number }): Promise<InviteCreated> =>
+  api.post('/admin/invites', data).then((r) => r.data)
+
+export const revokeInvite = (id: number): Promise<void> =>
+  api.delete(`/admin/invites/${id}`).then((r) => r.data)
 
 // ─── Backup ────────────────────────────────────────────────────────────────
 

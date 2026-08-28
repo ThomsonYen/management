@@ -36,7 +36,7 @@ There are no automated tests or linters configured.
 
 ### Key Frontend Patterns
 
-- React Contexts for global state: `ThemeContext`, `TimezoneContext`, `RecordingContext`, `HotkeysContext`, `TodoDefaultsContext`
+- React Contexts for global state: `SettingsContext` (theme, timezone, hotkeys, todo defaults, font size — exposed through narrow hooks like `useTheme`/`useTimezone`), `ToastContext`, `SuggestedNotesContext`, `RecordingContext`. Auth state is the `['session']` React Query entry (`hooks/useSession.ts`), not a context.
 - Pages in `src/pages/`, reusable components in `src/components/`
 - All API calls go through `src/api.ts` (Axios), types in `src/types.ts`
 - Vite proxies `/api` requests to the backend (configured in `vite.config.ts`)
@@ -63,6 +63,22 @@ An operating agent (Claude on any device, with no checkout) uses this app **only
 **`backend/agent_manual.md` is the operator's only source of truth** and is served live at `GET /agent/manual`. Any change to an endpoint, field, scope, or convention must update that file **and** `_BEARER_ROUTE_SCOPES` in the same commit. Do not put API recipes in `CLAUDE.md` or in Claude's memory — they belong in the manual.
 
 **MCP surface (`backend/mcp_server.py`)** mirrors the API as a curated tool list at `/mcp` (origin root; routes are attached in both `main.py` for dev and `serve.py` for prod) with its own OAuth 2.1 authorization server (DCR + PKCE, consent = app login, grants become `api_tokens` rows). A tool is a thin call into the same handler the REST route uses and must enforce the same scope via `_need()` and audit via `_audited()`. When an endpoint changes, update the matching tool in the same commit; when adding a capability an agent should have, add both the route and the tool.
+
+## Multi-user accounts (owner + members)
+
+One shared workspace. `users.role` is `owner` (exactly one; sees and does everything — today's behaviour) or `member`: a login linked to a `persons` row (`users.person_id`) that sees only the todos assigned to that person, plus what the owner grants — `access_grants` rows of kind `project` (the subtree's todos, read-only unless assigned) or `note`, and the per-user `see_attended_meetings` flag. Members are onboarded through single-use invite links (`user_invites`, sha256 at rest; `POST /admin/invites` → `/invite/<token>` in the SPA → `POST /auth/invite/accept`).
+
+**Enforcement has two layers, both in `backend/main.py`:**
+1. `_MEMBER_ROUTES` (next to `_BEARER_ROUTE_SCOPES`) is a deny-by-default table checked in `require_auth` for cookie sessions and tokens alike; anything unlisted answers `403 {"detail": "Owner only"}` to a member with no handler change. Every member mutation is written to `member_audit` (surfaced at `GET /admin/users/{id}/audit`).
+2. Inside the listed handlers, the per-request `Viewer` (`get_viewer` / `viewer_for_user`): queries go through `_scope_todos` / `_scope_notes`, single objects through `_visible_*_or_404` / `_editable_todo_or_403`, and output through the viewer-aware `todo_to_out` / `note_to_out` / `MemberProjectOut`. Rule: an id or name appears in member output only if that entity is in the viewer's visible set; not-visible and non-existent are both **404** (403 is only for visible-but-not-permitted: read-only account, not assigned to you, disallowed field — `MEMBER_TODO_FIELDS`).
+
+**Invariants:** a route added to `_MEMBER_ROUTES` must take `viewer`, scope its query and use member-safe output; new routes are owner-only unless listed. Tokens and MCP connectors are owner-only for now (`_resolve_api_token`, the token handlers, the consent page and `mcp_server._viewer()` all refuse members) — MCP tools still pass `viewer=` explicitly so REST and MCP share one scoping path. Member UI preferences live in `DATA_DIR/user_settings/<user_id>.json`; the owner keeps `user_settings.json`, which `get_user_timezone()` (server-side "today", backup scheduler) reads. Focus, must-do, daily goals, deletes, notes writes, tags, audio, vaults and `/admin/*` stay owner-only.
+
+**Regression gate (run before every deploy, both topologies):** `python scripts/check_auth.py && python scripts/check_auth.py serve && python scripts/check_member_access.py && python scripts/check_member_access.py serve`. The member script seeds a throwaway `DATA_DIR`, sweeps every route as a member (403 unless allowed) and asserts the leak rules above.
+
+**Rollback caution:** the schema is additive, but an image older than this feature treats every active `users` row as the single full-access user. Before `fly deploy --image <older>`, run `UPDATE users SET is_active=0 WHERE role<>'owner'` on the prod DB.
+
+Frontend: `App.tsx` routes `/login`, `/invite/:token` (public) and `/*` → `RequireAuth` → `RoleShell` (owner `AppShell`, member `components/member/MemberShell.tsx` with `pages/member/*`). `utils/deviceState.ts` purges the persisted query cache and per-user localStorage on login/logout/invite acceptance so a shared device never shows another user's data. Owner administration lives in `PersonAccessSection` (People page), `NoteShareControl` (note page) and `UsersSection` (Settings). How-to for the owner: `readmes/users.md`.
 
 ## Feature ideation
 

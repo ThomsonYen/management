@@ -4,8 +4,6 @@ import { useHotkeys, useTheme } from '../SettingsContext'
 import { useHotkey } from '../hooks/useHotkey'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import MDEditor from '@uiw/react-md-editor'
-import type { Root, ListItem, Paragraph, Text } from 'mdast'
-import { visit } from 'unist-util-visit'
 import {
  ArrowLeft,
  Trash2,
@@ -40,26 +38,8 @@ import { createMdEditorKeyHandler } from '../utils/mdEditorKeyHandler'
 import { remarkHashtag } from '../utils/remarkHashtag'
 import { extractTags } from '../utils/markdownTags'
 import TagPill from '../components/TagPill'
-
-function remarkFixEmptyTasks() {
- return (tree: Root) => {
- visit(tree, 'listItem', (node: ListItem) => {
- if (node.checked != null) return
- const para = node.children[0]
- if (!para || para.type !== 'paragraph' || para.children.length !== 1) return
- const text = para.children[0]
- if (text.type !== 'text') return
- const val = text.value.trim()
- if (val === '[ ]') {
- node.checked = false
- ;(para as Paragraph).children = [{ type: 'text', value: ' ' } as Text]
- } else if (val === '[x]' || val === '[X]') {
- node.checked = true
- ;(para as Paragraph).children = [{ type: 'text', value: ' ' } as Text]
- }
- })
- }
-}
+import NoteShareControl from '../components/NoteShareControl'
+import { remarkFixEmptyTasks } from '../utils/remarkFixEmptyTasks'
 
 export default function NoteDetailPage() {
  const { id } = useParams<{ id: string }>()
@@ -321,6 +301,12 @@ export default function NoteDetailPage() {
  </div>
  )}
 
+ {!isMeeting && (
+ <div className="px-6 pb-3">
+ <NoteShareControl noteId={noteId} attendeeIds={[]} />
+ </div>
+ )}
+
  {localTags.length > 0 && (
  <div className="px-6 pb-2 flex flex-wrap gap-1.5">
  {localTags.map((t) => (
@@ -452,6 +438,7 @@ export default function NoteDetailPage() {
  <AudioRecorder noteId={noteId} />
  <AudioFileList noteId={noteId} files={note?.audio_files ?? []} />
  </div>
+ <NoteShareControl noteId={noteId} attendeeIds={attendeeIds} />
  </div>
  )}
  </div>

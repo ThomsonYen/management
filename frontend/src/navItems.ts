@@ -1,4 +1,4 @@
-import { LayoutDashboard, CheckSquare, FolderKanban, Users, CheckCircle2, Crosshair, Settings, FileText, Target, BarChart3, Trash2, NotebookPen } from 'lucide-react'
+import { LayoutDashboard, CheckSquare, FolderKanban, Users, CheckCircle2, Crosshair, Settings, FileText, Target, BarChart3, Trash2, NotebookPen, ListChecks } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
 export interface NavItem {
@@ -31,19 +31,28 @@ export const secondaryNavItems = navItems.filter((n) => !PRIMARY_TABS.includes(n
 
 export const settingsNavItem: NavItem = { to: '/settings', label: 'Settings', icon: Settings, end: false }
 
+// Member accounts get a deliberately small shell: their items, what they've
+// finished, notes shared with them, and settings. No More sheet.
+export const memberNavItems: NavItem[] = [
+  { to: '/', label: 'My items', icon: ListChecks, end: true },
+  { to: '/done', label: 'Done', icon: CheckCircle2, end: false },
+  { to: '/notes', label: 'Notes', icon: NotebookPen, end: false },
+]
+export const memberPrimaryNavItems: NavItem[] = [...memberNavItems, settingsNavItem]
+
 const detailTitles: Array<[prefix: string, title: string]> = [
   ['/todos/', 'Todo'],
   ['/meeting-notes/', 'Meeting'],
   ['/notes/', 'Note'],
 ]
 
-export function routeTitle(pathname: string): string {
+export function routeTitle(pathname: string, items: NavItem[] = navItems): string {
   for (const [prefix, title] of detailTitles) {
     if (pathname.startsWith(prefix) && pathname.length > prefix.length) return title
   }
   if (pathname.startsWith('/settings')) return settingsNavItem.label
   let best: NavItem | undefined
-  for (const item of navItems) {
+  for (const item of items) {
     if (item.to === '/' ? pathname === '/' : pathname.startsWith(item.to)) {
       if (!best || item.to.length > best.to.length) best = item
     }

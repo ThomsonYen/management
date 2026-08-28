@@ -23,8 +23,11 @@ import {
 import {
  fetchPersons, fetchVaults, createVault, deleteVault, rescanVault, logout,
  fetchApiTokens, createApiToken, revokeApiToken, fetchApiTokenAudit,
- type AuthUser,
 } from '../api'
+import { useIsOwner, useSession } from '../hooks/useSession'
+import { clearDeviceState } from '../utils/deviceState'
+import ChangePasswordSection from '../components/ChangePasswordSection'
+import UsersSection from '../components/UsersSection'
 import type { ApiToken, ApiTokenScope } from '../types'
 import { listThemes, type ThemeName } from '../theme'
 import { Select } from '../components/ui'
@@ -646,12 +649,11 @@ const TIMEZONES = getAvailableTimezones()
 const IMPORTANCE_OPTIONS = ['low', 'medium', 'high', 'critical']
 
 function AccountSection() {
- const queryClient = useQueryClient()
- const sessionUser = queryClient.getQueryData<AuthUser>(['session'])
+ const sessionUser = useSession()
  const logoutMutation = useMutation({
  mutationFn: logout,
  onSettled: () => {
- queryClient.clear()
+ clearDeviceState()
  window.location.assign('/login')
  },
  })
@@ -662,7 +664,13 @@ function AccountSection() {
  <div>
  <h2 className="text-sm font-semibold text-fg">Account</h2>
  <p className="text-sm text-fg-muted mt-0.5">
- {sessionUser ? `Signed in as ${sessionUser.username}` : 'Signed in'}
+ Signed in as {sessionUser.username}
+ {sessionUser.role === 'member' && (
+   <>
+     {sessionUser.person_name && <> · {sessionUser.person_name}</>}
+     {' · '}{sessionUser.access_level === 'edit' ? 'Can edit own items' : 'View only'}
+   </>
+ )}
  </p>
  </div>
  <button
@@ -686,7 +694,8 @@ export default function SettingsPage() {
  const { resetToDefaults } = useHotkeys()
  const { size: fontSize, setSize: setFontSize } = useFontSize()
  const { variant: themeVariant, setVariant: setThemeVariant } = useThemeVariant()
- const { data: persons = [] } = useQuery({ queryKey: ['persons'], queryFn: fetchPersons })
+ const isOwner = useIsOwner()
+ const { data: persons = [] } = useQuery({ queryKey: ['persons'], queryFn: fetchPersons, enabled: isOwner })
  const themeOptions = listThemes()
 
  const updateField = <K extends keyof typeof defaults>(key: K, value: (typeof defaults)[K]) => {
@@ -699,6 +708,7 @@ export default function SettingsPage() {
 
  <div className="space-y-4">
  <AccountSection />
+ <ChangePasswordSection />
 
  {/* Appearance */}
  <div className="bg-surface rounded-xl shadow-sm border border-border">
@@ -802,13 +812,15 @@ export default function SettingsPage() {
  </div>
  </div>
 
- <RecordingSection />
+ {isOwner && <RecordingSection />}
 
- <VaultsSection />
+ {isOwner && <VaultsSection />}
 
- <ApiTokensSection />
+ {isOwner && <ApiTokensSection />}
+ {isOwner && <UsersSection />}
 
  {/* Meeting Notes */}
+ {isOwner && (
  <div className="bg-surface rounded-xl shadow-sm border border-border">
  <div className="px-6 py-5 flex flex-wrap items-center justify-between gap-y-2">
  <div>
@@ -827,8 +839,10 @@ export default function SettingsPage() {
  </select>
  </div>
  </div>
+ )}
 
  {/* Hotkeys — pointless on touch, hidden below md */}
+ {isOwner && (
  <div className="hidden md:block bg-surface rounded-xl shadow-sm border border-border">
  <div className="px-6 py-5">
  <div className="flex items-center justify-between mb-4">
@@ -919,6 +933,7 @@ export default function SettingsPage() {
  </div>
  </div>
  </div>
+ )}
 
  {/* Todo Defaults */}
  <div className="bg-surface rounded-xl shadow-sm border border-border">
@@ -930,6 +945,7 @@ export default function SettingsPage() {
 
  <div className="space-y-4">
  {/* Default Assignee (stored by name so restores survive person id changes) */}
+ {isOwner && (
  <div className="flex items-center justify-between gap-4">
  <label className="text-sm text-fg shrink-0">
  Default assignee
@@ -952,6 +968,7 @@ export default function SettingsPage() {
  )}
  </select>
  </div>
+ )}
 
  {/* Default Deadline to Today */}
  <div className="flex items-center justify-between gap-4">
