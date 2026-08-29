@@ -1,11 +1,15 @@
 import { NavLink } from 'react-router-dom'
 import { Sun, Moon } from 'lucide-react'
 import { useTheme } from '../../SettingsContext'
-import { secondaryNavItems, settingsNavItem } from '../../navItems'
+import { secondaryNavItems, settingsNavItem, type NavItem } from '../../navItems'
 
-export default function MobileMoreSheet({ onClose }: { onClose: () => void }) {
+interface Props {
+  onClose: () => void
+  items?: NavItem[]
+}
+
+export default function MobileMoreSheet({ onClose, items = [...secondaryNavItems, settingsNavItem] }: Props) {
   const { theme, setTheme } = useTheme()
-  const items = [...secondaryNavItems, settingsNavItem]
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 md:hidden" onClick={onClose}>

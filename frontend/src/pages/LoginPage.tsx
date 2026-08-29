@@ -1,22 +1,23 @@
 import { FormEvent, useState } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useMutation } from '@tanstack/react-query'
+import { useSearchParams } from 'react-router-dom'
 import { LayoutDashboard } from 'lucide-react'
 import { login } from '../api'
+import { clearDeviceState } from '../utils/deviceState'
 
 export default function LoginPage() {
-  const navigate = useNavigate()
-  const queryClient = useQueryClient()
   const [searchParams] = useSearchParams()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
 
   const loginMutation = useMutation({
     mutationFn: login,
-    onSuccess: (user) => {
-      queryClient.setQueryData(['session'], user)
+    onSuccess: () => {
+      // Purge whatever the previous user of this device left behind, then boot
+      // the app fresh as the new user (no pre-login state survives a reload).
+      clearDeviceState()
       const next = searchParams.get('next')
-      navigate(next && next.startsWith('/') ? next : '/', { replace: true })
+      window.location.assign(next && /^\/(?![/\\])/.test(next) ? next : '/')
     },
   })
 

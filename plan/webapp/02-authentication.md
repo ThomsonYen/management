@@ -96,14 +96,16 @@ In-process (valid because deployment is exactly one uvicorn worker — see [03-d
 - **Logout**: button in `SettingsPage` (and later the mobile More sheet) → `POST /auth/logout` → clear cache → `/login`.
 - `RecordingContext.tsx`'s `sendBeacon` needs no change — same-origin beacons carry cookies.
 
-## Multi-user later (documented, not built now)
+## Multi-user (built 2026-08 — a shared workspace, not per-user data)
 
-1. Add `user_id` FK columns to the 11 data models (plus `owner_id` on vaults); backfill everything to user 1 in a startup migration.
-2. Change query call sites to filter by `get_current_user(request).id` — the dependency seam already exists.
-3. Move `user_settings.json` into a `user_settings` table keyed by `user_id`.
-4. Add registration/invite endpoints as desired.
-
-Nothing in the session/middleware design changes — that is why `auth_sessions` references `users.id` from day one.
+The per-user-FK migration sketched here was not what was needed: the second user is a
+*member* of the owner's workspace (a person who sees the todos assigned to them), not a
+tenant with their own data. What shipped instead: `users.role` / `users.person_id`,
+`access_grants`, single-use `user_invites`, a deny-by-default `_MEMBER_ROUTES` table in the
+auth middleware and a per-request `Viewer` that scopes the listed handlers. Design and
+invariants: `CLAUDE.md` → "Multi-user accounts"; owner how-to: `readmes/users.md`.
+Nothing in the session/middleware design changed — `auth_sessions` referencing `users.id`
+from day one is exactly what made it additive.
 
 ## Verification checklist
 

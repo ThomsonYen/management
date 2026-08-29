@@ -27,6 +27,7 @@ import BulkActionBar from '../components/BulkActionBar'
 import CheckInButton from '../components/CheckInButton'
 import MarkdownEditor from '../components/MarkdownEditor'
 import PersonProjectBoard from '../components/PersonProjectBoard'
+import PersonAccessSection from '../components/PersonAccessSection'
 import SaveIndicator, { type SaveState } from '../components/SaveIndicator'
 import { useDebouncedFn } from '../hooks/useDebouncedFn'
 import { useToast } from '../ToastContext'
@@ -917,6 +918,9 @@ export default function PeoplePage({ onOpenTodo }: { onOpenTodo: (id: number) =>
  }
  />
  )}
+
+ {/* App access — this person's member account, invite and grants */}
+ {selectedPerson && <PersonAccessSection person={selectedPerson} projects={projects} />}
 
  {/* Notes */}
  {selectedPerson && <PersonNotes person={selectedPerson} />}

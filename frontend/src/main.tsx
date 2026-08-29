@@ -1,11 +1,10 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import { QueryClient } from '@tanstack/react-query'
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
-import { createSyncStoragePersister } from '@tanstack/query-sync-storage-persister'
 import { BrowserRouter } from 'react-router-dom'
 import App from './App'
 import { APP_VERSION } from './config'
+import { CACHE_MAX_AGE, persister, queryClient } from './queryClient'
 import { SettingsProvider } from './SettingsContext'
 import { SuggestedNotesProvider } from './SuggestedNotesContext'
 import { RecordingProvider } from './RecordingContext'
@@ -26,20 +25,9 @@ registerSW({
   },
 })
 
-const CACHE_MAX_AGE = 24 * 60 * 60 * 1000 // keep last-known data for a day
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 30000,
-      // must be >= the persister's maxAge, or restored data is garbage-collected
-      gcTime: CACHE_MAX_AGE,
-      retry: 1,
-    },
-  },
-})
-
-const persister = createSyncStoragePersister({ storage: window.localStorage })
+// Admin data (accounts, invite links, member activity) is never written to
+// localStorage; everything else is purged on login/logout (utils/deviceState).
+const NEVER_PERSISTED = new Set(['users', 'invite', 'user-audit'])
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
@@ -49,6 +37,11 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         persister,
         maxAge: CACHE_MAX_AGE,
         buster: APP_VERSION, // drop persisted cache when the app version changes
+        dehydrateOptions: {
+          // Same rule as the library default (successful queries only), minus the admin keys.
+          shouldDehydrateQuery: (query) =>
+            query.state.status === 'success' && !NEVER_PERSISTED.has(String(query.queryKey[0])),
+        },
       }}
     >
       <BrowserRouter>

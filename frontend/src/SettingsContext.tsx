@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { fetchSettings, updateSettings, type UserSettings, type UserSettingsPatch } from './api'
 import { applyTheme, DEFAULT_THEME, THEMES, type ThemeName } from './theme'
+import { useOptionalSession } from './hooks/useSession'
 
 // ─── Defaults (authoritative on the frontend too, so first paint has real values) ───
 
@@ -178,7 +179,13 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<UserSettings>(initial)
   const isInitial = useRef(true)
 
+  // Settings are per user, so load them only once a session exists (and again
+  // if the signed-in user changes). Never push the local cache to the server
+  // on failure: on a shared device that would overwrite one person's settings
+  // with another's; the cache is a first-paint hint, nothing more.
+  const sessionUserId = useOptionalSession()?.id
   useEffect(() => {
+    if (sessionUserId == null) return
     let cancelled = false
     fetchSettings()
       .then((server) => {
@@ -200,20 +207,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
           updateSettings({ timezone: merged.timezone }).catch(() => {})
         }
       })
-      .catch(() => {
-        updateSettings({
-          timezone: settings.timezone,
-          theme: settings.theme,
-          theme_variant: settings.theme_variant,
-          font_size: settings.font_size,
-          meeting_note_sort: settings.meeting_note_sort,
-          todo_defaults: settings.todo_defaults,
-          hotkeys: settings.hotkeys,
-        }).catch(() => {})
-      })
+      .catch(() => {})
     return () => { cancelled = true }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [sessionUserId])
 
   useEffect(() => {
     if (isInitial.current) {

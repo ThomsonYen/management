@@ -4,11 +4,15 @@ import { useRecording } from '../../RecordingContext'
 import { routeTitle } from '../../navItems'
 
 interface Props {
-  onNewTodo: () => void
-  onOpenSearch: () => void
+  /** Omit to hide the "+" button (member shell). */
+  onNewTodo?: () => void
+  /** Omit to hide the search button (member shell). */
+  onOpenSearch?: () => void
+  /** Overrides the title derived from the owner's nav items. */
+  title?: string
 }
 
-export default function MobileHeader({ onNewTodo, onOpenSearch }: Props) {
+export default function MobileHeader({ onNewTodo, onOpenSearch, title }: Props) {
   const location = useLocation()
   const navigate = useNavigate()
   const { isRecording, noteId, duration, isUploading, stop } = useRecording()
@@ -17,7 +21,7 @@ export default function MobileHeader({ onNewTodo, onOpenSearch }: Props) {
     <header className="md:hidden sticky top-0 z-30 bg-surface/95 backdrop-blur border-b border-border pt-[env(safe-area-inset-top)]">
       <div className="flex items-center gap-2 px-4 h-12">
         <h1 className="flex-1 min-w-0 truncate text-base font-semibold text-fg">
-          {routeTitle(location.pathname)}
+          {title ?? routeTitle(location.pathname)}
         </h1>
         {(isRecording || isUploading) && noteId != null && (
           <div
@@ -50,20 +54,24 @@ export default function MobileHeader({ onNewTodo, onOpenSearch }: Props) {
             )}
           </div>
         )}
-        <button
-          onClick={onNewTodo}
-          className="p-2.5 -mr-1 rounded-md text-fg-muted active:bg-inset transition-colors"
-          title="New todo"
-        >
-          <Plus size={20} />
-        </button>
-        <button
-          onClick={onOpenSearch}
-          className="p-2.5 -mr-2 rounded-md text-fg-muted active:bg-inset transition-colors"
-          title="Search"
-        >
-          <Search size={20} />
-        </button>
+        {onNewTodo && (
+          <button
+            onClick={onNewTodo}
+            className="p-2.5 -mr-1 rounded-md text-fg-muted active:bg-inset transition-colors"
+            title="New todo"
+          >
+            <Plus size={20} />
+          </button>
+        )}
+        {onOpenSearch && (
+          <button
+            onClick={onOpenSearch}
+            className="p-2.5 -mr-2 rounded-md text-fg-muted active:bg-inset transition-colors"
+            title="Search"
+          >
+            <Search size={20} />
+          </button>
+        )}
       </div>
     </header>
   )

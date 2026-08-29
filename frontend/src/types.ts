@@ -177,3 +177,52 @@ export interface PersonProgress {
   total_task_count: number
   total_hours: number
 }
+
+// ─── Accounts & access (multi-user) ─────────────────────────────────────────
+
+export type Role = 'owner' | 'member'
+export type AccessLevel = 'view' | 'edit'
+export type GrantKind = 'project' | 'note'
+
+export interface AccessGrant {
+  id: number
+  kind: GrantKind
+  target_id: number
+  target_name: string | null
+}
+
+export interface AppUser {
+  id: number
+  username: string
+  role: Role
+  person_id: number | null
+  person_name: string | null
+  access_level: AccessLevel
+  see_attended_meetings: boolean
+  is_active: boolean
+  created_at: string | null
+  last_seen_at: string | null
+  grants: AccessGrant[]
+}
+
+export interface Invite {
+  id: number
+  person_id: number
+  person_name: string
+  created_at: string
+  expires_at: string
+}
+
+export interface InviteCreated extends Invite {
+  token: string // shown once; the link is `${origin}/invite/${token}`
+}
+
+export interface UsersOverview {
+  users: AppUser[]
+  invites: Invite[]
+}
+
+export interface InvitePreview {
+  person_name: string
+  expires_at: string
+}

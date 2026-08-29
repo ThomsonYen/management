@@ -2,7 +2,7 @@ import type { ComponentType, ReactNode } from 'react'
 import { cn } from './cn'
 
 export interface EmptyStateProps {
-  icon?: ComponentType<{ size?: number; className?: string }>
+  icon?: ComponentType<{ size?: number | string; className?: string }>
   title: string
   description?: string
   action?: ReactNode

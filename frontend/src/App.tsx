@@ -28,6 +28,10 @@ import CommandPalette from './components/CommandPalette'
 import InstallHint from './components/mobile/InstallHint'
 import RequireAuth from './components/RequireAuth'
 import LoginPage from './pages/LoginPage'
+import InviteAcceptPage from './pages/InviteAcceptPage'
+import MemberShell from './components/member/MemberShell'
+import ApiErrorToaster from './components/ApiErrorToaster'
+import { useSession } from './hooks/useSession'
 
 import { navItems } from './navItems'
 import MobileHeader from './components/mobile/MobileHeader'
@@ -322,18 +326,28 @@ function AppShell() {
   )
 }
 
+/** Owner → the full app; member → the small "My items" shell. */
+function RoleShell() {
+  const user = useSession()
+  return user.role === 'member' ? <MemberShell /> : <AppShell />
+}
+
 export default function App() {
   return (
-    <Routes>
-      <Route path="/login" element={<LoginPage />} />
-      <Route
-        path="/*"
-        element={
-          <RequireAuth>
-            <AppShell />
-          </RequireAuth>
-        }
-      />
-    </Routes>
+    <>
+      <ApiErrorToaster />
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/invite/:token" element={<InviteAcceptPage />} />
+        <Route
+          path="/*"
+          element={
+            <RequireAuth>
+              <RoleShell />
+            </RequireAuth>
+          }
+        />
+      </Routes>
+    </>
   )
 }

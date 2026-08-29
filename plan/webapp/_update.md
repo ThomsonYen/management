@@ -16,8 +16,10 @@ Log in with your local user. Data stays in `backend/` (local) — completely sep
 ## 2. Pre-deploy checks
 
 ```bash
-# every route still requires auth (run after any backend route changes)
-cd backend && python scripts/check_auth.py && python scripts/check_auth.py serve
+# every route still requires auth, and member accounts stay scoped
+# (run after any backend route changes)
+cd backend && python scripts/check_auth.py && python scripts/check_auth.py serve \
+  && python scripts/check_member_access.py && python scripts/check_member_access.py serve
 
 # frontend compiles
 cd frontend && npm run build
@@ -72,7 +74,13 @@ fly deploy --image <previous-image>
 ```
 
 DB schema changes are additive-only (startup `create_all` + `ALTER TABLE` migrations in
-`main.py`), so an older image runs fine against a newer DB.
+`main.py`), so an older image runs fine against a newer DB — with one caveat: an image
+older than member accounts treats every active `users` row as the single full-access
+user. Disable members first:
+
+```bash
+fly ssh console -C "sqlite3 /data/management.db \"UPDATE users SET is_active=0 WHERE role<>'owner'\""
+```
 
 ## Notes
 

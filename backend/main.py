@@ -12,6 +12,7 @@ import tempfile
 import time
 import uuid
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from collections import defaultdict, deque
@@ -25,6 +26,7 @@ from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response, U
 
 from backup.backup import run_backup_once
 from backup.scheduler import backup_loop
+from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from openai import OpenAI
@@ -39,14 +41,18 @@ from sqlalchemy import (
     String,
     Table,
     Text,
+    UniqueConstraint,
+    and_,
     create_engine,
     event,
+    false,
     func,
     inspect,
     nullslast,
     or_,
     text,
 )
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import DeclarativeBase, Session, joinedload, relationship, sessionmaker
 
 load_dotenv(Path(__file__).parent / ".env")
@@ -68,6 +74,10 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 # ─── User settings (persisted, shared with frontend) ─────────────────────────
 
 USER_SETTINGS_PATH = DATA_DIR / "user_settings.json"
+# Member accounts keep their UI preferences in per-user files; the owner's
+# settings stay in the legacy single file so get_user_timezone() (which drives
+# every server-side "today" and the backup scheduler) is unaffected.
+USER_SETTINGS_DIR = DATA_DIR / "user_settings"
 
 DEFAULT_USER_SETTINGS: dict = {
     "timezone": None,
@@ -85,9 +95,16 @@ DEFAULT_USER_SETTINGS: dict = {
 }
 
 
-def _load_user_settings() -> dict:
+def _user_settings_path(user: "Optional[User]" = None) -> Path:
+    """None or the owner → the legacy single file; a member → their own file."""
+    if user is None or getattr(user, "role", "owner") == "owner":
+        return USER_SETTINGS_PATH
+    return USER_SETTINGS_DIR / f"{user.id}.json"
+
+
+def _load_user_settings(user: "Optional[User]" = None) -> dict:
     try:
-        with open(USER_SETTINGS_PATH, encoding="utf-8") as f:
+        with open(_user_settings_path(user), encoding="utf-8") as f:
             return json.load(f)
     except FileNotFoundError:
         return {}
@@ -95,16 +112,18 @@ def _load_user_settings() -> dict:
         return {}
 
 
-def _save_user_settings(data: dict) -> None:
-    tmp = USER_SETTINGS_PATH.with_suffix(".json.tmp")
+def _save_user_settings(data: dict, user: "Optional[User]" = None) -> None:
+    path = _user_settings_path(user)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".json.tmp")
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
-    tmp.replace(USER_SETTINGS_PATH)
+    tmp.replace(path)
 
 
-def _merged_user_settings() -> dict:
+def _merged_user_settings(user: "Optional[User]" = None) -> dict:
     """Return stored settings merged on top of DEFAULT_USER_SETTINGS (deep merge todo_defaults)."""
-    stored = _load_user_settings()
+    stored = _load_user_settings(user)
     merged = {**DEFAULT_USER_SETTINGS, **{k: v for k, v in stored.items() if v is not None or k == "timezone"}}
     merged["todo_defaults"] = {
         **DEFAULT_USER_SETTINGS["todo_defaults"],
@@ -419,12 +438,22 @@ class Tag(Base):
 
 
 class User(Base):
+    """A login. Exactly one row is the workspace owner (role='owner'); every
+    other row is a member linked to a persons row who sees only what the
+    owner assigns or grants (see the Viewer section next to the auth
+    middleware). Plain columns only: the middleware stores an expunged copy
+    on request.state.user, so relationships would fail to lazy-load.
+    """
     __tablename__ = "users"
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String, unique=True, nullable=False)
     password_hash = Column(String, nullable=False)  # argon2id encoded string
     created_at = Column(String, default=lambda: datetime.now(timezone.utc).isoformat())
     is_active = Column(Boolean, default=True, nullable=False)
+    role = Column(String, nullable=False, default="member")  # 'owner' | 'member'; never settable via the API
+    person_id = Column(Integer, ForeignKey("persons.id"), nullable=True)  # unique via partial index (see migration)
+    access_level = Column(String, nullable=False, default="edit")  # 'view' | 'edit' (members only)
+    see_attended_meetings = Column(Boolean, nullable=False, default=False)  # members only
 
 
 class AuthSession(Base):
@@ -465,6 +494,49 @@ class ApiAudit(Base):
     __tablename__ = "api_audit"
     id = Column(Integer, primary_key=True, index=True)
     token_id = Column(Integer, ForeignKey("api_tokens.id"), nullable=False, index=True)
+    ts = Column(String, nullable=False)
+    method = Column(String, nullable=False)
+    path = Column(String, nullable=False)
+    status = Column(Integer, nullable=False)
+    body = Column(Text, default="")  # request JSON, truncated
+
+
+class AccessGrant(Base):
+    """Extra visibility the owner gives a member: kind='project' (the whole
+    subtree's todos, read-only unless assigned) or kind='note' (one note)."""
+    __tablename__ = "access_grants"
+    __table_args__ = (UniqueConstraint("user_id", "kind", "target_id", name="ux_access_grants"),)
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    kind = Column(String, nullable=False)  # 'project' | 'note'
+    target_id = Column(Integer, nullable=False)
+    created_at = Column(String, nullable=False)
+
+
+class UserInvite(Base):
+    """Single-use invite link for a person. Only the sha256 of the token is
+    stored; the raw token is shown to the owner once, at creation."""
+    __tablename__ = "user_invites"
+    id = Column(Integer, primary_key=True, index=True)
+    person_id = Column(Integer, ForeignKey("persons.id"), nullable=False, index=True)
+    token_hash = Column(String, unique=True, nullable=False, index=True)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(String, nullable=False)
+    expires_at = Column(String, nullable=False)
+    accepted_at = Column(String, nullable=True)
+    accepted_user_id = Column(Integer, nullable=True)
+    revoked_at = Column(String, nullable=True)
+
+
+class MemberAudit(Base):
+    """One row per mutating request made by a member account (cookie session).
+
+    api_audit is keyed by token and members hold no tokens, so this is the
+    owner's record of what members changed. Pruned like api_audit.
+    """
+    __tablename__ = "member_audit"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     ts = Column(String, nullable=False)
     method = Column(String, nullable=False)
     path = Column(String, nullable=False)
@@ -585,6 +657,28 @@ with engine.connect() as _conn:
         _conn.exec_driver_sql("CREATE INDEX ix_notes_vault_id ON notes(vault_id)")
         _conn.exec_driver_sql("COMMIT")
         _conn.exec_driver_sql("PRAGMA foreign_keys=ON")
+    # Multi-user: roles + person link on users. Fresh DBs get these from
+    # create_all; the owner backfill for that case lives in lifespan()
+    # (_ensure_owner). Additive only, so an older image still boots.
+    _user_cols = [c["name"] for c in _insp.get_columns("users")]
+    if "role" not in _user_cols:
+        _conn.execute(text("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'member'"))
+        _conn.execute(text("UPDATE users SET role='owner' WHERE id=(SELECT MIN(id) FROM users)"))
+        _conn.commit()
+    for _col, _ddl in (
+        ("person_id", "ALTER TABLE users ADD COLUMN person_id INTEGER REFERENCES persons(id)"),
+        ("access_level", "ALTER TABLE users ADD COLUMN access_level TEXT NOT NULL DEFAULT 'edit'"),
+        ("see_attended_meetings", "ALTER TABLE users ADD COLUMN see_attended_meetings INTEGER NOT NULL DEFAULT 0"),
+    ):
+        if _col not in _user_cols:
+            _conn.execute(text(_ddl))
+            _conn.commit()
+    # SQLite cannot ADD COLUMN ... UNIQUE; a partial unique index is equivalent
+    # and idempotent, so it simply runs on every boot.
+    _conn.execute(text(
+        "CREATE UNIQUE INDEX IF NOT EXISTS ux_users_person_id ON users(person_id) WHERE person_id IS NOT NULL"
+    ))
+    _conn.commit()
 
 
 def get_db():
@@ -703,6 +797,18 @@ def _backfill_person_check_ins(db: Session) -> None:
         WHERE last_check_in_date IS NULL
         """
     ), {"today": today_in_user_tz()})
+
+
+def _ensure_owner(db: Session) -> None:
+    """Exactly one user is the owner. The ALTER TABLE migration promotes the
+    lowest id on upgrade; a fresh DB created by create_all needs the same
+    here. No-op once an owner exists."""
+    if db.query(User).filter(User.role == "owner").first() is not None:
+        return
+    first = db.query(User).order_by(User.id).first()
+    if first is not None:
+        first.role = "owner"
+        db.flush()
 
 
 PROJECT_IMPORTANCE_VALUES = {"low", "medium", "high"}
@@ -999,7 +1105,11 @@ class VaultOut(BaseModel):
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
 
-def todo_to_out(t: Todo) -> TodoOut:
+def todo_to_out(t: Todo, viewer: "Optional[Viewer]" = None) -> TodoOut:
+    """`viewer` is None for the owner (today's full output). For a member the
+    owner's planning state (focus) and cross-references to todos they cannot
+    see (blocker ids) are blanked; `is_blocked` stays truthful."""
+    member = viewer is not None and not viewer.is_owner
     return TodoOut(
         id=t.id,
         title=t.title,
@@ -1013,13 +1123,13 @@ def todo_to_out(t: Todo) -> TodoOut:
         estimated_hours=t.estimated_hours,
         status=t.status,
         is_blocked=any(b.status != "done" and b.deleted_at is None for b in t.blocked_by),
-        is_focused=t.is_focused or False,
-        focus_order=t.focus_order or 0,
+        is_focused=False if member else (t.is_focused or False),
+        focus_order=0 if member else (t.focus_order or 0),
         created_at=t.created_at,
         done_at=t.done_at,
-        deleted_at=t.deleted_at,
+        deleted_at=None if member else t.deleted_at,
         subtodos=[SubTodoOut.model_validate(s) for s in t.subtodos],
-        blocked_by_ids=[b.id for b in t.blocked_by],
+        blocked_by_ids=[] if member else [b.id for b in t.blocked_by],
     )
 
 
@@ -1312,13 +1422,26 @@ def _resync_all_note_tags(db: Session) -> None:
         db.flush()
 
 
-def note_to_out(n: Note) -> NoteOut:
+def _note_links_for_viewer(n: Note, viewer: "Optional[Viewer]", visible_project_ids: Optional[set]):
+    """(todos, projects) a viewer may see referenced from a note. Members only
+    get links to entities in their own visible set; names are never leaked
+    through a note they were given access to."""
+    if viewer is None or viewer.is_owner:
+        return list(n.todos), list(n.projects)
+    todos = [t for t in n.todos if _todo_visible(viewer, t)]
+    projects = [p for p in n.projects if visible_project_ids is not None and p.id in visible_project_ids]
+    return todos, projects
+
+
+def note_to_out(n: Note, viewer: "Optional[Viewer]" = None, visible_project_ids: Optional[set] = None) -> NoteOut:
     md = n.meeting_details
     is_meeting = n.kind == "meeting" or md is not None
+    member = viewer is not None and not viewer.is_owner
+    todos, projects = _note_links_for_viewer(n, viewer, visible_project_ids)
     return NoteOut(
         id=n.id,
         title=n.title,
-        filename=n.filename,
+        filename=None if member else n.filename,
         kind=n.kind,
         content=_read_note_body(n),
         created_at=n.created_at,
@@ -1327,22 +1450,25 @@ def note_to_out(n: Note) -> NoteOut:
         date=md.date if md else None,
         attendee_ids=[p.id for p in n.attendees],
         attendee_names=[p.name for p in n.attendees],
-        project_ids=[p.id for p in n.projects],
-        project_names=[p.name for p in n.projects],
-        todo_ids=[t.id for t in n.todos],
-        todo_titles=[t.title for t in n.todos],
-        transcript=_read_transcript(n.id) if is_meeting else None,
-        audio_files=_list_audio_files(n.id) if is_meeting else [],
-        vault_id=n.vault_id,
-        vault_name=n.vault.name if n.vault else None,
-        vault_root_path=n.vault.root_path if n.vault else None,
-        relative_path=n.relative_path,
+        project_ids=[p.id for p in projects],
+        project_names=[p.name for p in projects],
+        todo_ids=[t.id for t in todos],
+        todo_titles=[t.title for t in todos],
+        # A shared meeting note is shared as written; the verbatim transcript
+        # and the recordings stay with the owner.
+        transcript=None if member else (_read_transcript(n.id) if is_meeting else None),
+        audio_files=[] if member else (_list_audio_files(n.id) if is_meeting else []),
+        vault_id=None if member else n.vault_id,
+        vault_name=None if member else (n.vault.name if n.vault else None),
+        vault_root_path=None if member else (n.vault.root_path if n.vault else None),
+        relative_path=None if member else n.relative_path,
         content_unavailable=_vault_root_missing(n),
     )
 
 
-def note_to_summary(n: Note) -> NoteSummary:
+def note_to_summary(n: Note, viewer: "Optional[Viewer]" = None, visible_project_ids: Optional[set] = None) -> NoteSummary:
     md = n.meeting_details
+    todos, projects = _note_links_for_viewer(n, viewer, visible_project_ids)
     return NoteSummary(
         id=n.id,
         title=n.title,
@@ -1352,8 +1478,8 @@ def note_to_summary(n: Note) -> NoteSummary:
         tags=sorted(t.name for t in n.tags),
         date=md.date if md else None,
         attendee_names=[p.name for p in n.attendees],
-        project_names=[p.name for p in n.projects],
-        todo_count=len(n.todos),
+        project_names=[p.name for p in projects],
+        todo_count=len(todos),
     )
 
 
@@ -1639,9 +1765,14 @@ async def lifespan(_app: FastAPI):
         db.query(AuthSession).filter(
             AuthSession.expires_at <= datetime.now(timezone.utc).isoformat()
         ).delete(synchronize_session=False)
-        db.query(ApiAudit).filter(
-            ApiAudit.ts <= (datetime.now(timezone.utc) - timedelta(days=API_AUDIT_RETENTION_DAYS)).isoformat()
+        _audit_cutoff = (datetime.now(timezone.utc) - timedelta(days=API_AUDIT_RETENTION_DAYS)).isoformat()
+        db.query(ApiAudit).filter(ApiAudit.ts <= _audit_cutoff).delete(synchronize_session=False)
+        db.query(MemberAudit).filter(MemberAudit.ts <= _audit_cutoff).delete(synchronize_session=False)
+        db.query(UserInvite).filter(
+            UserInvite.accepted_at == None,
+            UserInvite.expires_at <= datetime.now(timezone.utc).isoformat(),
         ).delete(synchronize_session=False)
+        _ensure_owner(db)
         db.commit()
         _migrate_meeting_notes_to_unified_notes(db)
         managed_vault = _get_or_create_managed_vault(db)
@@ -1731,7 +1862,7 @@ SESSION_TTL = timedelta(days=90)
 SESSION_REFRESH_INTERVAL = timedelta(hours=1)
 COOKIE_SECURE = os.environ.get("COOKIE_SECURE", "1") == "1"
 
-PUBLIC_PATHS = {"/auth/login", "/healthz"}
+PUBLIC_PATHS = {"/auth/login", "/healthz", "/auth/invite/lookup", "/auth/invite/accept"}
 # Filled by mcp_server at import: /mcp and the OAuth endpoints enforce their
 # own bearer/OAuth auth, so the cookie middleware must let them through.
 MCP_PUBLIC_PATHS: set = set()
@@ -1748,8 +1879,9 @@ _login_failures: dict = defaultdict(deque)
 # Bearer tokens are deny-by-default: a request is allowed only if a
 # (method, path) rule below maps it to a scope the token holds. Anything not
 # listed — auth, config, vaults, backup, deletes, purges, transcription, audio
-# download, token management — stays cookie-session-only. Keep this table and
-# backend/agent_manual.md in sync.
+# download, token management, member administration — stays cookie-session-
+# only. Tokens are also owner-only (_resolve_api_token rejects any other
+# user). Keep this table and backend/agent_manual.md in sync.
 
 API_TOKEN_SCOPES = ("read", "write:todos", "write:persons", "write:notes", "write:daily")
 API_TOKEN_PREFIX = "mgmt_pat_"
@@ -1823,6 +1955,44 @@ def _bearer_required_scope(method: str, path: str) -> Optional[str]:
     return None
 
 
+# ─── Member accounts: deny-by-default route table ────────────────────────────
+#
+# A member (users.role != 'owner') may call only the routes below; everything
+# else — persons, projects CRUD, focus, must-do, daily goals, deletes, notes
+# writes, tags, audio, vaults, backup, tokens, /admin/* — is owner-only with
+# no handler change. Every route listed here must take `viewer` and scope its
+# query (see the Viewer section after get_current_user). Enforced in
+# require_auth for cookie sessions and bearer tokens alike.
+
+_MEMBER_ROUTES = [
+    (m, re.compile(f"^{p}$"))
+    for m, p in (
+        ("GET", r"/auth/me"),
+        ("POST", r"/auth/logout"),
+        ("POST", r"/auth/change-password"),
+        ("GET", r"/config/settings"),
+        ("PUT", r"/config/settings"),
+        ("GET", r"/todos"),
+        ("GET", r"/todos/recently-done"),
+        ("GET", rf"/todos/{_ID}"),
+        ("POST", r"/todos"),
+        ("PUT", rf"/todos/{_ID}"),
+        ("POST", rf"/todos/{_ID}/subtodos"),
+        ("PUT", rf"/subtodos/{_ID}"),
+        ("DELETE", rf"/subtodos/{_ID}"),
+        ("GET", r"/projects"),
+        ("GET", r"/notes"),
+        ("GET", r"/notes/search"),
+        ("GET", rf"/notes/{_ID}"),
+    )
+]
+
+
+def _member_route_allowed(method: str, path: str) -> bool:
+    m = "GET" if method == "HEAD" else method
+    return any(m == mm and pat.match(path) for mm, pat in _MEMBER_ROUTES)
+
+
 def _resolve_api_token(db: Session, raw: str):
     """Return (user, scopes, token_id) for a valid, unexpired, unrevoked token, else (None, [], None)."""
     if not raw.startswith(API_TOKEN_PREFIX):
@@ -1841,7 +2011,9 @@ def _resolve_api_token(db: Session, raw: str):
         row.last_used_at = now.isoformat()
         db.commit()
     user = db.query(User).filter(User.id == row.user_id, User.is_active == True).first()
-    if not user:
+    # Tokens are owner-only for now. This one check covers REST bearer auth,
+    # plain tokens on /mcp (mcp_server.load_access_token) and the CLI script.
+    if not user or user.role != "owner":
         return None, [], None
     db.expunge(user)
     return user, scopes, token_id
@@ -1864,6 +2036,25 @@ def _record_api_audit(token_id: int, method: str, path: str, status: int, body: 
             db.commit()
     except Exception:
         logger.exception("failed to write api audit row")
+
+
+def _record_member_audit(user_id: int, method: str, path: str, status: int, body: bytes) -> None:
+    text_body = body.decode("utf-8", errors="replace")[:API_AUDIT_BODY_MAX]
+    try:
+        with SessionLocal() as db:
+            db.add(
+                MemberAudit(
+                    user_id=user_id,
+                    ts=datetime.now(timezone.utc).isoformat(),
+                    method=method,
+                    path=path,
+                    status=status,
+                    body=text_body,
+                )
+            )
+            db.commit()
+    except Exception:
+        logger.exception("failed to write member audit row")
 
 
 def _is_token_auth(request: Request) -> bool:
@@ -1986,6 +2177,12 @@ async def require_auth(request: Request, call_next):
         request.state.auth_kind = "token"
         request.state.token_scopes = scopes
         request.state.token_id = token_id
+        # _resolve_api_token only returns the owner today; keep the member
+        # table as the second line of defense for when tokens open up.
+        if user.role != "owner" and not _member_route_allowed(request.method, path):
+            if request.method not in ("GET", "HEAD"):
+                _record_api_audit(token_id, request.method, path, 403, await request.body())
+            return JSONResponse({"detail": "Owner only"}, status_code=403)
         if request.method in ("GET", "HEAD"):
             return await call_next(request)
         # Starlette caches the body, so the handler can still read it.
@@ -2006,7 +2203,19 @@ async def require_auth(request: Request, call_next):
         return JSONResponse({"detail": "Not authenticated"}, status_code=401)
     request.state.user = user
     request.state.auth_kind = "session"
-    response = await call_next(request)
+    if user.role != "owner":
+        # Members: deny-by-default route table; every mutation is recorded
+        # for the owner (member_audit), mirroring the bearer branch.
+        if not _member_route_allowed(request.method, path):
+            return JSONResponse({"detail": "Owner only"}, status_code=403)
+        if request.method in ("GET", "HEAD"):
+            response = await call_next(request)
+        else:
+            body = await request.body()
+            response = await call_next(request)
+            _record_member_audit(user.id, request.method, path, response.status_code, body)
+    else:
+        response = await call_next(request)
     if refreshed:
         _set_session_cookie(response, token)
     return response
@@ -2019,6 +2228,187 @@ def get_current_user(request: Request) -> User:
     return user
 
 
+# ─── Authorization: owner vs member (the Viewer) ─────────────────────────────
+#
+# The owner sees and does everything. A member is a login linked to a persons
+# row: by default they see only todos assigned to that person; the owner can
+# widen that with access_grants (whole project subtrees, single notes) and the
+# see_attended_meetings flag. Two layers enforce it: _MEMBER_ROUTES in the
+# middleware (anything unlisted is owner-only), and inside the listed handlers
+# the Viewer built here — queries go through _scope_*, single objects through
+# _visible_*_or_404 / _editable_todo_or_403, and output through the viewer-
+# aware *_to_out helpers. Rule: an id or name appears in member output only if
+# that entity is in the viewer's visible set. Not-visible and non-existent are
+# both 404, so ids cannot be probed; 403 is reserved for visible-but-not-
+# permitted (read-only account, not assigned to you, disallowed field).
+
+
+@dataclass(frozen=True)
+class Viewer:
+    user_id: int
+    is_owner: bool
+    person_id: Optional[int]
+    access_level: str  # 'view' | 'edit'
+    see_attended_meetings: bool
+    project_ids: frozenset  # granted projects expanded to their non-deleted subtrees (members only)
+    note_ids: frozenset  # granted notes (members only)
+
+    @property
+    def can_edit(self) -> bool:
+        return self.is_owner or self.access_level == "edit"
+
+
+def _expand_project_ids(db: Session, roots: set) -> set:
+    """A project grant covers the subtree. BFS with a visited set — parent_id
+    is user-editable, so a cycle is possible."""
+    seen: set = set()
+    frontier = list(roots)
+    while frontier:
+        pid = frontier.pop()
+        if pid in seen:
+            continue
+        proj = db.query(Project).get(pid)
+        if proj is None or proj.deleted_at is not None:
+            continue
+        seen.add(pid)
+        for (child_id,) in db.query(Project.id).filter(Project.parent_id == pid, Project.deleted_at == None).all():
+            frontier.append(child_id)
+    return seen
+
+
+def viewer_for_user(db: Session, user: User) -> Viewer:
+    """Build the Viewer for a request. Never cached beyond the request, so a
+    revoked grant or a downgraded access level applies immediately. Shared by
+    REST (get_viewer) and the MCP tools."""
+    if user.role == "owner":
+        return Viewer(
+            user_id=user.id, is_owner=True, person_id=user.person_id, access_level="edit",
+            see_attended_meetings=True, project_ids=frozenset(), note_ids=frozenset(),
+        )
+    person_id = user.person_id
+    if person_id is not None:
+        person = db.query(Person).get(person_id)
+        if person is None or person.deleted_at is not None:
+            person_id = None  # archived person: only explicit grants remain
+    grants = db.query(AccessGrant).filter(AccessGrant.user_id == user.id).all()
+    project_ids = _expand_project_ids(db, {g.target_id for g in grants if g.kind == "project"})
+    note_ids = {g.target_id for g in grants if g.kind == "note"}
+    return Viewer(
+        user_id=user.id, is_owner=False, person_id=person_id,
+        access_level=user.access_level or "edit",
+        see_attended_meetings=bool(user.see_attended_meetings),
+        project_ids=frozenset(project_ids), note_ids=frozenset(note_ids),
+    )
+
+
+def get_viewer(request: Request, db: Session = Depends(get_db)) -> Viewer:
+    viewer = getattr(request.state, "viewer", None)
+    if viewer is None:
+        viewer = viewer_for_user(db, get_current_user(request))
+        request.state.viewer = viewer
+    return viewer
+
+
+def require_owner(user: User = Depends(get_current_user)) -> User:
+    if user.role != "owner":
+        raise HTTPException(403, "Owner only")
+    return user
+
+
+def _todo_visible(v: Viewer, t: Todo) -> bool:
+    if v.is_owner:
+        return True
+    if t.deleted_at is not None:
+        return False
+    return (v.person_id is not None and t.assignee_id == v.person_id) or t.project_id in v.project_ids
+
+
+def _scope_todos(q, v: Viewer):
+    """Restrict a Todo query to what the viewer may see (owner: unchanged)."""
+    if v.is_owner:
+        return q
+    conds = []
+    if v.person_id is not None:
+        conds.append(Todo.assignee_id == v.person_id)
+    if v.project_ids:
+        conds.append(Todo.project_id.in_(v.project_ids))
+    if not conds:
+        return q.filter(false())
+    return q.filter(Todo.deleted_at == None, or_(*conds))
+
+
+def _visible_todo_or_404(db: Session, v: Viewer, todo_id: int) -> Todo:
+    t = db.query(Todo).get(todo_id)
+    if not t or not _todo_visible(v, t):
+        raise HTTPException(404, "Todo not found")
+    return t
+
+
+def _editable_todo_or_403(db: Session, v: Viewer, todo_id: int) -> Todo:
+    t = _visible_todo_or_404(db, v, todo_id)
+    if v.is_owner:
+        return t
+    if v.access_level != "edit":
+        raise HTTPException(403, "Your account is read-only")
+    if v.person_id is None or t.assignee_id != v.person_id:
+        raise HTTPException(403, "Members may only edit todos assigned to them")
+    return t
+
+
+def _note_visible(v: Viewer, n: Note) -> bool:
+    if v.is_owner:
+        return True
+    if n.hidden:
+        return False
+    if n.id in v.note_ids:
+        return True
+    return bool(
+        v.see_attended_meetings and v.person_id is not None and n.kind == "meeting"
+        and any(p.id == v.person_id for p in n.attendees)
+    )
+
+
+def _scope_notes(q, v: Viewer):
+    """Restrict a Note query to what the viewer may see (owner: unchanged).
+    Applied to the query itself so search never reads an invisible body."""
+    if v.is_owner:
+        return q
+    conds = []
+    if v.note_ids:
+        conds.append(Note.id.in_(v.note_ids))
+    if v.see_attended_meetings and v.person_id is not None:
+        conds.append(and_(Note.kind == "meeting", Note.attendees.any(Person.id == v.person_id)))
+    if not conds:
+        return q.filter(false())
+    return q.filter(Note.hidden == False, or_(*conds))
+
+
+def _visible_note_or_404(db: Session, v: Viewer, note_id: int) -> Note:
+    n = db.query(Note).get(note_id)
+    if not n or not _note_visible(v, n):
+        raise HTTPException(404, "Note not found")
+    return n
+
+
+def _visible_project_ids(db: Session, v: Viewer) -> Optional[set]:
+    """Projects a member may know by name: granted subtrees plus the projects
+    of visible todos (label-only, so lists can be grouped). None for the
+    owner, meaning everything."""
+    if v.is_owner:
+        return None
+    ids = set(v.project_ids)
+    rows = _scope_todos(db.query(Todo.project_id), v).filter(Todo.project_id != None).distinct().all()
+    ids.update(pid for (pid,) in rows)
+    return ids
+
+
+class MemberProjectOut(BaseModel):
+    """What a member sees of a project: enough to group and pick, nothing else."""
+    id: int
+    name: str
+    parent_id: Optional[int] = None
+
+
 class LoginIn(BaseModel):
     username: str
     password: str
@@ -2027,6 +2417,44 @@ class LoginIn(BaseModel):
 class AuthUserOut(BaseModel):
     id: int
     username: str
+    role: str = "owner"  # 'owner' | 'member'
+    person_id: Optional[int] = None
+    person_name: Optional[str] = None
+    access_level: str = "edit"  # members: 'view' | 'edit'
+    see_attended_meetings: bool = False
+
+
+def _auth_user_out(db: Session, user: User) -> dict:
+    person_name = None
+    if user.person_id is not None:
+        person_name = db.query(Person.name).filter(Person.id == user.person_id).scalar()
+    return {
+        "id": user.id,
+        "username": user.username,
+        "role": user.role or "owner",
+        "person_id": user.person_id,
+        "person_name": person_name,
+        "access_level": user.access_level or "edit",
+        "see_attended_meetings": bool(user.see_attended_meetings),
+    }
+
+
+def _start_session(db: Session, user: User, request: Request, response: Response) -> None:
+    """Create an auth_sessions row for `user` and set the cookie (login + invite accept)."""
+    token = secrets.token_urlsafe(32)
+    now = datetime.now(timezone.utc)
+    db.add(
+        AuthSession(
+            user_id=user.id,
+            token_hash=_hash_token(token),
+            created_at=now.isoformat(),
+            last_seen_at=now.isoformat(),
+            expires_at=(now + SESSION_TTL).isoformat(),
+            user_agent=(request.headers.get("user-agent") or "")[:300],
+        )
+    )
+    db.commit()
+    _set_session_cookie(response, token)
 
 
 @app.get("/healthz")
@@ -2065,21 +2493,8 @@ def auth_login(
     if _password_hasher.check_needs_rehash(user.password_hash):
         user.password_hash = _password_hasher.hash(data.password)
 
-    token = secrets.token_urlsafe(32)
-    now = datetime.now(timezone.utc)
-    db.add(
-        AuthSession(
-            user_id=user.id,
-            token_hash=_hash_token(token),
-            created_at=now.isoformat(),
-            last_seen_at=now.isoformat(),
-            expires_at=(now + SESSION_TTL).isoformat(),
-            user_agent=(request.headers.get("user-agent") or "")[:300],
-        )
-    )
-    db.commit()
-    _set_session_cookie(response, token)
-    return {"id": user.id, "username": user.username}
+    _start_session(db, user, request, response)
+    return _auth_user_out(db, user)
 
 
 @app.post("/auth/logout")
@@ -2095,11 +2510,151 @@ def auth_logout(request: Request, response: Response, db: Session = Depends(get_
 
 
 @app.get("/auth/me", response_model=AuthUserOut)
-def auth_me(user: User = Depends(get_current_user)):
-    return {"id": user.id, "username": user.username}
+def auth_me(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    return _auth_user_out(db, user)
 
 
-# ─── API tokens (management is cookie-session-only; see _BEARER_ROUTE_SCOPES) ──
+class ChangePasswordIn(BaseModel):
+    current_password: str
+    new_password: str = Field(..., min_length=8, max_length=200)
+
+
+@app.post("/auth/change-password", summary="Change the signed-in user's password")
+def auth_change_password(
+    data: ChangePasswordIn,
+    request: Request,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Verifies the current password (failures count against the login rate
+    limit) and signs this user out of every other session."""
+    ip = _client_ip(request)
+    if _rate_limited(_login_failures, ip, LOGIN_MAX_FAILURES, LOGIN_WINDOW_SECONDS):
+        raise HTTPException(
+            429, "Too many failed attempts. Try again later.",
+            headers={"Retry-After": str(LOGIN_WINDOW_SECONDS)},
+        )
+    row = db.query(User).get(user.id)
+    try:
+        _password_hasher.verify(row.password_hash, data.current_password)
+    except VerifyMismatchError:
+        _login_failures[ip].append(time.monotonic())
+        time.sleep(0.5)
+        raise HTTPException(400, "Current password is incorrect")
+    row.password_hash = _password_hasher.hash(data.new_password)
+    others = db.query(AuthSession).filter(AuthSession.user_id == row.id)
+    token = request.cookies.get(SESSION_COOKIE)
+    if token:
+        others = others.filter(AuthSession.token_hash != _hash_token(token))
+    others.delete(synchronize_session=False)
+    db.commit()
+    return {"ok": True}
+
+
+# ─── Invites: the public half of member onboarding ──────────────────────────
+#
+# The owner mints a single-use link (POST /admin/invites); the invitee opens
+# /invite/<token> in the SPA, which calls these two routes. The token travels
+# in the request body so it never lands in access logs. Unknown, expired, used
+# and revoked invites are indistinguishable (404), and failures are rate
+# limited per IP like logins.
+
+INVITE_DEFAULT_DAYS = 7
+INVITE_MAX_DAYS = 30
+INVITE_MAX_FAILURES = 5
+_invite_failures: dict = defaultdict(deque)
+USERNAME_RE = re.compile(r"^[A-Za-z0-9._-]{3,32}$")
+
+
+class InviteLookupIn(BaseModel):
+    token: str = Field(..., min_length=1, max_length=200)
+
+
+class InviteAcceptIn(InviteLookupIn):
+    username: str = Field(..., min_length=1, max_length=64)
+    password: str = Field(..., min_length=8, max_length=200)
+
+
+class InviteLookupOut(BaseModel):
+    person_name: str
+    expires_at: str
+
+
+def _load_valid_invite(db: Session, token: str) -> Optional[UserInvite]:
+    inv = db.query(UserInvite).filter(UserInvite.token_hash == _hash_token(token)).first()
+    if not inv or inv.accepted_at or inv.revoked_at:
+        return None
+    if _parse_iso(inv.expires_at) <= datetime.now(timezone.utc):
+        return None
+    person = db.query(Person).get(inv.person_id)
+    if person is None or person.deleted_at is not None:
+        return None
+    if db.query(User).filter(User.person_id == inv.person_id).first() is not None:
+        return None  # the person already has an account
+    return inv
+
+
+def _invite_guard(request: Request) -> str:
+    ip = _client_ip(request)
+    if _rate_limited(_invite_failures, ip, INVITE_MAX_FAILURES, LOGIN_WINDOW_SECONDS):
+        raise HTTPException(
+            429, "Too many attempts. Try again later.",
+            headers={"Retry-After": str(LOGIN_WINDOW_SECONDS)},
+        )
+    return ip
+
+
+def _invite_failure(ip: str) -> HTTPException:
+    _invite_failures[ip].append(time.monotonic())
+    time.sleep(0.5)
+    return HTTPException(404, "This invite link is invalid or has expired")
+
+
+@app.post("/auth/invite/lookup", response_model=InviteLookupOut, summary="Preview an invite link (public)")
+def invite_lookup(data: InviteLookupIn, request: Request, db: Session = Depends(get_db)):
+    ip = _invite_guard(request)
+    inv = _load_valid_invite(db, data.token)
+    if inv is None:
+        raise _invite_failure(ip)
+    person = db.query(Person).get(inv.person_id)
+    return {"person_name": person.name, "expires_at": inv.expires_at}
+
+
+@app.post("/auth/invite/accept", response_model=AuthUserOut, summary="Accept an invite: create the member account and sign in (public)")
+def invite_accept(data: InviteAcceptIn, request: Request, response: Response, db: Session = Depends(get_db)):
+    ip = _invite_guard(request)
+    inv = _load_valid_invite(db, data.token)
+    if inv is None:
+        raise _invite_failure(ip)
+    username = data.username.strip()
+    if not USERNAME_RE.match(username):
+        raise HTTPException(422, "Username must be 3-32 characters: letters, digits, '.', '_' or '-'")
+    if db.query(User).filter(func.lower(User.username) == username.lower()).first() is not None:
+        raise HTTPException(409, "That username is already taken")
+    now = datetime.now(timezone.utc).isoformat()
+    user = User(
+        username=username,
+        password_hash=_password_hasher.hash(data.password),
+        role="member",
+        person_id=inv.person_id,
+        access_level="edit",
+        see_attended_meetings=False,
+        is_active=True,
+    )
+    db.add(user)
+    try:
+        db.flush()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(409, "That username is already taken")
+    inv.accepted_at = now
+    inv.accepted_user_id = user.id
+    db.commit()
+    _start_session(db, user, request, response)
+    return _auth_user_out(db, user)
+
+
+# ─── API tokens (owner only; management is cookie-session-only; see _BEARER_ROUTE_SCOPES) ──
 
 
 class ApiTokenCreate(BaseModel):
@@ -2135,14 +2690,14 @@ def _api_token_out(t: ApiToken) -> dict:
 
 
 @app.get("/api-tokens", response_model=List[ApiTokenOut])
-def list_api_tokens(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def list_api_tokens(user: User = Depends(require_owner), db: Session = Depends(get_db)):
     rows = db.query(ApiToken).filter(ApiToken.user_id == user.id).order_by(ApiToken.id.desc()).all()
     return [_api_token_out(t) for t in rows]
 
 
 @app.post("/api-tokens", response_model=ApiTokenCreated)
 def create_api_token(
-    data: ApiTokenCreate, user: User = Depends(get_current_user), db: Session = Depends(get_db)
+    data: ApiTokenCreate, user: User = Depends(require_owner), db: Session = Depends(get_db)
 ):
     bad = sorted(set(data.scopes) - set(API_TOKEN_SCOPES))
     if bad:
@@ -2177,7 +2732,7 @@ class ApiAuditOut(BaseModel):
 def api_token_audit(
     token_id: int,
     limit: int = Query(50, ge=1, le=500),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_owner),
     db: Session = Depends(get_db),
 ):
     """Most recent mutating requests made with this token, newest first."""
@@ -2199,7 +2754,7 @@ def api_token_audit(
 
 @app.delete("/api-tokens/{token_id}", response_model=ApiTokenOut)
 def revoke_api_token(
-    token_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)
+    token_id: int, user: User = Depends(require_owner), db: Session = Depends(get_db)
 ):
     row = db.query(ApiToken).filter(ApiToken.id == token_id, ApiToken.user_id == user.id).first()
     if not row:
@@ -2209,6 +2764,289 @@ def revoke_api_token(
         db.commit()
         db.refresh(row)
     return _api_token_out(row)
+
+
+# ─── Members administration (owner only; cookie-session only) ────────────────
+#
+# Accounts, invites and grants. None of this is reachable with an API token
+# (not in _BEARER_ROUTE_SCOPES) or by a member (not in _MEMBER_ROUTES).
+
+
+class AdminGrantOut(BaseModel):
+    id: int
+    kind: str  # 'project' | 'note'
+    target_id: int
+    target_name: Optional[str] = None
+
+
+class AdminUserOut(AuthUserOut):
+    is_active: bool = True
+    created_at: Optional[str] = None
+    last_seen_at: Optional[str] = None
+    grants: List[AdminGrantOut] = []
+
+
+class AdminInviteOut(BaseModel):
+    id: int
+    person_id: int
+    person_name: str
+    created_at: str
+    expires_at: str
+
+
+class AdminUsersOut(BaseModel):
+    users: List[AdminUserOut]
+    invites: List[AdminInviteOut]
+
+
+class AdminUserPatch(BaseModel):
+    access_level: Optional[str] = Field(None, pattern="^(view|edit)$")
+    see_attended_meetings: Optional[bool] = None
+    is_active: Optional[bool] = None
+
+
+class AdminPasswordIn(BaseModel):
+    new_password: str = Field(..., min_length=8, max_length=200)
+
+
+class AdminGrantIn(BaseModel):
+    kind: str = Field(..., pattern="^(project|note)$")
+    target_id: int
+
+
+class AdminInviteIn(BaseModel):
+    person_id: int
+    expires_in_days: int = Field(INVITE_DEFAULT_DAYS, ge=1, le=INVITE_MAX_DAYS)
+
+
+class AdminInviteCreated(AdminInviteOut):
+    token: str  # shown exactly once; the client builds `${origin}/invite/${token}`
+
+
+def _grant_target_name(db: Session, g: AccessGrant) -> Optional[str]:
+    if g.kind == "project":
+        return db.query(Project.name).filter(Project.id == g.target_id).scalar()
+    if g.kind == "note":
+        return db.query(Note.title).filter(Note.id == g.target_id).scalar()
+    return None
+
+
+def _admin_user_out(db: Session, u: User) -> dict:
+    grants = db.query(AccessGrant).filter(AccessGrant.user_id == u.id).order_by(AccessGrant.id).all()
+    last_seen = db.query(func.max(AuthSession.last_seen_at)).filter(AuthSession.user_id == u.id).scalar()
+    return {
+        **_auth_user_out(db, u),
+        "is_active": bool(u.is_active),
+        "created_at": u.created_at,
+        "last_seen_at": last_seen,
+        "grants": [
+            {"id": g.id, "kind": g.kind, "target_id": g.target_id, "target_name": _grant_target_name(db, g)}
+            for g in grants
+        ],
+    }
+
+
+def _invite_out(db: Session, inv: UserInvite) -> dict:
+    name = db.query(Person.name).filter(Person.id == inv.person_id).scalar() or "?"
+    return {
+        "id": inv.id, "person_id": inv.person_id, "person_name": name,
+        "created_at": inv.created_at, "expires_at": inv.expires_at,
+    }
+
+
+def _pending_invites(db: Session) -> List[UserInvite]:
+    now = datetime.now(timezone.utc).isoformat()
+    return (
+        db.query(UserInvite)
+        .filter(UserInvite.accepted_at == None, UserInvite.revoked_at == None, UserInvite.expires_at > now)
+        .order_by(UserInvite.id)
+        .all()
+    )
+
+
+def _member_or_404(db: Session, user_id: int) -> User:
+    u = db.query(User).get(user_id)
+    if not u:
+        raise HTTPException(404, "User not found")
+    if u.role == "owner":
+        raise HTTPException(403, "The owner account cannot be managed here")
+    return u
+
+
+def _revoke_user_access(db: Session, u: User) -> None:
+    """Sign the user out everywhere and revoke their tokens (disable / delete / archive)."""
+    db.query(AuthSession).filter(AuthSession.user_id == u.id).delete(synchronize_session=False)
+    now = datetime.now(timezone.utc).isoformat()
+    db.query(ApiToken).filter(ApiToken.user_id == u.id, ApiToken.revoked_at == None).update(
+        {ApiToken.revoked_at: now}, synchronize_session=False
+    )
+
+
+@app.get("/admin/users", response_model=AdminUsersOut, summary="All accounts and pending invites (owner only)")
+def admin_list_users(_owner: User = Depends(require_owner), db: Session = Depends(get_db)):
+    users = db.query(User).order_by(User.id).all()
+    return {
+        "users": [_admin_user_out(db, u) for u in users],
+        "invites": [_invite_out(db, i) for i in _pending_invites(db)],
+    }
+
+
+@app.put("/admin/users/{user_id}", response_model=AdminUserOut, summary="Change a member's access level, meeting visibility or active state")
+def admin_update_user(
+    user_id: int, data: AdminUserPatch, _owner: User = Depends(require_owner), db: Session = Depends(get_db)
+):
+    """Disabling (`is_active=false`) also ends the member's sessions and revokes their tokens."""
+    u = _member_or_404(db, user_id)
+    patch = data.model_dump(exclude_unset=True)
+    for k, v in patch.items():
+        setattr(u, k, v)
+    if patch.get("is_active") is False:
+        _revoke_user_access(db, u)
+    db.commit()
+    db.refresh(u)
+    return _admin_user_out(db, u)
+
+
+@app.post("/admin/users/{user_id}/reset-password", response_model=AdminUserOut, summary="Set a new password for a member")
+def admin_reset_password(
+    user_id: int, data: AdminPasswordIn, _owner: User = Depends(require_owner), db: Session = Depends(get_db)
+):
+    u = _member_or_404(db, user_id)
+    u.password_hash = _password_hasher.hash(data.new_password)
+    db.query(AuthSession).filter(AuthSession.user_id == u.id).delete(synchronize_session=False)
+    db.commit()
+    db.refresh(u)
+    return _admin_user_out(db, u)
+
+
+@app.delete("/admin/users/{user_id}", summary="Remove a member account and everything attached to it")
+def admin_delete_user(user_id: int, _owner: User = Depends(require_owner), db: Session = Depends(get_db)):
+    u = _member_or_404(db, user_id)
+    uid = u.id
+    _revoke_user_access(db, u)
+    db.query(AccessGrant).filter(AccessGrant.user_id == uid).delete(synchronize_session=False)
+    db.query(MemberAudit).filter(MemberAudit.user_id == uid).delete(synchronize_session=False)
+    db.query(UserInvite).filter(UserInvite.accepted_user_id == uid).delete(synchronize_session=False)
+    token_ids = [tid for (tid,) in db.query(ApiToken.id).filter(ApiToken.user_id == uid).all()]
+    if token_ids:
+        db.query(ApiAudit).filter(ApiAudit.token_id.in_(token_ids)).delete(synchronize_session=False)
+        db.query(mcp_server.OAuthGrantToken).filter(
+            mcp_server.OAuthGrantToken.api_token_id.in_(token_ids)
+        ).delete(synchronize_session=False)
+        db.query(mcp_server.OAuthCode).filter(mcp_server.OAuthCode.api_token_id.in_(token_ids)).delete(
+            synchronize_session=False
+        )
+        db.query(ApiToken).filter(ApiToken.id.in_(token_ids)).delete(synchronize_session=False)
+    db.delete(u)
+    db.commit()
+    try:
+        (USER_SETTINGS_DIR / f"{uid}.json").unlink()
+    except FileNotFoundError:
+        pass
+    return {"ok": True}
+
+
+@app.post("/admin/users/{user_id}/grants", response_model=AdminGrantOut, summary="Grant a member visibility of a project subtree or a single note")
+def admin_add_grant(
+    user_id: int, data: AdminGrantIn, _owner: User = Depends(require_owner), db: Session = Depends(get_db)
+):
+    """Idempotent: granting the same target twice returns the existing grant."""
+    u = _member_or_404(db, user_id)
+    if data.kind == "project":
+        target = db.query(Project).get(data.target_id)
+        if target is None or target.deleted_at is not None:
+            raise HTTPException(404, "Project not found")
+    else:
+        target = db.query(Note).get(data.target_id)
+        if target is None or target.hidden:
+            raise HTTPException(404, "Note not found")
+    g = (
+        db.query(AccessGrant)
+        .filter(AccessGrant.user_id == u.id, AccessGrant.kind == data.kind, AccessGrant.target_id == data.target_id)
+        .first()
+    )
+    if g is None:
+        g = AccessGrant(
+            user_id=u.id, kind=data.kind, target_id=data.target_id,
+            created_at=datetime.now(timezone.utc).isoformat(),
+        )
+        db.add(g)
+        db.commit()
+        db.refresh(g)
+    return {"id": g.id, "kind": g.kind, "target_id": g.target_id, "target_name": _grant_target_name(db, g)}
+
+
+@app.delete("/admin/users/{user_id}/grants/{grant_id}", summary="Remove a grant")
+def admin_remove_grant(
+    user_id: int, grant_id: int, _owner: User = Depends(require_owner), db: Session = Depends(get_db)
+):
+    u = _member_or_404(db, user_id)
+    g = db.query(AccessGrant).filter(AccessGrant.id == grant_id, AccessGrant.user_id == u.id).first()
+    if g is not None:
+        db.delete(g)
+        db.commit()
+    return {"ok": True}
+
+
+@app.get("/admin/users/{user_id}/audit", response_model=List[ApiAuditOut], summary="A member's recent mutations, newest first")
+def admin_user_audit(
+    user_id: int,
+    limit: int = Query(50, ge=1, le=500),
+    _owner: User = Depends(require_owner),
+    db: Session = Depends(get_db),
+):
+    u = _member_or_404(db, user_id)
+    rows = (
+        db.query(MemberAudit)
+        .filter(MemberAudit.user_id == u.id)
+        .order_by(MemberAudit.id.desc())
+        .limit(limit)
+        .all()
+    )
+    return [
+        {"id": r.id, "ts": r.ts, "method": r.method, "path": r.path, "status": r.status, "body": r.body or ""}
+        for r in rows
+    ]
+
+
+@app.post("/admin/invites", response_model=AdminInviteCreated, summary="Create a single-use invite link for a person")
+def admin_create_invite(data: AdminInviteIn, owner: User = Depends(require_owner), db: Session = Depends(get_db)):
+    """Replaces any pending invite for the same person. The raw token is
+    returned once; the UI shows `${origin}/invite/${token}`."""
+    person = db.query(Person).get(data.person_id)
+    if person is None or person.deleted_at is not None:
+        raise HTTPException(404, "Person not found")
+    if db.query(User).filter(User.person_id == person.id).first() is not None:
+        raise HTTPException(409, "This person already has an account")
+    now = datetime.now(timezone.utc)
+    db.query(UserInvite).filter(
+        UserInvite.person_id == person.id, UserInvite.accepted_at == None, UserInvite.revoked_at == None
+    ).update({UserInvite.revoked_at: now.isoformat()}, synchronize_session=False)
+    raw = secrets.token_urlsafe(32)
+    inv = UserInvite(
+        person_id=person.id,
+        token_hash=_hash_token(raw),
+        created_by=owner.id,
+        created_at=now.isoformat(),
+        expires_at=(now + timedelta(days=data.expires_in_days)).isoformat(),
+    )
+    db.add(inv)
+    db.commit()
+    db.refresh(inv)
+    return {**_invite_out(db, inv), "token": raw}
+
+
+@app.delete("/admin/invites/{invite_id}", summary="Revoke a pending invite")
+def admin_revoke_invite(invite_id: int, _owner: User = Depends(require_owner), db: Session = Depends(get_db)):
+    inv = db.query(UserInvite).get(invite_id)
+    if inv is None:
+        raise HTTPException(404, "Invite not found")
+    if inv.accepted_at:
+        raise HTTPException(400, "Invite was already accepted")
+    if not inv.revoked_at:
+        inv.revoked_at = datetime.now(timezone.utc).isoformat()
+        db.commit()
+    return {"ok": True}
 
 
 # ─── Agent surface ───────────────────────────────────────────────────────────
@@ -2438,6 +3276,12 @@ def delete_person(person_id: int, db: Session = Depends(get_db)):
         raise HTTPException(404, "Person not found")
     if p.deleted_at is None:
         p.deleted_at = datetime.now(timezone.utc).isoformat()
+        # An archived person's member account is disabled with it; restoring
+        # the person does not silently re-enable the login.
+        linked = db.query(User).filter(User.person_id == p.id, User.role != "owner").first()
+        if linked is not None and linked.is_active:
+            linked.is_active = False
+            _revoke_user_access(db, linked)
     db.commit()
     return {"ok": True}
 
@@ -2459,6 +3303,10 @@ def purge_person(person_id: int, db: Session = Depends(get_db)):
         raise HTTPException(404, "Person not found")
     if p.deleted_at is None:
         raise HTTPException(400, "Person is not archived")
+    # SQLite runs without foreign_keys=ON here, so guard the link explicitly.
+    if db.query(User).filter(User.person_id == p.id).first() is not None:
+        raise HTTPException(409, "A user account is linked to this person; remove the account first")
+    db.query(UserInvite).filter(UserInvite.person_id == p.id).delete(synchronize_session=False)
     db.delete(p)
     db.commit()
     return {"ok": True}
@@ -2537,13 +3385,26 @@ def person_progress(
 
 
 @app.get("/projects", response_model=List[ProjectOut])
-def list_projects(db: Session = Depends(get_db)):
-    return (
+def list_projects(db: Session = Depends(get_db), viewer: Viewer = Depends(get_viewer)):
+    """Owner: every project. Member: only the projects they can see, as
+    MemberProjectOut (id, name, parent_id) — no description, notes or dates."""
+    rows = (
         db.query(Project)
         .filter(Project.deleted_at == None)
         .order_by(Project.display_order, Project.id)
         .all()
     )
+    if viewer.is_owner:
+        return rows
+    visible = _visible_project_ids(db, viewer) or set()
+    out = [
+        MemberProjectOut(id=p.id, name=p.name, parent_id=p.parent_id if p.parent_id in visible else None)
+        for p in rows
+        if p.id in visible
+    ]
+    # Returned as a Response on purpose: the member shape must not be widened
+    # to ProjectOut's nulled fields by response_model validation.
+    return JSONResponse(jsonable_encoder(out))
 
 
 @app.get("/projects/tree", response_model=List[ProjectTreeOut])
@@ -2663,13 +3524,17 @@ def list_todos(
     exclude_done: bool = Query(False),
     is_focused: Optional[bool] = Query(None),
     db: Session = Depends(get_db),
+    viewer: Viewer = Depends(get_viewer),
 ):
-    q = db.query(Todo).filter(Todo.deleted_at == None)
+    """Members get only the todos visible to them (assigned to their person
+    or inside a granted project); the `is_focused` filter is ignored for
+    them because focus is the owner's planning state."""
+    q = _scope_todos(db.query(Todo).filter(Todo.deleted_at == None), viewer)
     if assignee_id is not None:
         q = q.filter(Todo.assignee_id == assignee_id)
     if project_id is not None:
         q = q.filter(Todo.project_id == project_id)
-    if is_focused is not None:
+    if is_focused is not None and viewer.is_owner:
         q = q.filter(Todo.is_focused == is_focused)
     if exclude_done:
         q = q.filter(Todo.status != "done")
@@ -2682,7 +3547,7 @@ def list_todos(
         if status is not None:
             q = q.filter(Todo.status == status)
         todos = q.all()
-    return [todo_to_out(t) for t in todos]
+    return [todo_to_out(t, viewer) for t in todos]
 
 
 @app.get("/todos/recently-done", response_model=List[TodoOut])
@@ -2690,8 +3555,9 @@ def recently_done_todos(
     limit: int = Query(50),
     since: Optional[datetime] = Query(None),
     db: Session = Depends(get_db),
+    viewer: Viewer = Depends(get_viewer),
 ):
-    q = db.query(Todo).filter(Todo.status == "done", Todo.deleted_at == None)
+    q = _scope_todos(db.query(Todo).filter(Todo.status == "done", Todo.deleted_at == None), viewer)
     if since is not None:
         q = q.filter(Todo.done_at >= since.isoformat())
     todos = (
@@ -2699,7 +3565,7 @@ def recently_done_todos(
         .limit(limit)
         .all()
     )
-    return [todo_to_out(t) for t in todos]
+    return [todo_to_out(t, viewer) for t in todos]
 
 
 @app.get("/todos/deleted", response_model=List[TodoOut])
@@ -2759,22 +3625,56 @@ def set_focus_list(data: FocusListIn, db: Session = Depends(get_db)):
 
 
 @app.get("/todos/{todo_id}", response_model=TodoOut)
-def get_todo(todo_id: int, db: Session = Depends(get_db)):
-    t = db.query(Todo).get(todo_id)
-    if not t:
-        raise HTTPException(404, "Todo not found")
-    return todo_to_out(t)
+def get_todo(todo_id: int, db: Session = Depends(get_db), viewer: Viewer = Depends(get_viewer)):
+    t = _visible_todo_or_404(db, viewer, todo_id)
+    return todo_to_out(t, viewer)
 
 
 DEPRECATED_STATUSES = {"in_progress", "in-progress"}
 
+# Members have full edit of todos assigned to them, minus anything that is the
+# owner's call: who it is assigned to, the focus list, blockers, and moving it
+# onto a project they cannot see.
+MEMBER_TODO_FIELDS = {"title", "description", "deadline", "importance", "estimated_hours", "status", "project_id"}
+
+
+def _member_todo_payload_check(db: Session, v: Viewer, payload: dict, creating: bool) -> None:
+    if v.access_level != "edit":
+        raise HTTPException(403, "Your account is read-only")
+    if v.person_id is None:
+        raise HTTPException(403, "Your account is not linked to a person")
+    if creating:
+        if payload.get("assignee_id") not in (None, v.person_id):
+            raise HTTPException(403, "Members can only create todos assigned to themselves")
+        if payload.get("is_focused"):
+            raise HTTPException(403, "The focus list is managed by the owner")
+        if payload.get("blocked_by_ids"):
+            raise HTTPException(403, "Blockers are managed by the owner")
+    else:
+        extra = sorted(set(payload) - MEMBER_TODO_FIELDS)
+        if extra:
+            raise HTTPException(
+                403, f"Members may only update {sorted(MEMBER_TODO_FIELDS)} on their todos; got {extra}"
+            )
+    if payload.get("project_id") is not None:
+        visible = _visible_project_ids(db, v) or set()
+        if payload["project_id"] not in visible:
+            raise HTTPException(403, "That project is not visible to you")
+
 
 @app.post("/todos", response_model=TodoOut)
-def create_todo(data: TodoCreate, db: Session = Depends(get_db)):
+def create_todo(data: TodoCreate, db: Session = Depends(get_db), viewer: Viewer = Depends(get_viewer)):
+    """Members can create todos, always assigned to themselves and never focused."""
     if data.status in DEPRECATED_STATUSES:
         raise HTTPException(400, "Status 'in-progress' is deprecated; use 'todo'")
+    if not viewer.is_owner:
+        _member_todo_payload_check(db, viewer, data.model_dump(exclude_unset=True), creating=True)
     blocked_by_ids = data.blocked_by_ids
     todo_data = data.model_dump(exclude={"blocked_by_ids"})
+    if not viewer.is_owner:
+        todo_data["assignee_id"] = viewer.person_id
+        todo_data["is_focused"] = False
+        blocked_by_ids = []
     t = Todo(**todo_data)
     if blocked_by_ids:
         blockers = db.query(Todo).filter(Todo.id.in_(blocked_by_ids)).all()
@@ -2782,17 +3682,19 @@ def create_todo(data: TodoCreate, db: Session = Depends(get_db)):
     db.add(t)
     db.commit()
     db.refresh(t)
-    return todo_to_out(t)
+    return todo_to_out(t, viewer)
 
 
 @app.put("/todos/{todo_id}", response_model=TodoOut)
-def update_todo(todo_id: int, data: TodoUpdate, db: Session = Depends(get_db)):
-    t = db.query(Todo).get(todo_id)
-    if not t:
-        raise HTTPException(404, "Todo not found")
+def update_todo(todo_id: int, data: TodoUpdate, db: Session = Depends(get_db), viewer: Viewer = Depends(get_viewer)):
+    """Members: only todos assigned to them, only MEMBER_TODO_FIELDS (403 names
+    the offending fields); a todo they cannot see is a 404."""
+    t = _editable_todo_or_403(db, viewer, todo_id)
     update_data = data.model_dump(exclude_unset=True)
     if update_data.get("status") in DEPRECATED_STATUSES:
         raise HTTPException(400, "Status 'in-progress' is deprecated; use 'todo'")
+    if not viewer.is_owner:
+        _member_todo_payload_check(db, viewer, update_data, creating=False)
     blocked_by_ids = update_data.pop("blocked_by_ids", None)
     old_status = t.status
     for k, v in update_data.items():
@@ -2808,7 +3710,7 @@ def update_todo(todo_id: int, data: TodoUpdate, db: Session = Depends(get_db)):
         t.blocked_by = blockers
     db.commit()
     db.refresh(t)
-    return todo_to_out(t)
+    return todo_to_out(t, viewer)
 
 
 @app.delete("/todos/{todo_id}")
@@ -2847,11 +3749,11 @@ def purge_todo(todo_id: int, db: Session = Depends(get_db)):
 
 
 @app.post("/todos/{todo_id}/subtodos", response_model=SubTodoOut)
-def create_subtodo(todo_id: int, data: SubTodoCreate, db: Session = Depends(get_db)):
-    t = db.query(Todo).get(todo_id)
-    if not t:
-        raise HTTPException(404, "Todo not found")
-    s = SubTodo(todo_id=todo_id, **data.model_dump())
+def create_subtodo(
+    todo_id: int, data: SubTodoCreate, db: Session = Depends(get_db), viewer: Viewer = Depends(get_viewer)
+):
+    t = _editable_todo_or_403(db, viewer, todo_id)
+    s = SubTodo(todo_id=t.id, **data.model_dump())
     db.add(s)
     db.commit()
     db.refresh(s)
@@ -2859,10 +3761,13 @@ def create_subtodo(todo_id: int, data: SubTodoCreate, db: Session = Depends(get_
 
 
 @app.put("/subtodos/{subtodo_id}", response_model=SubTodoOut)
-def update_subtodo(subtodo_id: int, data: SubTodoUpdate, db: Session = Depends(get_db)):
+def update_subtodo(
+    subtodo_id: int, data: SubTodoUpdate, db: Session = Depends(get_db), viewer: Viewer = Depends(get_viewer)
+):
     s = db.query(SubTodo).get(subtodo_id)
     if not s:
         raise HTTPException(404, "SubTodo not found")
+    _editable_todo_or_403(db, viewer, s.todo_id)  # subtodos are addressed by id: always check the parent
     for k, v in data.model_dump(exclude_none=True).items():
         setattr(s, k, v)
     db.commit()
@@ -2871,10 +3776,11 @@ def update_subtodo(subtodo_id: int, data: SubTodoUpdate, db: Session = Depends(g
 
 
 @app.delete("/subtodos/{subtodo_id}")
-def delete_subtodo(subtodo_id: int, db: Session = Depends(get_db)):
+def delete_subtodo(subtodo_id: int, db: Session = Depends(get_db), viewer: Viewer = Depends(get_viewer)):
     s = db.query(SubTodo).get(subtodo_id)
     if not s:
         raise HTTPException(404, "SubTodo not found")
+    _editable_todo_or_403(db, viewer, s.todo_id)
     db.delete(s)
     db.commit()
     return {"ok": True}
@@ -3113,13 +4019,17 @@ def rescan_vault(vault_id: int, db: Session = Depends(get_db)):
 # ─── Notes (unified personal + meeting note model) ──────────────────────────
 
 
-def _search_notes(db: Session, q: str, kind: Optional[str], hidden: bool) -> List[NoteSearchResult]:
+def _search_notes(
+    db: Session, q: str, kind: Optional[str], hidden: bool, viewer: "Optional[Viewer]" = None
+) -> List[NoteSearchResult]:
     q_lower = q.lower()
     query = (
         db.query(Note)
         .options(joinedload(Note.meeting_details))
         .filter(Note.hidden == hidden)
     )
+    if viewer is not None:
+        query = _scope_notes(query, viewer)  # before any body is read from disk
     if kind is not None:
         query = query.filter(Note.kind == kind)
     notes = query.order_by(Note.updated_at.desc()).all()
@@ -3147,8 +4057,9 @@ def search_notes(
     q: str = Query(..., min_length=1),
     kind: Optional[str] = Query(None),
     db: Session = Depends(get_db),
+    viewer: Viewer = Depends(get_viewer),
 ):
-    return _search_notes(db, q, kind, hidden=False)
+    return _search_notes(db, q, kind, hidden=False, viewer=viewer)
 
 
 @app.get("/notes-hidden", response_model=List[NoteSummary])
@@ -3183,8 +4094,10 @@ def list_notes(
     date_to: Optional[str] = Query(None),
     vault_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
+    viewer: Viewer = Depends(get_viewer),
 ):
-    _scan_all_vaults_if_stale(db)
+    if viewer.is_owner:
+        _scan_all_vaults_if_stale(db)  # a member GET must never write (scan stamps files)
     q = (
         db.query(Note)
         .options(
@@ -3196,6 +4109,7 @@ def list_notes(
         )
         .filter(Note.hidden == False)
     )
+    q = _scope_notes(q, viewer)
     if kind is not None:
         q = q.filter(Note.kind == kind)
     if tag is not None:
@@ -3222,7 +4136,8 @@ def list_notes(
         ).all()
     else:
         notes = q.order_by(Note.updated_at.desc()).all()
-    return [note_to_summary(n) for n in notes]
+    visible_projects = _visible_project_ids(db, viewer)
+    return [note_to_summary(n, viewer, visible_projects) for n in notes]
 
 
 # ─── Tags ───────────────────────────────────────────────────────────────────
@@ -3247,11 +4162,11 @@ def list_tags(
 
 
 @app.get("/notes/{note_id}", response_model=NoteOut)
-def get_note(note_id: int, db: Session = Depends(get_db)):
-    n = db.query(Note).get(note_id)
-    if not n:
-        raise HTTPException(404, "Note not found")
-    return note_to_out(n)
+def get_note(note_id: int, db: Session = Depends(get_db), viewer: Viewer = Depends(get_viewer)):
+    """Members see only notes shared with them or (if enabled) meetings they
+    attended, without transcript, audio or vault paths."""
+    n = _visible_note_or_404(db, viewer, note_id)
+    return note_to_out(n, viewer, _visible_project_ids(db, viewer))
 
 
 @app.post("/notes", response_model=NoteOut)
@@ -3712,14 +4627,14 @@ def _validate_patch(patch: UserSettingsPatch) -> None:
 
 
 @app.get("/config/settings")
-def get_settings_endpoint():
-    return _merged_user_settings()
+def get_settings_endpoint(user: User = Depends(get_current_user)):
+    return _merged_user_settings(user)
 
 
 @app.put("/config/settings")
-def update_settings_endpoint(patch: UserSettingsPatch):
+def update_settings_endpoint(patch: UserSettingsPatch, user: User = Depends(get_current_user)):
     _validate_patch(patch)
-    stored = _load_user_settings()
+    stored = _load_user_settings(user)
     data = patch.model_dump(exclude_unset=True)
     if "todo_defaults" in data and data["todo_defaults"] is not None:
         existing_td = stored.get("todo_defaults") or {}
@@ -3730,8 +4645,8 @@ def update_settings_endpoint(patch: UserSettingsPatch):
         stored["hotkeys"] = {**existing_hk, **data["hotkeys"]}
         del data["hotkeys"]
     stored.update(data)
-    _save_user_settings(stored)
-    return _merged_user_settings()
+    _save_user_settings(stored, user)
+    return _merged_user_settings(user)
 
 
 # ─── Backup (manual trigger) ─────────────────────────────────────────────────
