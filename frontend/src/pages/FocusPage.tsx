@@ -1,13 +1,13 @@
 import React, { useState, useRef, useCallback } from 'react'
 import { ChevronUp, ChevronDown } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { fetchTodos, fetchProjects, updateTodo, createTodo, reorderFocus, fetchMustDoItems, createMustDoItem, updateMustDoItem, deleteMustDoItem } from '../api'
+import { fetchTodos, fetchProjects, fetchPersons, updateTodo, createTodo, reorderFocus, fetchMustDoItems, createMustDoItem, updateMustDoItem, deleteMustDoItem } from '../api'
 import type { Todo, Project } from '../types'
 import type { MustDoItem } from '../api'
 import TodoCard from '../components/TodoCard'
 import TodoModal from '../components/TodoModal'
 import BulkActionBar from '../components/BulkActionBar'
-import { useTimezone, useHotkeys } from '../SettingsContext'
+import { useTimezone, useHotkeys, useTodoDefaults, resolveAssigneeId } from '../SettingsContext'
 import { getTodayString } from '../dateUtils'
 import { useHotkey } from '../hooks/useHotkey'
 
@@ -47,6 +47,18 @@ function groupTodosNested(todos: Todo[]): NestedGroup[] {
 
 export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => void }) {
  const { timezone } = useTimezone()
+ const { defaults } = useTodoDefaults()
+ const { data: persons = [] } = useQuery({ queryKey: ['persons'], queryFn: fetchPersons })
+ // Payload for quick-created todos, honouring Settings → Todo defaults
+ // (assignee by name, importance, estimated hours, deadline-to-today).
+ const defaultTodoPayload = useCallback((title: string) => ({
+ title,
+ status: 'todo',
+ importance: defaults.importance,
+ estimated_hours: parseFloat(defaults.estimatedHours) || 1,
+ assignee_id: resolveAssigneeId(defaults.assigneeName, persons),
+ deadline: defaults.deadlineToToday ? getTodayString(timezone) : undefined,
+ }), [defaults, persons, timezone])
  const [selectedProject, setSelectedProject] = useState<string>(() => {
  return localStorage.getItem('focusSelectedProject') || ''
  })
@@ -187,12 +199,12 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  const convertToTodo = useCallback(async (item: MustDoItem) => {
  const cached = queryClient.getQueryData<Todo[]>(['todos', { is_focused: true }]) || []
  const maxOrder = cached.reduce((max, t) => Math.max(max, t.focus_order), 0)
- const todo = await createTodo({ title: item.text, status: 'todo', importance: 'medium', estimated_hours: 1 })
+ const todo = await createTodo(defaultTodoPayload(item.text))
  await updateTodo(todo.id, { is_focused: true, focus_order: maxOrder + 1 })
  await updateMustDoItem(item.id, { todo_id: todo.id })
  queryClient.invalidateQueries({ queryKey: ['must-do', todayKey] })
  queryClient.invalidateQueries({ queryKey: ['todos'] })
- }, [queryClient, todayKey])
+ }, [queryClient, todayKey, defaultTodoPayload])
 
  const { data: todos = [], isLoading } = useQuery<Todo[]>({
  queryKey: ['todos', { is_focused: true }],
@@ -220,7 +232,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  const addFocusedTodo = useMutation({
  mutationFn: async (title: string) => {
  const maxOrder = todos.reduce((max, t) => Math.max(max, t.focus_order), 0)
- const todo = await createTodo({ title, status: 'todo', importance: 'medium', estimated_hours: 1 })
+ const todo = await createTodo(defaultTodoPayload(title))
  await updateTodo(todo.id, { is_focused: true, focus_order: maxOrder + 1 })
  return todo
  },
@@ -229,11 +241,15 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  await queryClient.cancelQueries({ queryKey: ['todos', { is_focused: true }] })
  const previous = queryClient.getQueryData<Todo[]>(['todos', { is_focused: true }])
  const maxOrder = (previous ?? []).reduce((max, t) => Math.max(max, t.focus_order), 0)
+ const payload = defaultTodoPayload(title)
  const temp: Todo = {
  id: -Date.now(), // placeholder until refetch delivers the server row
  title,
- importance: 'medium',
- estimated_hours: 1,
+ importance: payload.importance,
+ estimated_hours: payload.estimated_hours,
+ assignee_id: payload.assignee_id ?? undefined,
+ assignee_name: persons.find((p) => p.id === payload.assignee_id)?.name,
+ deadline: payload.deadline,
  status: 'todo',
  is_blocked: false,
  is_focused: true,
