@@ -1,4 +1,4 @@
-import { LayoutDashboard, CheckSquare, FolderKanban, Users, CheckCircle2, Crosshair, Settings, FileText, Target, BarChart3, Trash2, NotebookPen, ListChecks } from 'lucide-react'
+import { LayoutDashboard, CheckSquare, FolderKanban, Users, CheckCircle2, Crosshair, Settings, FileText, Target, BarChart3, Trash2, NotebookPen, ListChecks, HeartHandshake } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
 export interface NavItem {
@@ -15,6 +15,7 @@ export const navItems: NavItem[] = [
   { to: '/todos', label: 'Todos', icon: CheckSquare, end: false },
   { to: '/projects', label: 'Projects', icon: FolderKanban, end: false },
   { to: '/people', label: 'People', icon: Users, end: false },
+  { to: '/social', label: 'Social', icon: HeartHandshake, end: false },
   { to: '/meeting-notes', label: 'Meetings', icon: FileText, end: false },
   { to: '/notes', label: 'Notes', icon: NotebookPen, end: false },
   { to: '/weekly-goals', label: 'Weekly Goals', icon: Target, end: false },

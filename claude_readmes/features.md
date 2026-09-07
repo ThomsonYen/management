@@ -115,6 +115,22 @@ Add a "Copy as markdown" button on every todo so the full record can be pasted i
 
 **Why:** Todos are often the unit of communication ("here's what I'm tracking on this") but there's no friction-free way to lift one out of the app. Copying as markdown makes the app a better citizen of the user's broader workflow without coupling to any specific destination.
 
+## 12. Social: friends and catch-up cadence ✅ Implemented
+
+A `Social` section alongside Projects/People/Meetings for personal relationships, kept deliberately outside the work graph.
+
+- `friends` table (name, notes, `cadence_days`, `last_hangout_date`) — **not** a flag on `persons`, which is the FK target for todo assignees, meeting attendees and `users.person_id`; friends must never appear in assignee pickers or the account-linking UI.
+- `hangouts` + `hangout_friends` many-to-many, so one dinner logs everyone who was there and advances all their cadences at once.
+- Status is derived server-side on every friend: `planned` / `needs_confirm` / `never` / `ok` / `due_soon` (≥80% of the cadence) / `slipping` (≥95%) / `overdue`, plus `days_since_hangout`, `days_until_due` and `cadence_tier`. The 80% lead time is the point — a 30-day cadence nudges on day 24, while there is still time to act — and the tone escalates at each tier (all wording lives in `frontend/src/socialCopy.ts`).
+- **Plans.** A future-dated hangout is a plan: it mutes the nudge, because reaching out is the thing the nudge was asking for. Once its date passes the friend becomes `needs_confirm` and nudging resumes until someone answers — confirm it (it becomes history and advances the cadence) or delete it. Only `happened` entries count toward `last_hangout_date`, so a plan that falls through can never silently mute the nudge.
+- `last_hangout_date` is recomputed from the log rather than being a forward-only watermark like person check-ins: the hangout log is the only source of truth, so deleting or re-dating an entry rolls it back. Future-dated hangouts never count.
+- Dashboard card for overdue/due-soon friends; `never` stays on the Social page as a prompt rather than an alert.
+- Owner-only (absent from `_MEMBER_ROUTES`); `write:social` scope for tokens and five MCP tools.
+
+**Why:** the check-in cadence machinery already existed for direct reports and worked well; personal relationships drift for exactly the same reason work relationships do, and the same nudge fixes it.
+
+**Not built:** real push notifications. There is no push infrastructure in the app at all (no VAPID, no service-worker push handler, no scheduler job), so reminders currently surface only when the app is open. See the note in the implementation order below.
+
 ## Implementation order
 
 Suggested sequence when picking these up:
@@ -127,3 +143,5 @@ Suggested sequence when picking these up:
 6. Structured meeting extraction (feeds the memory docs automatically)
 7. Weekly retrospective, natural-language capture, smart triage (quality-of-life on top)
 8. Semantic search (capstone once there's enough structured content to index)
+
+Also open: **push notifications for Social (#12)**. The feature ships in-app only — there is no push infrastructure anywhere in the codebase. Adding it means a `push_subscriptions` table, VAPID keys as a Fly secret, `pywebpush`, a daily scheduler job (the backup loop in `backend/backup/scheduler.py` is the template), and switching `vite-plugin-pwa` from `generateSW` to `injectManifest` so a custom `push` handler can exist. On iOS it only works once the PWA is added to the Home Screen (16.4+). A daily email digest is the cheaper alternative — no service-worker changes, but it needs an email provider key.
