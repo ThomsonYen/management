@@ -8,7 +8,10 @@ const ZWSP = '​'
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
-type LineType = 'todo' | 'list' | 'header' | 'paragraph'
+type LineType = 'todo' | 'list' | 'olist' | 'header' | 'paragraph'
+
+/** Marker style of an ordered list line: `1.`, `a.` or `A.` */
+type OrderedStyle = 'number' | 'alpha' | 'Alpha'
 
 interface ParsedLine {
  type: LineType
@@ -16,6 +19,36 @@ interface ParsedLine {
  text: string
  done?: boolean
  headerLevel?: number
+ /** Ordered lists only */
+ olStyle?: OrderedStyle
+ /** Ordered lists only — 1-based position within its run (recomputed by renumberOrderedLists) */
+ ordinal?: number
+}
+
+// ─── Ordered-list markers ──────────────────────────────────────────────────
+
+/** Matches `1.`, `12)`, `a.`, `B.` markers followed by at least one space. */
+const ORDERED_MARKER_RE = /^(\d{1,3}|[a-z]|[A-Z])[.)]\s+(.*)/
+
+function parseOrderedMarker(marker: string): { olStyle: OrderedStyle; ordinal: number } {
+ if (/^\d+$/.test(marker)) return { olStyle: 'number', ordinal: Math.max(1, parseInt(marker, 10) || 1) }
+ if (marker >= 'a' && marker <= 'z') return { olStyle: 'alpha', ordinal: marker.charCodeAt(0) - 96 }
+ return { olStyle: 'Alpha', ordinal: marker.charCodeAt(0) - 64 }
+}
+
+/** 1 → "1" / "a" / "A"; 27 → "aa" (spreadsheet-style) for lettered lists. */
+function formatOrdinal(style: OrderedStyle, n: number): string {
+ const v = Math.max(1, Math.floor(n))
+ if (style === 'number') return String(v)
+ const base = style === 'alpha' ? 97 : 65
+ let out = ''
+ let k = v
+ while (k > 0) {
+ k -= 1
+ out = String.fromCharCode(base + (k % 26)) + out
+ k = Math.floor(k / 26)
+ }
+ return out
 }
 
 export interface MarkdownEditorProps {
@@ -48,15 +81,25 @@ function parseLine(line: string): ParsedLine {
  if (listMatch) {
  return { type: 'list', indent: Math.floor(listMatch[1].length / 2), text: listMatch[2] }
  }
+ const olMatch = line.match(/^(\s*)(\d{1,3}|[a-z]|[A-Z])[.)]\s+(.*)/)
+ if (olMatch) {
+ return {
+ type: 'olist',
+ indent: Math.floor(olMatch[1].length / 2),
+ text: olMatch[3],
+ ...parseOrderedMarker(olMatch[2]),
+ }
+ }
  const m = /^(\s*)(.*)$/.exec(line)!
  return { type: 'paragraph', indent: Math.floor(m[1].length / 2), text: m[2] }
 }
 
 function serializeLine(p: ParsedLine): string {
- const ind = ' '.repeat(p.indent)
+ const ind = '  '.repeat(p.indent)
  switch (p.type) {
  case 'todo': return `${ind}- [${p.done ? 'x' : ' '}] ${p.text}`
  case 'list': return `${ind}- ${p.text}`
+ case 'olist': return `${ind}${formatOrdinal(p.olStyle ?? 'number', p.ordinal ?? 1)}. ${p.text}`
  case 'header': return `${'#'.repeat(p.headerLevel ?? 2)} ${p.text}`
  case 'paragraph': return ind + p.text
  }
@@ -68,6 +111,7 @@ function lineWrapperClass(p: ParsedLine): string {
  switch (p.type) {
  case 'todo': return 'md-line flex items-start gap-2.5'
  case 'list': return 'md-line flex items-start gap-2 pl-0.5'
+ case 'olist': return 'md-line flex items-start gap-2 pl-0.5'
  case 'header': return 'md-line text-xs font-bold text-fg-muted tracking-wide mt-2 mb-0.5'
  case 'paragraph': return 'md-line'
  }
@@ -81,6 +125,7 @@ function textElClass(p: ParsedLine): string {
  ? `${base} flex-1 text-sm leading-relaxed line-through text-fg-subtle dark:text-fg-muted`
  : `${base} flex-1 text-sm leading-relaxed text-fg`
  case 'list': return `${base} flex-1 text-sm text-fg-muted`
+ case 'olist': return `${base} flex-1 text-sm text-fg-muted`
  case 'header': return `${base}`
  case 'paragraph': return `${base} block text-sm text-fg-muted leading-relaxed`
  }
@@ -114,6 +159,15 @@ function buildBulletPrefix(): HTMLElement {
  return span
 }
 
+function buildOrderedPrefix(style: OrderedStyle, ordinal: number): HTMLElement {
+ const span = document.createElement('span')
+ span.setAttribute('contenteditable', 'false')
+ span.setAttribute('data-prefix', 'ordinal')
+ span.className = 'md-ordinal flex-shrink-0 text-fg-subtle mt-px text-xs tabular-nums select-none min-w-[1.1rem] text-right'
+ span.textContent = `${formatOrdinal(style, ordinal)}.`
+ return span
+}
+
 function buildLineEl(p: ParsedLine): HTMLDivElement {
  const div = document.createElement('div')
  div.setAttribute('data-line', '')
@@ -121,11 +175,16 @@ function buildLineEl(p: ParsedLine): HTMLDivElement {
  div.setAttribute('data-indent', String(p.indent))
  if (p.type === 'todo') div.setAttribute('data-done', String(!!p.done))
  if (p.type === 'header') div.setAttribute('data-level', String(p.headerLevel ?? 2))
+ if (p.type === 'olist') {
+ div.setAttribute('data-olstyle', p.olStyle ?? 'number')
+ div.setAttribute('data-ord', String(p.ordinal ?? 1))
+ }
  div.className = lineWrapperClass(p)
  if (p.indent > 0) div.style.paddingLeft = `${p.indent * INDENT_PX}px`
 
  if (p.type === 'todo') div.appendChild(buildCheckboxPrefix(!!p.done))
  else if (p.type === 'list') div.appendChild(buildBulletPrefix())
+ else if (p.type === 'olist') div.appendChild(buildOrderedPrefix(p.olStyle ?? 'number', p.ordinal ?? 1))
 
  const textEl = document.createElement('span')
  textEl.className = textElClass(p)
@@ -149,10 +208,54 @@ function readLineEl(lineEl: HTMLElement): ParsedLine {
  const out: ParsedLine = { type, indent, text }
  if (type === 'todo') out.done = lineEl.getAttribute('data-done') === 'true'
  if (type === 'header') out.headerLevel = parseInt(lineEl.getAttribute('data-level') ?? '2') || 2
+ if (type === 'olist') {
+ const st = lineEl.getAttribute('data-olstyle')
+ out.olStyle = st === 'alpha' || st === 'Alpha' ? st : 'number'
+ out.ordinal = parseInt(lineEl.getAttribute('data-ord') ?? '1') || 1
+ }
  return out
 }
 
+/**
+ * Recompute the ordinal of every ordered-list line from its position: a line
+ * continues the run of the nearest preceding line at the same indent when that
+ * line is an ordered item of the same style (deeper-indented lines in between
+ * are nested content and are skipped); anything else restarts the count at 1.
+ * Only the non-editable prefix spans are touched, so the caret is unaffected.
+ */
+function renumberOrderedLists(host: HTMLDivElement): void {
+ const lines = Array.from(host.children).filter(
+ (c): c is HTMLDivElement => c instanceof HTMLDivElement && c.hasAttribute('data-line'),
+ )
+ for (let i = 0; i < lines.length; i++) {
+ const el = lines[i]
+ if (el.getAttribute('data-type') !== 'olist') continue
+ const indent = parseInt(el.getAttribute('data-indent') ?? '0') || 0
+ const style = el.getAttribute('data-olstyle') ?? 'number'
+ let ordinal = 1
+ for (let j = i - 1; j >= 0; j--) {
+ const prev = lines[j]
+ const prevIndent = parseInt(prev.getAttribute('data-indent') ?? '0') || 0
+ if (prevIndent > indent) continue
+ if (
+ prevIndent === indent &&
+ prev.getAttribute('data-type') === 'olist' &&
+ (prev.getAttribute('data-olstyle') ?? 'number') === style
+ ) {
+ ordinal = (parseInt(prev.getAttribute('data-ord') ?? '1') || 1) + 1
+ }
+ break
+ }
+ if ((parseInt(el.getAttribute('data-ord') ?? '') || 0) !== ordinal) {
+ el.setAttribute('data-ord', String(ordinal))
+ const prefix = el.querySelector(':scope > [data-prefix="ordinal"]')
+ if (prefix) prefix.textContent = `${formatOrdinal(style as OrderedStyle, ordinal)}.`
+ }
+ }
+}
+
 function readDOM(host: HTMLDivElement): string {
+ renumberOrderedLists(host)
  const lines: string[] = []
  for (const child of Array.from(host.children)) {
  if (!(child instanceof HTMLElement) || !child.hasAttribute('data-line')) continue
@@ -165,6 +268,7 @@ function renderDOM(host: HTMLDivElement, md: string): void {
  host.innerHTML = ''
  const lines = md.length === 0 ? [''] : md.split('\n')
  for (const line of lines) host.appendChild(buildLineEl(parseLine(line)))
+ renumberOrderedLists(host)
 }
 
 // ─── Caret helpers ─────────────────────────────────────────────────────────
@@ -250,7 +354,7 @@ function splitLineAtCaret(lineEl: HTMLDivElement, textEl: HTMLElement, offset: n
  const cur = readLineEl(lineEl)
 
  // Empty list/todo + Enter → demote to paragraph (exit list)
- if ((cur.type === 'todo' || cur.type === 'list') && before === '' && after === '') {
+ if ((cur.type === 'todo' || cur.type === 'list' || cur.type === 'olist') && before === '' && after === '') {
  const replacement = buildLineEl({ type: 'paragraph', indent: cur.indent, text: '' })
  lineEl.replaceWith(replacement)
  const t = findTextEl(replacement)
@@ -261,10 +365,18 @@ function splitLineAtCaret(lineEl: HTMLDivElement, textEl: HTMLElement, offset: n
  let nextType: LineType = 'paragraph'
  if (cur.type === 'todo') nextType = 'todo'
  else if (cur.type === 'list') nextType = 'list'
+ else if (cur.type === 'olist') nextType = 'olist'
  const nextIndent = cur.type === 'header' ? 0 : cur.indent
 
  setLineText(textEl, before)
- const newLine = buildLineEl({ type: nextType, indent: nextIndent, text: after, done: false })
+ const newLine = buildLineEl({
+ type: nextType,
+ indent: nextIndent,
+ text: after,
+ done: false,
+ olStyle: cur.olStyle,
+ ordinal: (cur.ordinal ?? 0) + 1,
+ })
  lineEl.after(newLine)
  const newTextEl = findTextEl(newLine)
  if (newTextEl) setCaretIn(newTextEl, 0)
@@ -450,6 +562,18 @@ function tryConvertLinePrefix(host: HTMLDivElement): boolean {
  replaceLinePreservingCaret(
  info.lineEl,
  { type: 'list', indent, text: remainder },
+ Math.max(0, info.offset - prefixLen),
+ )
+ return true
+ }
+ // "1. x", "a. x" or "A. x" → ordered list (the number is recomputed from position)
+ const ordered = text.match(ORDERED_MARKER_RE)
+ if (ordered) {
+ const remainder = ordered[2]
+ const prefixLen = ordered[0].length - remainder.length
+ replaceLinePreservingCaret(
+ info.lineEl,
+ { type: 'olist', indent, text: remainder, ...parseOrderedMarker(ordered[1]) },
  Math.max(0, info.offset - prefixLen),
  )
  return true
