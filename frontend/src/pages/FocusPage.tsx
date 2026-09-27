@@ -7,9 +7,11 @@ import type { MustDoItem } from '../api'
 import TodoCard from '../components/TodoCard'
 import TodoModal from '../components/TodoModal'
 import BulkActionBar from '../components/BulkActionBar'
+import HoursTodayCard from '../components/HoursTodayCard'
 import { useTimezone, useHotkeys, useTodoDefaults, resolveAssigneeId } from '../SettingsContext'
 import { getTodayString } from '../dateUtils'
 import { useHotkey } from '../hooks/useHotkey'
+import { useUnfocusWithUndo } from '../hooks/useUnfocusWithUndo'
 
 // Must-do section headers (Morning / Afternoon / Evening)
 const SECTION_ICON = 'shrink-0 text-fg-subtle'
@@ -225,12 +227,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  queryFn: fetchProjects,
  })
 
- const removeFocus = useMutation({
- mutationFn: (id: number) => updateTodo(id, { is_focused: false }),
- onSuccess: () => {
- queryClient.invalidateQueries({ queryKey: ['todos'] })
- },
- })
+ const unfocusWithUndo = useUnfocusWithUndo()
 
  const addFocusedTodo = useMutation({
  mutationFn: async (title: string) => {
@@ -309,7 +306,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  })
 
  const notDone = todos
- .filter((t) => t.status !== 'done')
+ .filter((t) => t.status !== 'done' && t.is_focused)
  .sort((a, b) => a.focus_order - b.focus_order)
 
  const filtered = selectedProject
@@ -328,10 +325,6 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  mutationFn: (id: number) => updateTodo(id, { status: 'done' }),
  onSuccess: () => queryClient.invalidateQueries({ queryKey: ['todos'] }),
  })
- const toggleFocusMutation = useMutation({
- mutationFn: (id: number) => updateTodo(id, { is_focused: false }),
- onSuccess: () => queryClient.invalidateQueries({ queryKey: ['todos'] }),
- })
 
  useHotkey(bindings.markDone, useCallback(() => {
  if (selectedIds.size === 0) return
@@ -341,9 +334,9 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
 
  useHotkey(bindings.toggleFocus, useCallback(() => {
  if (selectedIds.size === 0) return
- selectedIds.forEach((id) => toggleFocusMutation.mutate(id))
+ unfocusWithUndo(todos.filter((t) => selectedIds.has(t.id)))
  setSelectedIds(new Set())
- }, [selectedIds, toggleFocusMutation]))
+ }, [selectedIds, todos, unfocusWithUndo]))
 
  useHotkey(bindings.editTodo, useCallback(() => {
  if (selectedIds.size !== 1) return
@@ -1008,6 +1001,11 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  </div>
  )}
  </div>
+
+ {/* Hours today vs averages — fills the space under Must Do on wide screens */}
+ <div className="hidden xl:block">
+ <HoursTodayCard onOpenTodo={onOpenTodo} />
+ </div>
  </div>
  </div>
 
@@ -1184,7 +1182,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  </button>
  </span>
  <button
- onClick={() => removeFocus.mutate(t.id)}
+ onClick={() => unfocusWithUndo([t])}
  title="Remove from Focus"
  className="hidden md:flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium text-fg-muted bg-inset hover:bg-danger-bg hover:text-danger border border-border hover:border-danger/30 transition-colors"
  >

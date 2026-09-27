@@ -9,6 +9,7 @@ import BulkActionBar from '../components/BulkActionBar'
 import { useTodoDefaults, useTimezone, useHotkeys, resolveAssigneeId } from '../SettingsContext'
 import { getTodayString } from '../dateUtils'
 import { useHotkey } from '../hooks/useHotkey'
+import { useUnfocusWithUndo } from '../hooks/useUnfocusWithUndo'
 
 const STATUS_OPTIONS = ['', 'todo', 'blocked']
 const IMPORTANCE_OPTIONS = ['', 'low', 'medium', 'high', 'critical']
@@ -127,10 +128,11 @@ export default function TodosPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  mutationFn: (id: number) => updateTodo(id, { status: 'done' }),
  onSuccess: () => queryClient.invalidateQueries({ queryKey: ['todos'] }),
  })
- const toggleFocusMutation = useMutation({
- mutationFn: ({ id, focused }: { id: number; focused: boolean }) => updateTodo(id, { is_focused: !focused }),
+ const focusMutation = useMutation({
+ mutationFn: (id: number) => updateTodo(id, { is_focused: true }),
  onSuccess: () => queryClient.invalidateQueries({ queryKey: ['todos'] }),
  })
+ const unfocusWithUndo = useUnfocusWithUndo()
 
  // ⌘D — mark selected todos done
  useHotkey(bindings.markDone, useCallback(() => {
@@ -142,11 +144,10 @@ export default function TodosPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  // ⌘F — toggle focus on selected todos
  useHotkey(bindings.toggleFocus, useCallback(() => {
  if (selectedIds.size === 0) return
- selectedIds.forEach((id) => {
- const todo = filtered.find((t) => t.id === id)
- if (todo) toggleFocusMutation.mutate({ id, focused: todo.is_focused })
- })
- }, [selectedIds, filtered, toggleFocusMutation]))
+ const selected = filtered.filter((t) => selectedIds.has(t.id))
+ selected.filter((t) => !t.is_focused).forEach((t) => focusMutation.mutate(t.id))
+ unfocusWithUndo(selected.filter((t) => t.is_focused))
+ }, [selectedIds, filtered, focusMutation, unfocusWithUndo]))
 
  // ⌘E — edit first selected todo
  useHotkey(bindings.editTodo, useCallback(() => {

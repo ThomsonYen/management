@@ -16,6 +16,7 @@ import {
  restoreTodo,
 } from '../api'
 import { useToast } from '../ToastContext'
+import { useUnfocusWithUndo } from '../hooks/useUnfocusWithUndo'
 import type { SubTodo, Todo, Person, Project } from '../types'
 import { pickableProjects, projectOptionLabel } from '../utils/projects'
 import DatePicker from '../components/DatePicker'
@@ -171,6 +172,7 @@ export default function TodoDetailPage() {
  })
 
  const { showToast } = useToast()
+ const unfocusWithUndo = useUnfocusWithUndo()
  const deleteMutation = useMutation({
  mutationFn: () => deleteTodo(todoId),
  onSuccess: () => {
@@ -211,11 +213,7 @@ export default function TodoDetailPage() {
  const handleFocusToggle = () => {
  if (!todo) return
  if (todo.is_focused) {
- updateMutation.mutate({ is_focused: false })
- showToast({
- message: `Removed "${todo.title}" from Focus`,
- action: { label: 'Undo', onClick: () => updateMutation.mutate({ is_focused: true }) },
- })
+ unfocusWithUndo([todo])
  } else {
  updateMutation.mutate({ is_focused: true })
  }

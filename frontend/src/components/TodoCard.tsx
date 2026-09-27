@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
 import { createTodo, createSubTodo, deleteTodo, restoreTodo, updateSubTodo, updateTodo, fetchPersons, fetchProjects, fetchTodos } from '../api'
 import { useToast } from '../ToastContext'
+import { useUnfocusWithUndo } from '../hooks/useUnfocusWithUndo'
 import DatePicker from './DatePicker'
 import type { Todo, Person, Project } from '../types'
 import { pickableProjects, projectOptionLabel } from '../utils/projects'
@@ -127,6 +128,7 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
  const queryClient = useQueryClient()
  const navigate = useNavigate()
  const { showToast } = useToast()
+ const unfocusWithUndo = useUnfocusWithUndo()
 
  useEffect(() => {
  return () => {
@@ -168,11 +170,7 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
 
  const handleFocusToggle = () => {
  if (todo.is_focused) {
- updateMutation.mutate({ is_focused: false })
- showToast({
- message: `Removed "${todo.title}" from Focus`,
- action: { label: 'Undo', onClick: () => updateMutation.mutate({ is_focused: true }) },
- })
+ unfocusWithUndo([todo])
  } else {
  updateMutation.mutate({ is_focused: true })
  }
@@ -401,7 +399,7 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
  {onOpenDetail && (
  <button
  onClick={onOpenDetail}
- title="Open todo page"
+ title="Open (quick view)"
  className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium text-accent bg-accent-1 hover:bg-accent-2 border border-accent-2 transition-colors"
  >
  <ArrowUpRight size={13} /><span className="hidden md:inline">Open</span>

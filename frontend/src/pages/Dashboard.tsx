@@ -20,6 +20,7 @@ import {
  type TodoCachesSnapshot,
 } from '../utils/optimisticTodo'
 import { daysSinceDate, getTodayString } from '../dateUtils'
+import { useUnfocusWithUndo } from '../hooks/useUnfocusWithUndo'
 
 const STATUS_OPTIONS = ['todo', 'done', 'blocked']
 
@@ -85,6 +86,7 @@ function ScheduleCard({ item, allTodos, persons, onOpenTodo }: { item: ScheduleS
  onSettled: invalidate,
  })
 
+ const unfocusWithUndo = useUnfocusWithUndo()
  const toggleFocus = useMutation({
  mutationFn: () => updateTodo(item.todo_id, { is_focused: !isFocused }),
  onMutate: async () => {
@@ -177,7 +179,8 @@ function ScheduleCard({ item, allTodos, persons, onOpenTodo }: { item: ScheduleS
  <button
  onClick={(e) => {
  e.stopPropagation()
- toggleFocus.mutate()
+ if (isFocused && mainTodoObj) unfocusWithUndo([mainTodoObj])
+ else toggleFocus.mutate()
  }}
  disabled={toggleFocus.isPending}
  title={isFocused ? 'Remove from Focus' : 'Add to Focus'}

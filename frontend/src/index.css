@@ -52,6 +52,15 @@ html.dark {
   backdrop-filter: saturate(180%) blur(16px);
 }
 
+/* Todo peek entrance */
+.peek-backdrop { animation: peek-fade 180ms ease-out; }
+.peek-panel { animation: peek-rise 240ms cubic-bezier(0.22, 1, 0.36, 1); }
+@keyframes peek-fade { from { opacity: 0; } }
+@keyframes peek-rise { from { opacity: 0; transform: translateY(8px) scale(0.97); } }
+@media (prefers-reduced-motion: reduce) {
+  .peek-backdrop, .peek-panel { animation: none; }
+}
+
 body {
   margin: 0;
   font-family: var(--font-sans, 'Inter', system-ui, sans-serif);

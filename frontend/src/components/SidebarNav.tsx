@@ -172,9 +172,6 @@ export default function SidebarNav({ collapsed, dragOverFocus, onFocusDrop, onFo
           >
             <ChevronRight size={14} className={`transition-transform ${folderOpen ? 'rotate-90' : ''}`} />
             {!collapsed && <span>More</span>}
-            {!collapsed && !folderOpen && folder.length > 0 && (
-              <span className="ml-auto text-2xs tabular-nums">{folder.length}</span>
-            )}
           </button>
           {folderOpen && (
             <div className={collapsed ? '' : 'ml-3 pl-1 border-l border-border'}>

@@ -25,6 +25,7 @@ import NoteDetailPage from './pages/NoteDetailPage'
 import WeeklyGoalsPage from './pages/WeeklyGoalsPage'
 import ProgressPage from './pages/ProgressPage'
 import TodoModal from './components/TodoModal'
+import TodoPeek from './components/TodoPeek'
 import CommandPalette from './components/CommandPalette'
 import InstallHint from './components/mobile/InstallHint'
 import RequireAuth from './components/RequireAuth'
@@ -44,6 +45,7 @@ function AppShell() {
   const queryClient = useQueryClient()
   const [dragOverFocus, setDragOverFocus] = useState(false)
   const [showNewTodoModal, setShowNewTodoModal] = useState(false)
+  const [peekTodoId, setPeekTodoId] = useState<number | null>(null)
   const [showCommandPalette, setShowCommandPalette] = useState(false)
   const { width: sidebarWidth, collapsed: sidebarCollapsed, startResize, toggleCollapsed: toggleSidebar } = useResizableSidebar('sidebarWidth', 224)
   const { bindings } = useHotkeys()
@@ -243,12 +245,12 @@ function AppShell() {
           onOpenSearch={() => setShowCommandPalette(true)}
         />
         <Routes>
-          <Route path="/" element={<Dashboard onOpenTodo={(id) => navigate(`/todos/${id}`)} />} />
-          <Route path="/focus" element={<FocusPage onOpenTodo={(id) => navigate(`/todos/${id}`)} />} />
-          <Route path="/todos" element={<TodosPage onOpenTodo={(id) => navigate(`/todos/${id}`)} />} />
+          <Route path="/" element={<Dashboard onOpenTodo={setPeekTodoId} />} />
+          <Route path="/focus" element={<FocusPage onOpenTodo={setPeekTodoId} />} />
+          <Route path="/todos" element={<TodosPage onOpenTodo={setPeekTodoId} />} />
           <Route path="/todos/:id" element={<TodoDetailPage />} />
-          <Route path="/projects" element={<ProjectsPage onOpenTodo={(id) => navigate(`/todos/${id}`)} />} />
-          <Route path="/people" element={<PeoplePage onOpenTodo={(id) => navigate(`/todos/${id}`)} />} />
+          <Route path="/projects" element={<ProjectsPage onOpenTodo={setPeekTodoId} />} />
+          <Route path="/people" element={<PeoplePage onOpenTodo={setPeekTodoId} />} />
           <Route path="/social" element={<SocialPage />} />
           <Route path="/done" element={<RecentlyDonePage />} />
           <Route path="/deleted" element={<RecentlyDeletedPage />} />
@@ -264,6 +266,15 @@ function AppShell() {
       </main>
 
       <MobileTabBar items={nav.primary} moreItems={[...nav.secondary, settingsNavItem]} />
+
+      {/* "Open" on a todo anywhere peeks at it over the current page */}
+      {peekTodoId !== null && (
+        <TodoPeek
+          todoId={peekTodoId}
+          onClose={() => setPeekTodoId(null)}
+          onGoInto={(id) => { setPeekTodoId(null); navigate(`/todos/${id}`) }}
+        />
+      )}
 
       {/* Global new todo modal */}
       {showNewTodoModal && (
