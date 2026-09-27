@@ -4,7 +4,9 @@
 //   npm i --no-save playwright && npx playwright install chromium
 //   node scripts/render-icons.cjs
 //
-// apple-touch-icon and pwa-* are full-bleed (the OS rounds the corners);
+// Writes public/icons/tracker-<ICON_VERSION>-*.png (see below).
+//
+// All but the maskable icon are full-bleed (the OS rounds the corners);
 // the maskable icon shrinks the artwork into Android's safe zone.
 const fs = require('node:fs')
 const path = require('node:path')
@@ -19,11 +21,18 @@ const maskable = logo.replace(
   (_, rect, art) => `${rect}<g transform="translate(32 32) scale(0.72) translate(-32 -32)">${art}</g></svg>`,
 )
 
+// Icons live at versioned URLs because iOS caches home-screen icons by URL and
+// never refetches one it has seen, even after the app is removed and re-added.
+// After changing logo.svg, bump ICON_VERSION and update the references in
+// index.html and vite.config.ts (the manifest) to match.
+const ICON_VERSION = 'v2'
 const targets = [
+  [`icons/tracker-${ICON_VERSION}-180.png`, 180, logo],
+  [`icons/tracker-${ICON_VERSION}-192.png`, 192, logo],
+  [`icons/tracker-${ICON_VERSION}-512.png`, 512, logo],
+  [`icons/tracker-${ICON_VERSION}-512-maskable.png`, 512, maskable],
+  // Safari also probes this fixed path when a page declares no icon
   ['apple-touch-icon.png', 180, logo],
-  ['pwa-192.png', 192, logo],
-  ['pwa-512.png', 512, logo],
-  ['pwa-512-maskable.png', 512, maskable],
 ]
 
 ;(async () => {

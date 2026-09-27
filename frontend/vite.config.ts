@@ -71,9 +71,10 @@ const pwaPlugin = VitePWA({
     background_color: '#fafaf9', // linear-emerald light bgApp
     theme_color: '#fafaf9',
     icons: [
-      { src: '/pwa-192.png', sizes: '192x192', type: 'image/png' },
-      { src: '/pwa-512.png', sizes: '512x512', type: 'image/png' },
-      { src: '/pwa-512-maskable.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+      // Versioned paths: see scripts/render-icons.cjs
+      { src: '/icons/tracker-v2-192.png', sizes: '192x192', type: 'image/png' },
+      { src: '/icons/tracker-v2-512.png', sizes: '512x512', type: 'image/png' },
+      { src: '/icons/tracker-v2-512-maskable.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
     ],
   },
   workbox: {
