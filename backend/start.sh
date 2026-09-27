@@ -15,4 +15,4 @@ fi
 PORT=$(grep 'port:' "$CONFIG" | awk '{print $2}')
 
 echo "Starting backend on port $PORT..."
-uvicorn main:app --reload --port "$PORT"
+uvicorn main:app --reload --reload-include "*.yaml" --port "$PORT"

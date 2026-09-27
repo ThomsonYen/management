@@ -1,4 +1,5 @@
 export { cn } from './cn'
+export { AppLogo } from './AppLogo'
 
 export { Button } from './Button'
 export type { ButtonProps } from './Button'

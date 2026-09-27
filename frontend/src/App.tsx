@@ -1,6 +1,7 @@
 import { useState, useCallback, useMemo } from 'react'
 import { Navigate, NavLink, Route, Routes, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, Settings, ChevronsLeft, ChevronsRight, Square, Sun, Moon } from 'lucide-react'
+import { Settings, ChevronsLeft, ChevronsRight, Square, Sun, Moon } from 'lucide-react'
+import SidebarBrand from './components/SidebarBrand'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { updateTodo, createNote } from './api'
 import { useResizableSidebar } from './hooks/useResizableSidebar'
@@ -8,7 +9,6 @@ import { useHotkeys, useNavLayout, useTheme, useTimezone } from './SettingsConte
 import { useHotkey } from './hooks/useHotkey'
 import { useRecording } from './RecordingContext'
 import { getTodayString } from './dateUtils'
-import { APP_VERSION } from './config'
 import Dashboard from './pages/Dashboard'
 import TodosPage from './pages/TodosPage'
 import ProjectsPage from './pages/ProjectsPage'
@@ -142,19 +142,7 @@ function AppShell() {
         style={{ width: sidebarCollapsed ? 56 : sidebarWidth }}
         className="bg-surface border-r border-border text-fg hidden md:flex flex-col flex-shrink-0 relative transition-[width] duration-200"
       >
-        <div className={`py-5 border-b border-border ${sidebarCollapsed ? 'px-2' : 'px-5'}`}>
-          <div className="flex items-center gap-2.5 justify-center">
-            <div className="w-7 h-7 bg-accent rounded-md flex items-center justify-center flex-shrink-0">
-              <LayoutDashboard size={14} className="text-fg-on-accent" />
-            </div>
-            {!sidebarCollapsed && (
-              <div>
-                <h1 className="text-sm font-semibold tracking-tight text-fg leading-none">Management</h1>
-                <p className="text-fg-subtle text-xs mt-0.5 leading-none">Work tracker · v{APP_VERSION}</p>
-              </div>
-            )}
-          </div>
-        </div>
+        <SidebarBrand collapsed={sidebarCollapsed} />
         <SidebarNav
           collapsed={sidebarCollapsed}
           dragOverFocus={dragOverFocus}

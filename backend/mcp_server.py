@@ -751,7 +751,7 @@ def build_routes() -> list[Route]:
         if r.path == "/register":
             r.app = _rate_limited_asgi(r.app)
     routes += create_protected_resource_routes(resource_url=resource, authorization_servers=[issuer],
-                                               scopes_supported=list(M.API_TOKEN_SCOPES), resource_name="Management app")
+                                               scopes_supported=list(M.API_TOKEN_SCOPES), resource_name="Tracker")
     routes.append(Route("/oauth/consent", endpoint=consent, methods=["GET", "POST"]))
     return routes
 

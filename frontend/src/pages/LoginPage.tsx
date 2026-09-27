@@ -1,7 +1,7 @@
 import { FormEvent, useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
-import { LayoutDashboard } from 'lucide-react'
+import { AppLogo } from '../components/ui/AppLogo'
 import { login } from '../api'
 import { clearDeviceState } from '../utils/deviceState'
 
@@ -41,12 +41,9 @@ export default function LoginPage() {
     <div className="flex h-dvh items-center justify-center bg-app px-4">
       <div className="w-full max-w-sm">
         <div className="flex items-center justify-center gap-2.5 mb-6">
-          <div className="w-9 h-9 bg-accent rounded-lg flex items-center justify-center">
-            <LayoutDashboard size={18} className="text-fg-on-accent" />
-          </div>
+          <AppLogo className="w-9 h-9" />
           <div>
-            <h1 className="text-base font-semibold tracking-tight text-fg leading-none">Management</h1>
-            <p className="text-fg-subtle text-xs mt-0.5 leading-none">Work tracker</p>
+            <h1 className="text-base font-semibold tracking-tight text-fg leading-none">Tracker</h1>
           </div>
         </div>
         <form

@@ -40,6 +40,21 @@ function hstsPlugin() {
   }
 }
 
+// Files read above at config load. Vite only restarts itself for vite.config.ts
+// and its imports, so watch these too — e.g. the version bump in package.json
+// shows up in the sidebar without restarting start_local.sh.
+function restartOnConfigFiles(files: string[]) {
+  return {
+    name: 'restart-on-config-files',
+    configureServer(server: import('vite').ViteDevServer) {
+      server.watcher.add(files)
+      server.watcher.on('change', (file) => {
+        if (files.includes(path.resolve(file))) server.restart()
+      })
+    },
+  }
+}
+
 const DEV_HOST = 'dev.localhost'
 const DEV_PORT = 5173
 
@@ -48,8 +63,8 @@ const DEV_PORT = 5173
 const pwaPlugin = VitePWA({
   registerType: 'autoUpdate',
   manifest: {
-    name: 'Management',
-    short_name: 'Management',
+    name: 'Tracker',
+    short_name: 'Tracker',
     display: 'standalone',
     start_url: '/',
     scope: '/',
@@ -97,7 +112,16 @@ const pwaPlugin = VitePWA({
 })
 
 export default defineConfig({
-  plugins: [react(), pwaPlugin, ...(httpsConfig ? [hstsPlugin()] : [])],
+  plugins: [
+    react(),
+    pwaPlugin,
+    restartOnConfigFiles([
+      path.resolve(__dirname, 'package.json'),
+      path.resolve(__dirname, '_frontend_config.yaml'),
+      path.resolve(__dirname, '../project_config.yaml'),
+    ]),
+    ...(httpsConfig ? [hstsPlugin()] : []),
+  ],
   define: {
     __FRONTEND_CONFIG__: JSON.stringify(getFrontendConfig()),
     __APP_VERSION__: JSON.stringify(

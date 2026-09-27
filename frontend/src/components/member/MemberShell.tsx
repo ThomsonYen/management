@@ -1,13 +1,13 @@
 import { useCallback } from 'react'
 import { Navigate, NavLink, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom'
-import { ChevronsLeft, ChevronsRight, LayoutDashboard, Moon, Settings, Sun } from 'lucide-react'
+import { ChevronsLeft, ChevronsRight, Moon, Settings, Sun } from 'lucide-react'
 import { useResizableSidebar } from '../../hooks/useResizableSidebar'
 import { useHotkeys, useTheme } from '../../SettingsContext'
 import { useHotkey } from '../../hooks/useHotkey'
 import { useSession } from '../../hooks/useSession'
-import { APP_VERSION } from '../../config'
 import { memberNavItems, memberPrimaryNavItems, routeTitle } from '../../navItems'
 import { Badge } from '../ui'
+import SidebarBrand from '../SidebarBrand'
 import MobileHeader from '../mobile/MobileHeader'
 import MobileTabBar from '../mobile/MobileTabBar'
 import InstallHint from '../mobile/InstallHint'
@@ -53,19 +53,7 @@ export default function MemberShell() {
         style={{ width: sidebarCollapsed ? 56 : sidebarWidth }}
         className="bg-surface border-r border-border text-fg hidden md:flex flex-col flex-shrink-0 relative transition-[width] duration-200"
       >
-        <div className={`py-5 border-b border-border ${sidebarCollapsed ? 'px-2' : 'px-5'}`}>
-          <div className="flex items-center gap-2.5 justify-center">
-            <div className="w-7 h-7 bg-accent rounded-md flex items-center justify-center flex-shrink-0">
-              <LayoutDashboard size={14} className="text-fg-on-accent" />
-            </div>
-            {!sidebarCollapsed && (
-              <div>
-                <h1 className="text-sm font-semibold tracking-tight text-fg leading-none">Management</h1>
-                <p className="text-fg-subtle text-xs mt-0.5 leading-none">Work tracker · v{APP_VERSION}</p>
-              </div>
-            )}
-          </div>
-        </div>
+        <SidebarBrand collapsed={sidebarCollapsed} />
         <nav className="flex-1 py-3 px-2">
           {memberNavItems.map((item) => {
             const Icon = item.icon

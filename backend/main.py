@@ -2132,7 +2132,7 @@ async def lifespan(_app: FastAPI):
                 pass
 
 
-app = FastAPI(title="Management API", lifespan=lifespan)
+app = FastAPI(title="Tracker API", lifespan=lifespan)
 
 APP_ORIGIN = os.environ.get("APP_ORIGIN", "")
 _cors_origins = [

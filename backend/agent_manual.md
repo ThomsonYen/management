@@ -1,4 +1,4 @@
-# Agent Operator Manual — Management App
+# Agent Operator Manual — Tracker
 
 This file is served live at `GET /agent/manual` and is the **only** thing an operating agent should rely on for how to use this API. Fetch it at the start of every session; do not cache across sessions. The `X-Manual-Version` response header changes whenever this text changes.
 

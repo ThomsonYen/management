@@ -112,5 +112,5 @@ export function routeTitle(pathname: string, items: NavItem[] = navItems): strin
       if (!best || item.to.length > best.to.length) best = item
     }
   }
-  return best?.label ?? 'Management'
+  return best?.label ?? 'Tracker'
 }

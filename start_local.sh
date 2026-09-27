@@ -1,6 +1,8 @@
 #!/bin/bash
 # Start the backend and frontend together for local development.
 #   bash start_local.sh
+# Both reload live: frontend edits hot-update the open page (Vite restarts itself
+# for package.json / *_config.yaml), backend .py/.yaml edits restart uvicorn.
 # Output from both is interleaved with a [backend]/[frontend] prefix.
 # Ctrl-C stops both.
 
@@ -22,7 +24,8 @@ export VITE_DEV_HOST=0.0.0.0
 export DEV_EXTRA_ORIGINS="http://$HOST_SHORT:5173${TS_IP:+,http://$TS_IP:5173}${TS_DNS:+,http://$TS_DNS:5173}"
 echo "From other tailnet devices: http://$HOST_SHORT:5173"
 
-if [ ! -d frontend/node_modules ]; then
+# Install when node_modules is missing or older than the lockfile (e.g. after a pull)
+if [ ! -d frontend/node_modules ] || [ frontend/package-lock.json -nt frontend/node_modules/.package-lock.json ]; then
     echo "Installing frontend dependencies..."
     (cd frontend && npm install) || exit 1
 fi
