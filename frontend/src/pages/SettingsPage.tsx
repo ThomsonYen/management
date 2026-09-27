@@ -385,6 +385,7 @@ const SCOPE_OPTIONS: { value: ApiTokenScope; label: string; hint: string }[] = [
  { value: 'read', label: 'read', hint: 'List and read todos, projects, people, goals, notes, the operator manual' },
  { value: 'write:todos', label: 'write:todos', hint: 'Create, edit, complete, focus todos and subtodos' },
  { value: 'write:persons', label: 'write:persons', hint: 'Record check-ins and person notes only' },
+ { value: 'write:social', label: 'write:social', hint: 'Add friends and log hangouts' },
  { value: 'write:notes', label: 'write:notes', hint: 'Create and edit personal notes (reports)' },
  { value: 'write:daily', label: 'write:daily', hint: 'Daily goals and must-do items' },
 ]

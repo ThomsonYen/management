@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { Person, PersonProgress, Project, ProjectTree, Todo, SubTodo, ScheduleStatus, AudioFileInfo, Note, NoteKind, NoteSummary, NoteSearchResult, TagOut, Vault, ApiToken, ApiTokenCreated, ApiTokenScope, ApiAuditEntry, AccessGrant, AccessLevel, AppUser, GrantKind, InviteCreated, InvitePreview, Role, UsersOverview } from './types'
+import type { Person, PersonProgress, Project, ProjectTree, Todo, SubTodo, ScheduleStatus, AudioFileInfo, Note, NoteKind, NoteSummary, NoteSearchResult, TagOut, Vault, ApiToken, ApiTokenCreated, ApiTokenScope, ApiAuditEntry, Friend, Hangout, SocialStatus, AccessGrant, AccessLevel, AppUser, GrantKind, InviteCreated, InvitePreview, Role, UsersOverview } from './types'
 
 const api = axios.create({
   baseURL: '/api',
@@ -69,6 +69,72 @@ export const lookupInvite = (token: string): Promise<InvitePreview> =>
 
 export const acceptInvite = (data: { token: string; username: string; password: string }): Promise<AuthUser> =>
   api.post('/auth/invite/accept', data).then((r) => normalizeUser(r.data))
+
+// ─── Social: friends & hangouts ──────────────────────────────────────────────
+
+export const fetchFriends = (status?: SocialStatus): Promise<Friend[]> =>
+  api.get('/friends', { params: status ? { status } : undefined }).then((r) => r.data)
+
+/** Friends who are overdue, due soon, or never logged — most overdue first. */
+export const fetchDueFriends = (): Promise<Friend[]> =>
+  api.get('/friends/due').then((r) => r.data)
+
+export const createFriend = (data: {
+  name: string
+  notes?: string
+  cadence_days?: number
+}): Promise<Friend> => api.post('/friends', data).then((r) => r.data)
+
+export const updateFriend = (
+  id: number,
+  data: { name?: string; notes?: string; cadence_days?: number },
+): Promise<Friend> => api.put(`/friends/${id}`, data).then((r) => r.data)
+
+export const deleteFriend = (id: number): Promise<void> =>
+  api.delete(`/friends/${id}`).then((r) => r.data)
+
+export const restoreFriend = (id: number): Promise<void> =>
+  api.post(`/friends/${id}/restore`).then((r) => r.data)
+
+export const fetchArchivedFriends = (): Promise<Friend[]> =>
+  api.get('/friends/deleted').then((r) => r.data)
+
+export const reorderFriends = (
+  items: { id: number; display_order: number }[],
+): Promise<void> => api.put('/friends/reorder', items).then((r) => r.data)
+
+export const fetchFriendHangouts = (id: number): Promise<Hangout[]> =>
+  api.get(`/friends/${id}/hangouts`).then((r) => r.data)
+
+/** Log time with one friend (plus anyone else who was there). Returns the friend. */
+export const logHangout = (
+  id: number,
+  data: { date?: string; what_we_did?: string; also_friend_ids?: number[] },
+): Promise<Friend> => api.post(`/friends/${id}/hangouts`, data).then((r) => r.data)
+
+/** Arrange something in the future. Mutes the nudge until the date passes. */
+export const planHangout = (
+  id: number,
+  data: { date: string; what_we_did?: string; also_friend_ids?: number[] },
+): Promise<Friend> => api.post(`/friends/${id}/plans`, data).then((r) => r.data)
+
+export const fetchPlans = (): Promise<Hangout[]> =>
+  api.get('/plans').then((r) => r.data)
+
+/** Turn a plan into history; advances everyone's cadence. */
+export const confirmHangout = (id: number): Promise<Hangout> =>
+  api.post(`/hangouts/${id}/confirm`).then((r) => r.data)
+
+export const fetchHangouts = (limit = 50): Promise<Hangout[]> =>
+  api.get('/hangouts', { params: { limit } }).then((r) => r.data)
+
+export const updateHangout = (
+  id: number,
+  data: { date?: string; what_we_did?: string; friend_ids?: number[] },
+): Promise<Hangout> => api.put(`/hangouts/${id}`, data).then((r) => r.data)
+
+export const deleteHangout = (id: number): Promise<void> =>
+  api.delete(`/hangouts/${id}`).then((r) => r.data)
 
 // ─── Persons ─────────────────────────────────────────────────────────────────
 

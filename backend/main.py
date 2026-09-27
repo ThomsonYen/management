@@ -157,6 +157,14 @@ def today_in_user_tz() -> str:
 # Fallback check-in cadence for persons created before the column existed.
 DEFAULT_CHECK_IN_INTERVAL_DAYS = 2
 
+# ─── Social (friends + hangouts) ─────────────────────────────────────────────
+# Cadence a friend gets when none is set: reach out about once a month.
+DEFAULT_FRIEND_CADENCE_DAYS = 30
+# Nudge before the cadence actually elapses — a 30-day cadence starts warning
+# on day 24, so "it's been almost a month" arrives while there's still time to
+# do something about it, rather than as a reproach on day 31.
+SOCIAL_DUE_SOON_RATIO = 0.8
+
 MEETING_NOTES_DIR = DATA_DIR / "meeting_notes"
 MEETING_TEMPLATES_DIR = DATA_DIR / "meeting_templates"
 MEETING_AUDIO_DIR = DATA_DIR / "meeting_audio"
@@ -238,6 +246,16 @@ meeting_note_todos = Table(
 )
 
 
+# Many-to-many: hangouts ↔ friends. One dinner logs everyone who was there, so
+# a single entry advances several friends' cadence at once.
+hangout_friends = Table(
+    "hangout_friends",
+    Base.metadata,
+    Column("hangout_id", Integer, ForeignKey("hangouts.id"), primary_key=True),
+    Column("friend_id", Integer, ForeignKey("friends.id"), primary_key=True),
+)
+
+
 class Person(Base):
     __tablename__ = "persons"
     id = Column(Integer, primary_key=True, index=True)
@@ -256,6 +274,50 @@ class Person(Base):
         "Project",
         secondary=person_projects,
         order_by=person_projects.c.display_order,
+    )
+
+
+class Friend(Base):
+    """Someone you keep up with socially.
+
+    Deliberately not a `persons` row: persons is the FK target for todo
+    assignees, meeting attendees and `users.person_id` (app login), so putting
+    friends there would surface them in assignee pickers and the account-
+    linking UI. Friends are owner-only and never enter the auth graph.
+    """
+
+    __tablename__ = "friends"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    notes = Column(Text, nullable=True)
+    # How often you want to see them, in days.
+    cadence_days = Column(Integer, default=DEFAULT_FRIEND_CADENCE_DAYS, nullable=False)
+    # Denormalised MAX(hangouts.date) for this friend, ignoring future dates.
+    # Unlike persons.last_check_in_date this is NOT a forward-only watermark:
+    # the hangout log is the only source of truth here, so deleting or
+    # re-dating an entry recomputes it (see _recompute_last_hangout).
+    last_hangout_date = Column(String, nullable=True)  # YYYY-MM-DD
+    display_order = Column(Integer, default=0, nullable=False)
+    deleted_at = Column(String, nullable=True)
+    hangouts = relationship(
+        "Hangout", secondary=hangout_friends, back_populates="friends"
+    )
+
+
+class Hangout(Base):
+    """One logged occasion — when you saw them and what you did."""
+
+    __tablename__ = "hangouts"
+    id = Column(Integer, primary_key=True, index=True)
+    date = Column(String, nullable=False, index=True)  # YYYY-MM-DD
+    what_we_did = Column(Text, nullable=True)
+    # 'planned' (agreed, not yet happened) or 'happened'. A future date is a
+    # plan; a plan whose date has passed must be confirmed before it counts as
+    # time actually spent, so a cancelled plan cannot silently mute the nudge.
+    status = Column(String, default="happened", nullable=False)
+    created_at = Column(String, nullable=True)
+    friends = relationship(
+        "Friend", secondary=hangout_friends, back_populates="hangouts"
     )
 
 
@@ -593,6 +655,15 @@ with engine.connect() as _conn:
     if "last_check_in_date" not in _person_cols:
         _conn.execute(text("ALTER TABLE persons ADD COLUMN last_check_in_date TEXT"))
         _conn.commit()
+    # Social: a hangout is either something that happened or a plan for the
+    # future. Existing rows are all things that happened.
+    if _insp.has_table("hangouts"):
+        _hangout_cols = [c["name"] for c in _insp.get_columns("hangouts")]
+        if "status" not in _hangout_cols:
+            _conn.execute(text(
+                "ALTER TABLE hangouts ADD COLUMN status TEXT NOT NULL DEFAULT 'happened'"
+            ))
+            _conn.commit()
     # Phase 4: vault metadata on notes
     _note_cols = [c["name"] for c in _insp.get_columns("notes")]
     for _col, _ddl in (
@@ -809,6 +880,224 @@ def _ensure_owner(db: Session) -> None:
     if first is not None:
         first.role = "owner"
         db.flush()
+
+
+# ─── Social schemas ──────────────────────────────────────────────────────────
+
+# Ordered loosely by urgency. "planned" and "needs_confirm" are about an
+# arranged occasion; the rest are cadence tiers.
+SOCIAL_STATUS_VALUES = (
+    "planned",       # something is on the calendar — do not nudge
+    "needs_confirm", # a plan's date passed and nobody said whether it happened
+    "never",         # no history at all
+    "ok",
+    "due_soon",      # >= 80% of the cadence
+    "slipping",      # >= 95% of the cadence
+    "overdue",       # cadence elapsed
+)
+HANGOUT_STATUS_VALUES = ("planned", "happened")
+# Second, louder tier before the cadence actually elapses.
+SOCIAL_SLIPPING_RATIO = 0.95
+
+
+class FriendCreate(BaseModel):
+    name: str
+    notes: Optional[str] = None
+    cadence_days: Optional[int] = Field(None, ge=1, le=3650)
+
+
+class FriendUpdate(BaseModel):
+    name: Optional[str] = None
+    notes: Optional[str] = None
+    cadence_days: Optional[int] = Field(None, ge=1, le=3650)
+
+
+class FriendOrderItem(BaseModel):
+    id: int
+    display_order: int
+
+
+class HangoutOut(BaseModel):
+    id: int
+    date: str
+    what_we_did: Optional[str] = None
+    status: str = "happened"  # one of HANGOUT_STATUS_VALUES
+    friend_ids: List[int] = []
+    friend_names: List[str] = []
+    created_at: Optional[str] = None
+
+
+class FriendOut(BaseModel):
+    id: int
+    name: str
+    notes: Optional[str] = None
+    cadence_days: int = DEFAULT_FRIEND_CADENCE_DAYS
+    last_hangout_date: Optional[str] = None
+    display_order: int = 0
+    deleted_at: Optional[str] = None
+    # Derived, so a caller never has to redo the date maths.
+    days_since_hangout: Optional[int] = None  # None until the first hangout
+    days_until_due: Optional[int] = None  # negative once overdue
+    status: str = "never"  # one of SOCIAL_STATUS_VALUES
+    hangout_count: int = 0
+    last_hangout_what: Optional[str] = None
+    # The cadence tier on its own, ignoring any plan. Lets a caller say
+    # "overdue, but you're seeing them Friday" instead of hiding the backlog.
+    cadence_tier: str = "never"
+    # Next agreed occasion, if any. While this is set the friend is not nudged.
+    next_plan_date: Optional[str] = None
+    next_plan_what: Optional[str] = None
+    next_plan_id: Optional[int] = None
+    days_until_plan: Optional[int] = None
+    # A plan whose date has passed and that nobody has confirmed or cancelled.
+    unconfirmed_plan_id: Optional[int] = None
+    unconfirmed_plan_date: Optional[str] = None
+
+
+class HangoutCreate(BaseModel):
+    """A hangout with at least one friend. Date defaults to today.
+
+    A future date is stored as a plan unless `status` says otherwise.
+    """
+
+    friend_ids: List[int] = Field(..., min_length=1)
+    date: Optional[str] = Field(None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+    what_we_did: Optional[str] = None
+    status: Optional[str] = None  # planned | happened; inferred from the date
+
+
+class HangoutForFriend(BaseModel):
+    """Body for POST /friends/{id}/hangouts — the friend comes from the path."""
+
+    date: Optional[str] = Field(None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+    what_we_did: Optional[str] = None
+    also_friend_ids: Optional[List[int]] = None  # others who were there
+    status: Optional[str] = None  # planned | happened; inferred from the date
+
+
+class HangoutUpdate(BaseModel):
+    date: Optional[str] = Field(None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+    what_we_did: Optional[str] = None
+    friend_ids: Optional[List[int]] = Field(None, min_length=1)
+    status: Optional[str] = None  # planned | happened
+
+
+def _cadence_tier(last_hangout_date: Optional[str], cadence_days: int, today: date):
+    """(days_since, days_until_due, tier) from elapsed time alone.
+
+    A friend with no logged hangout is "never" rather than "overdue": there is
+    no elapsed time to measure, and it reads as a prompt to log history rather
+    than an accusation.
+    """
+    if not last_hangout_date:
+        return None, None, "never"
+    days_since = (today - date.fromisoformat(last_hangout_date)).days
+    days_until_due = cadence_days - days_since
+    if days_since >= cadence_days:
+        tier = "overdue"
+    elif days_since >= cadence_days * SOCIAL_SLIPPING_RATIO:
+        tier = "slipping"
+    elif days_since >= cadence_days * SOCIAL_DUE_SOON_RATIO:
+        tier = "due_soon"
+    else:
+        tier = "ok"
+    return days_since, days_until_due, tier
+
+
+def friend_to_out(f: Friend, today: Optional[date] = None) -> FriendOut:
+    today = today or date.fromisoformat(today_in_user_tz())
+    iso_today = today.isoformat()
+    cadence = f.cadence_days or DEFAULT_FRIEND_CADENCE_DAYS
+    days_since, days_until_due, tier = _cadence_tier(
+        f.last_hangout_date, cadence, today
+    )
+    # Only things that actually happened count as history. A booked plan is not
+    # the last time you saw them.
+    past = sorted(
+        (h for h in f.hangouts if h.status == "happened" and h.date <= iso_today),
+        key=lambda h: h.date,
+    )
+    upcoming = sorted(
+        (h for h in f.hangouts if h.status == "planned" and h.date >= iso_today),
+        key=lambda h: h.date,
+    )
+    # A plan whose date has gone by without anyone saying it happened. Oldest
+    # first, so the prompt is about the one that has been hanging longest.
+    stale = sorted(
+        (h for h in f.hangouts if h.status == "planned" and h.date < iso_today),
+        key=lambda h: h.date,
+    )
+
+    # Precedence: an unconfirmed past plan outranks everything (it blocks the
+    # cadence from being trusted), then an upcoming plan mutes the nudge, then
+    # plain elapsed time.
+    if stale:
+        status = "needs_confirm"
+    elif upcoming:
+        status = "planned"
+    else:
+        status = tier
+
+    nxt = upcoming[0] if upcoming else None
+    return FriendOut(
+        id=f.id,
+        name=f.name,
+        notes=f.notes,
+        cadence_days=cadence,
+        last_hangout_date=f.last_hangout_date,
+        display_order=f.display_order,
+        deleted_at=f.deleted_at,
+        days_since_hangout=days_since,
+        days_until_due=days_until_due,
+        status=status,
+        cadence_tier=tier,
+        hangout_count=len(past),
+        last_hangout_what=past[-1].what_we_did if past else None,
+        next_plan_date=nxt.date if nxt else None,
+        next_plan_what=nxt.what_we_did if nxt else None,
+        next_plan_id=nxt.id if nxt else None,
+        days_until_plan=(date.fromisoformat(nxt.date) - today).days if nxt else None,
+        unconfirmed_plan_id=stale[0].id if stale else None,
+        unconfirmed_plan_date=stale[0].date if stale else None,
+    )
+
+
+def hangout_to_out(h: Hangout) -> HangoutOut:
+    live = [f for f in h.friends if f.deleted_at is None]
+    return HangoutOut(
+        id=h.id,
+        date=h.date,
+        what_we_did=h.what_we_did,
+        status=h.status or "happened",
+        friend_ids=[f.id for f in live],
+        friend_names=[f.name for f in live],
+        created_at=h.created_at,
+    )
+
+
+def _recompute_last_hangout(db: Session, friend_ids: List[int]) -> None:
+    """Re-derive last_hangout_date from the log for the given friends.
+
+    Called after every hangout write. Unlike the persons watermark this rolls
+    backwards, because deleting or re-dating the only hangout you had with
+    someone should not leave them looking recently seen.
+    """
+    today = today_in_user_tz()
+    for fid in set(friend_ids):
+        f = db.query(Friend).get(fid)
+        if f is None:
+            continue
+        newest = (
+            db.query(func.max(Hangout.date))
+            .join(hangout_friends, hangout_friends.c.hangout_id == Hangout.id)
+            .filter(
+                hangout_friends.c.friend_id == fid,
+                Hangout.date <= today,
+                Hangout.status == "happened",
+            )
+            .scalar()
+        )
+        f.last_hangout_date = newest
 
 
 PROJECT_IMPORTANCE_VALUES = {"low", "medium", "high"}
@@ -1883,7 +2172,7 @@ _login_failures: dict = defaultdict(deque)
 # only. Tokens are also owner-only (_resolve_api_token rejects any other
 # user). Keep this table and backend/agent_manual.md in sync.
 
-API_TOKEN_SCOPES = ("read", "write:todos", "write:persons", "write:notes", "write:daily")
+API_TOKEN_SCOPES = ("read", "write:todos", "write:persons", "write:notes", "write:daily", "write:social")
 API_TOKEN_PREFIX = "mgmt_pat_"
 API_TOKEN_DEFAULT_DAYS = 90
 API_TOKEN_MAX_DAYS = 365
@@ -1925,6 +2214,13 @@ _BEARER_ROUTE_SCOPES = [
         ("GET", r"/notes-hidden/search", "read"),
         ("GET", rf"/notes/{_ID}", "read"),
         ("GET", rf"/notes/{_ID}/audio", "read"),
+        ("GET", r"/friends", "read"),
+        ("GET", r"/friends/due", "read"),
+        ("GET", r"/friends/deleted", "read"),
+        ("GET", rf"/friends/{_ID}", "read"),
+        ("GET", rf"/friends/{_ID}/hangouts", "read"),
+        ("GET", r"/hangouts", "read"),
+        ("GET", r"/plans", "read"),
         # write:todos
         ("POST", r"/todos", "write:todos"),
         ("PUT", r"/todos/reorder-focus", "write:todos"),
@@ -1940,6 +2236,14 @@ _BEARER_ROUTE_SCOPES = [
         ("POST", r"/notes", "write:notes"),
         ("PUT", rf"/notes/{_ID}", "write:notes"),
         ("POST", rf"/notes/{_ID}/restore", "write:notes"),
+        # write:social
+        ("POST", r"/friends", "write:social"),
+        ("PUT", rf"/friends/{_ID}", "write:social"),
+        ("POST", rf"/friends/{_ID}/hangouts", "write:social"),
+        ("POST", r"/hangouts", "write:social"),
+        ("POST", rf"/friends/{_ID}/plans", "write:social"),
+        ("POST", rf"/hangouts/{_ID}/confirm", "write:social"),
+        ("PUT", rf"/hangouts/{_ID}", "write:social"),
         # write:daily
         ("PUT", rf"/daily-goals/{_DATE}", "write:daily"),
         ("POST", rf"/must-do/{_DATE}", "write:daily"),
@@ -3152,6 +3456,19 @@ def agent_digest(db: Session = Depends(get_db)):
                 }
             )
 
+    # Friends you are due to reach out to (see the Social section).
+    social_nudges = [
+        f for f in (
+            friend_to_out(fr, today_d)
+            for fr in db.query(Friend)
+            .filter(Friend.deleted_at == None)
+            .order_by(Friend.display_order, Friend.id)
+            .all()
+        )
+        if f.status in ("overdue", "slipping", "due_soon", "needs_confirm")
+    ]
+    social_nudges.sort(key=lambda f: f.days_until_due if f.days_until_due is not None else 0)
+
     must_do = db.query(MustDoItem).filter(MustDoItem.date == today).order_by(MustDoItem.order).all()
     goal = db.query(DailyGoal).filter(DailyGoal.date == today).first()
 
@@ -3161,6 +3478,7 @@ def agent_digest(db: Session = Depends(get_db)):
         "overdue_todos": [todo_to_out(t) for t in overdue],
         "due_today_todos": [todo_to_out(t) for t in due_today],
         "overdue_check_ins": overdue_check_ins,
+        "social_nudges": social_nudges,
         "must_do_today": [MustDoItemOut.model_validate(m) for m in must_do],
         "daily_goal_today": DailyGoalOut.model_validate(goal) if goal else None,
         "recently_done": [todo_to_out(t) for t in recently_done],
@@ -3379,6 +3697,350 @@ def person_progress(
             total_hours=sum(v["hours"] for v in buckets.values()),
         ))
     return sorted(result, key=lambda r: r.person_name)
+
+
+# ─── Social: friends & hangouts ──────────────────────────────────────────────
+#
+# Owner-only by design: friends are absent from _MEMBER_ROUTES, so a member
+# gets 403 on every route here without any handler change.
+
+
+def _friend_or_404(db: Session, friend_id: int, allow_archived: bool = False) -> Friend:
+    f = db.query(Friend).get(friend_id)
+    if not f or (f.deleted_at is not None and not allow_archived):
+        raise HTTPException(404, "Friend not found")
+    return f
+
+
+def _hangout_status(explicit: Optional[str], when: str) -> str:
+    """A future date means a plan unless the caller says otherwise."""
+    if explicit is not None:
+        if explicit not in HANGOUT_STATUS_VALUES:
+            raise HTTPException(
+                422, f"status must be one of {', '.join(HANGOUT_STATUS_VALUES)}"
+            )
+        return explicit
+    return "planned" if when > today_in_user_tz() else "happened"
+
+
+def _resolve_friends(db: Session, friend_ids: List[int]) -> List[Friend]:
+    """Dedupe, preserve order, and 422 on anything unknown or archived."""
+    seen: set[int] = set()
+    out: List[Friend] = []
+    missing: List[int] = []
+    for fid in friend_ids:
+        if fid in seen:
+            continue
+        seen.add(fid)
+        f = db.query(Friend).get(fid)
+        if f is None or f.deleted_at is not None:
+            missing.append(fid)
+        else:
+            out.append(f)
+    if missing:
+        raise HTTPException(422, f"friend_ids: no active friend with id {missing}")
+    if not out:
+        raise HTTPException(422, "friend_ids: at least one active friend is required")
+    return out
+
+
+@app.get("/friends", response_model=List[FriendOut], summary="List friends with cadence status")
+def list_friends(
+    status: Optional[str] = Query(
+        None, description="Filter by status: never, ok, due_soon, overdue"
+    ),
+    db: Session = Depends(get_db),
+):
+    """Every active friend, each carrying days_since_hangout, days_until_due
+    and status so a caller never has to redo the date maths."""
+    if status is not None and status not in SOCIAL_STATUS_VALUES:
+        raise HTTPException(
+            422, f"status must be one of {', '.join(SOCIAL_STATUS_VALUES)}"
+        )
+    today = date.fromisoformat(today_in_user_tz())
+    rows = (
+        db.query(Friend)
+        .filter(Friend.deleted_at == None)
+        .order_by(Friend.display_order, Friend.id)
+        .all()
+    )
+    out = [friend_to_out(f, today) for f in rows]
+    if status is not None:
+        out = [f for f in out if f.status == status]
+    return out
+
+
+@app.get("/friends/due", response_model=List[FriendOut], summary="Friends you are due to see")
+def list_due_friends(db: Session = Depends(get_db)):
+    """Friends whose cadence has elapsed or is about to, plus anyone never
+    logged. Sorted most-overdue first — this is what the dashboard shows."""
+    today = date.fromisoformat(today_in_user_tz())
+    rows = (
+        db.query(Friend)
+        .filter(Friend.deleted_at == None)
+        .order_by(Friend.display_order, Friend.id)
+        .all()
+    )
+    # "planned" is deliberately absent: you already did the thing the nudge
+    # was asking for. "needs_confirm" is present — an unanswered plan is
+    # exactly what should come back to you.
+    due = [
+        f for f in (friend_to_out(f, today) for f in rows)
+        if f.status in ("overdue", "slipping", "due_soon", "never", "needs_confirm")
+    ]
+    # Never-logged friends sort last: they are a prompt, not a debt.
+    due.sort(key=lambda f: (f.days_until_due is None, f.days_until_due or 0))
+    return due
+
+
+@app.get("/friends/deleted", response_model=List[FriendOut], summary="Archived friends")
+def list_deleted_friends(db: Session = Depends(get_db)):
+    today = date.fromisoformat(today_in_user_tz())
+    rows = (
+        db.query(Friend)
+        .filter(Friend.deleted_at != None)
+        .order_by(Friend.deleted_at.desc())
+        .all()
+    )
+    return [friend_to_out(f, today) for f in rows]
+
+
+@app.post("/friends", response_model=FriendOut, summary="Add a friend")
+def create_friend(data: FriendCreate, db: Session = Depends(get_db)):
+    """cadence_days defaults to 30 (about monthly)."""
+    max_order = (
+        db.query(Friend.display_order)
+        .filter(Friend.deleted_at == None)
+        .order_by(Friend.display_order.desc())
+        .limit(1)
+        .scalar()
+    ) or 0
+    payload = data.model_dump(exclude_none=True)
+    f = Friend(**payload, display_order=max_order + 1)
+    db.add(f)
+    db.commit()
+    db.refresh(f)
+    return friend_to_out(f)
+
+
+@app.put("/friends/reorder", summary="Reorder the friends list")
+def reorder_friends(items: List[FriendOrderItem], db: Session = Depends(get_db)):
+    for item in items:
+        f = db.query(Friend).get(item.id)
+        if f:
+            f.display_order = item.display_order
+    db.commit()
+    return {"ok": True}
+
+
+@app.get("/friends/{friend_id}", response_model=FriendOut, summary="One friend")
+def get_friend(friend_id: int, db: Session = Depends(get_db)):
+    return friend_to_out(_friend_or_404(db, friend_id, allow_archived=True))
+
+
+@app.put("/friends/{friend_id}", response_model=FriendOut, summary="Update a friend")
+def update_friend(friend_id: int, data: FriendUpdate, db: Session = Depends(get_db)):
+    f = _friend_or_404(db, friend_id, allow_archived=True)
+    for k, v in data.model_dump(exclude_unset=True).items():
+        setattr(f, k, v)
+    db.commit()
+    db.refresh(f)
+    return friend_to_out(f)
+
+
+@app.delete("/friends/{friend_id}", summary="Archive a friend (soft delete)")
+def delete_friend(friend_id: int, db: Session = Depends(get_db)):
+    f = db.query(Friend).get(friend_id)
+    if not f:
+        raise HTTPException(404, "Friend not found")
+    if f.deleted_at is None:
+        f.deleted_at = datetime.now(timezone.utc).isoformat()
+    db.commit()
+    return {"ok": True}
+
+
+@app.post("/friends/{friend_id}/restore", summary="Restore an archived friend")
+def restore_friend(friend_id: int, db: Session = Depends(get_db)):
+    f = db.query(Friend).get(friend_id)
+    if not f:
+        raise HTTPException(404, "Friend not found")
+    f.deleted_at = None
+    db.commit()
+    return {"ok": True}
+
+
+@app.delete("/friends/{friend_id}/purge", summary="Permanently delete an archived friend")
+def purge_friend(friend_id: int, db: Session = Depends(get_db)):
+    f = db.query(Friend).get(friend_id)
+    if not f:
+        raise HTTPException(404, "Friend not found")
+    if f.deleted_at is None:
+        raise HTTPException(400, "Friend is not archived")
+    # Drop the friend from every hangout; delete entries left with nobody in
+    # them, since a hangout with no friends is unreachable.
+    orphaned = [h for h in list(f.hangouts) if len(h.friends) == 1]
+    f.hangouts = []  # ORM-managed, for the same reason as delete_hangout
+    for h in orphaned:
+        db.delete(h)
+    db.delete(f)
+    db.commit()
+    return {"ok": True}
+
+
+@app.get("/friends/{friend_id}/hangouts", response_model=List[HangoutOut], summary="One friend's hangout log")
+def list_friend_hangouts(friend_id: int, db: Session = Depends(get_db)):
+    """Newest first."""
+    f = _friend_or_404(db, friend_id, allow_archived=True)
+    rows = sorted(f.hangouts, key=lambda h: (h.date, h.id), reverse=True)
+    return [hangout_to_out(h) for h in rows]
+
+
+@app.post("/friends/{friend_id}/hangouts", response_model=FriendOut, summary="Log a hangout with a friend")
+def log_hangout_for_friend(
+    friend_id: int, data: Optional[HangoutForFriend] = None, db: Session = Depends(get_db)
+):
+    """Composite: records the hangout and re-derives the friend's cadence in
+    one call. Date defaults to today in your timezone. Pass also_friend_ids
+    for a group occasion. Returns the updated friend."""
+    f = _friend_or_404(db, friend_id)
+    data = data or HangoutForFriend()
+    ids = [friend_id] + list(data.also_friend_ids or [])
+    friends = _resolve_friends(db, ids)
+    when = data.date or today_in_user_tz()
+    h = Hangout(
+        date=when,
+        what_we_did=data.what_we_did,
+        status=_hangout_status(data.status, when),
+        created_at=datetime.now(timezone.utc).isoformat(),
+    )
+    h.friends = friends
+    db.add(h)
+    db.flush()
+    _recompute_last_hangout(db, [x.id for x in friends])
+    db.commit()
+    db.refresh(f)
+    return friend_to_out(f)
+
+
+@app.post("/friends/{friend_id}/plans", response_model=FriendOut, summary="Plan to see a friend")
+def plan_hangout(friend_id: int, data: HangoutForFriend, db: Session = Depends(get_db)):
+    """Record something arranged for the future. While a plan is upcoming the
+    friend stops being nudged; once its date passes it must be confirmed with
+    `POST /hangouts/{id}/confirm` (or cancelled) before it counts as time
+    actually spent. `date` is required and must not be in the past."""
+    f = _friend_or_404(db, friend_id)
+    if not data.date:
+        raise HTTPException(422, "date: a plan needs a date")
+    if data.date < today_in_user_tz():
+        raise HTTPException(422, "date: a plan cannot be in the past — log it as a hangout instead")
+    friends = _resolve_friends(db, [friend_id] + list(data.also_friend_ids or []))
+    h = Hangout(
+        date=data.date,
+        what_we_did=data.what_we_did,
+        status="planned",
+        created_at=datetime.now(timezone.utc).isoformat(),
+    )
+    h.friends = friends
+    db.add(h)
+    db.commit()
+    db.refresh(f)
+    return friend_to_out(f)
+
+
+@app.get("/plans", response_model=List[HangoutOut], summary="Upcoming and unconfirmed plans")
+def list_plans(db: Session = Depends(get_db)):
+    """Everything still marked `planned`, soonest first. Entries dated before
+    today are waiting to be confirmed or cancelled."""
+    rows = (
+        db.query(Hangout)
+        .filter(Hangout.status == "planned")
+        .order_by(Hangout.date, Hangout.id)
+        .all()
+    )
+    return [hangout_to_out(h) for h in rows]
+
+
+@app.post("/hangouts/{hangout_id}/confirm", response_model=HangoutOut, summary="Confirm a plan happened")
+def confirm_hangout(hangout_id: int, db: Session = Depends(get_db)):
+    """Turns a plan into history and advances everyone's cadence. Idempotent."""
+    h = db.query(Hangout).get(hangout_id)
+    if not h:
+        raise HTTPException(404, "Hangout not found")
+    h.status = "happened"
+    db.flush()
+    _recompute_last_hangout(db, [f.id for f in h.friends])
+    db.commit()
+    db.refresh(h)
+    return hangout_to_out(h)
+
+
+@app.get("/hangouts", response_model=List[HangoutOut], summary="Recent hangouts across all friends")
+def list_hangouts(
+    limit: int = Query(50, ge=1, le=500), db: Session = Depends(get_db)
+):
+    rows = (
+        db.query(Hangout).order_by(Hangout.date.desc(), Hangout.id.desc()).limit(limit).all()
+    )
+    return [hangout_to_out(h) for h in rows]
+
+
+@app.post("/hangouts", response_model=HangoutOut, summary="Log a hangout with one or more friends")
+def create_hangout(data: HangoutCreate, db: Session = Depends(get_db)):
+    """Date defaults to today in your timezone."""
+    friends = _resolve_friends(db, data.friend_ids)
+    when = data.date or today_in_user_tz()
+    h = Hangout(
+        date=when,
+        what_we_did=data.what_we_did,
+        status=_hangout_status(data.status, when),
+        created_at=datetime.now(timezone.utc).isoformat(),
+    )
+    h.friends = friends
+    db.add(h)
+    db.flush()
+    _recompute_last_hangout(db, [f.id for f in friends])
+    db.commit()
+    db.refresh(h)
+    return hangout_to_out(h)
+
+
+@app.put("/hangouts/{hangout_id}", response_model=HangoutOut, summary="Edit a hangout")
+def update_hangout(hangout_id: int, data: HangoutUpdate, db: Session = Depends(get_db)):
+    h = db.query(Hangout).get(hangout_id)
+    if not h:
+        raise HTTPException(404, "Hangout not found")
+    payload = data.model_dump(exclude_unset=True)
+    touched = {f.id for f in h.friends}  # old roster must be recomputed too
+    if "friend_ids" in payload:
+        friends = _resolve_friends(db, payload.pop("friend_ids"))
+        h.friends = friends
+        touched |= {f.id for f in friends}
+    if "status" in payload:
+        payload["status"] = _hangout_status(payload["status"], payload.get("date", h.date))
+    for k, v in payload.items():
+        setattr(h, k, v)
+    db.flush()
+    _recompute_last_hangout(db, sorted(touched))
+    db.commit()
+    db.refresh(h)
+    return hangout_to_out(h)
+
+
+@app.delete("/hangouts/{hangout_id}", summary="Delete a hangout")
+def delete_hangout(hangout_id: int, db: Session = Depends(get_db)):
+    h = db.query(Hangout).get(hangout_id)
+    if not h:
+        raise HTTPException(404, "Hangout not found")
+    touched = [f.id for f in h.friends]
+    # Clear the roster through the ORM; issuing a manual DELETE on
+    # hangout_friends here makes the unit of work try to delete the same rows
+    # again on flush and raise StaleDataError.
+    h.friends = []
+    db.delete(h)
+    db.flush()
+    _recompute_last_hangout(db, touched)
+    db.commit()
+    return {"ok": True}
 
 
 # ─── Projects ────────────────────────────────────────────────────────────────

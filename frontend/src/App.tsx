@@ -13,6 +13,7 @@ import Dashboard from './pages/Dashboard'
 import TodosPage from './pages/TodosPage'
 import ProjectsPage from './pages/ProjectsPage'
 import PeoplePage from './pages/PeoplePage'
+import SocialPage from './pages/SocialPage'
 import TodoDetailPage from './pages/TodoDetailPage'
 import RecentlyDonePage from './pages/RecentlyDonePage'
 import RecentlyDeletedPage from './pages/RecentlyDeletedPage'
@@ -282,6 +283,7 @@ function AppShell() {
           <Route path="/todos/:id" element={<TodoDetailPage />} />
           <Route path="/projects" element={<ProjectsPage onOpenTodo={(id) => navigate(`/todos/${id}`)} />} />
           <Route path="/people" element={<PeoplePage onOpenTodo={(id) => navigate(`/todos/${id}`)} />} />
+          <Route path="/social" element={<SocialPage />} />
           <Route path="/done" element={<RecentlyDonePage />} />
           <Route path="/deleted" element={<RecentlyDeletedPage />} />
           <Route path="/meeting-notes" element={<MeetingNotesPage />} />

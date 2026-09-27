@@ -93,6 +93,7 @@ Proposed features and usability improvements are tracked in `claude_readmes/feat
 | `project_config.yaml` | Backend port, venv path, OpenAI key, model selection |
 | `frontend/_frontend_config.yaml` | UI behavior (fade timings, layout defaults) |
 | `frontend/vite.config.ts` | Dev server proxy, HTTPS (optional via mkcert) |
+| `fly.toml` / `fly.mona.toml` | One Fly config per deployment — the repo is deployed twice, to separate apps with separate databases. Deploy with `-c <your file>`; never put an app name in the other person's config. See `readmes/deployments.md`. |
 
 ## Database
 

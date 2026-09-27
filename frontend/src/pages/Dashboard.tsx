@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { fetchReminders, fetchRecentlyDone, fetchTodos, fetchPersons, updateTodo } from '../api'
-import type { ScheduleStatus, Todo, Person } from '../types'
+import { fetchReminders, fetchRecentlyDone, fetchTodos, fetchPersons, fetchDueFriends, fetchPlans, updateTodo } from '../api'
+import type { ScheduleStatus, Todo, Person, Friend, Hangout } from '../types'
 import { ListTodo, CheckCircle2, ShieldAlert, ExternalLink, type LucideIcon } from 'lucide-react'
+import { nudgeCopy } from '../socialCopy'
 import { BlockerTreeNode } from '../components/BlockerTree'
 import CheckInButton from '../components/CheckInButton'
 import DatePicker from '../components/DatePicker'
@@ -17,8 +18,22 @@ import {
  snapshotTodoCaches,
  type TodoCachesSnapshot,
 } from '../utils/optimisticTodo'
+import { daysSinceDate, getTodayString } from '../dateUtils'
 
 const STATUS_OPTIONS = ['todo', 'done', 'blocked']
+
+/** "Today" / "Tomorrow" / "Fri 11 Sep" — a plan is easier to place by weekday. */
+function formatPlanDate(dateStr: string, timezone: string): string {
+ const away = -daysSinceDate(dateStr, timezone)
+ if (away === 0) return 'Today'
+ if (away === 1) return 'Tomorrow'
+ const [y, m, d] = dateStr.split('-').map(Number)
+ return new Date(y, m - 1, d).toLocaleDateString(undefined, {
+ weekday: 'short',
+ day: 'numeric',
+ month: 'short',
+ })
+}
 const IMPORTANCE_OPTIONS = ['low', 'medium', 'high', 'critical']
 
 const autoOpenSelect = (el: HTMLSelectElement | null) => {
@@ -367,6 +382,16 @@ export default function Dashboard({ onOpenTodo }: { onOpenTodo: (id: number) => 
  queryFn: () => fetchRecentlyDone({ since: sevenDaysAgoIso }),
  })
 
+ const { data: allDueFriends = [] } = useQuery<Friend[]>({
+ queryKey: ['friends-due'],
+ queryFn: fetchDueFriends,
+ })
+
+ const { data: allPlans = [] } = useQuery<Hangout[]>({
+ queryKey: ['plans'],
+ queryFn: fetchPlans,
+ })
+
  const { data: persons = [] } = useQuery<Person[]>({
  queryKey: ['persons'],
  queryFn: fetchPersons,
@@ -386,6 +411,22 @@ export default function Dashboard({ onOpenTodo }: { onOpenTodo: (id: number) => 
  (p) => getCheckInState(p, timezone).state !== 'due',
  ).length
  const checkInDueCount = dueCheckIns.length - checkInOverdueCount
+
+ // Only friends who are overdue or nearly due; "never logged" belongs on the
+ // Social page as a prompt, not on the dashboard as an alert.
+ const dueFriends = allDueFriends.filter((f) => f.status !== 'never' && f.status !== 'planned')
+ const socialOverdueCount = dueFriends.filter(
+ (f) => f.status === 'overdue' || f.status === 'slipping',
+ ).length
+ const socialConfirmCount = dueFriends.filter((f) => f.status === 'needs_confirm').length
+ const socialSoonCount = dueFriends.length - socialOverdueCount - socialConfirmCount
+
+ // Plans still to come, next two weeks. Past-dated ones are deliberately left
+ // out: they already surface as "Did it happen?" on the friend's own card.
+ const todayStr = getTodayString(timezone)
+ const upcomingPlans = allPlans
+ .filter((h) => h.date >= todayStr && daysSinceDate(h.date, timezone) >= -14)
+ .slice(0, 5)
 
  const recentTodos = [...todos]
  .sort((a, b) => b.created_at.localeCompare(a.created_at))
@@ -432,6 +473,73 @@ export default function Dashboard({ onOpenTodo }: { onOpenTodo: (id: number) => 
  onOpen={() => navigate(`/people?person=${p.id}`)}
  />
  ))}
+ </div>
+ )}
+ </div>
+ )}
+
+ {/* Friends you are due to reach out to, plus what's already arranged */}
+ {(dueFriends.length > 0 || upcomingPlans.length > 0) && (
+ <div className="mb-8">
+ <div className="flex items-center gap-3 mb-3">
+ <h3 className="text-lg font-semibold text-fg">Social</h3>
+ {socialOverdueCount > 0 && (
+ <span className="bg-danger-bg text-danger text-xs font-bold px-2 py-0.5 rounded-full">
+ {socialOverdueCount} overdue
+ </span>
+ )}
+ {socialSoonCount > 0 && (
+ <span className="bg-warning-bg text-warning text-xs font-bold px-2 py-0.5 rounded-full">
+ {socialSoonCount} due soon
+ </span>
+ )}
+ {socialConfirmCount > 0 && (
+ <span className="bg-accent-1 text-accent-fg text-xs font-bold px-2 py-0.5 rounded-full">
+ {socialConfirmCount} to confirm
+ </span>
+ )}
+ </div>
+ <div className="space-y-2">
+ {dueFriends.map((f) => (
+ <button
+ key={f.id}
+ onClick={() => navigate('/social')}
+ className={`w-full text-left rounded-lg border p-3 transition-colors ${
+ f.status === 'needs_confirm'
+ ? 'bg-accent-1 border-accent/30 hover:border-accent/60'
+ : f.status === 'overdue' || f.status === 'slipping'
+ ? 'bg-danger-bg border-danger/30 hover:border-danger/60'
+ : 'bg-warning-bg border-warning/30 hover:border-warning/60'
+ }`}
+ >
+ <div className="font-medium text-fg">{nudgeCopy(f).headline}</div>
+ <div className="text-sm text-fg-muted">
+ {f.days_since_hangout === null
+ ? 'No hangout logged yet'
+ : `Last seen ${f.days_since_hangout} days ago`}
+ {f.last_hangout_what ? ` — ${f.last_hangout_what}` : ''}
+ </div>
+ </button>
+ ))}
+ </div>
+ {upcomingPlans.length > 0 && (
+ <div className="mt-3">
+ <div className="text-xs font-semibold text-fg-subtle uppercase tracking-wide mb-1.5">
+ Coming up
+ </div>
+ <ul className="m-0 p-0 list-none flex flex-col gap-1">
+ {upcomingPlans.map((h) => (
+ <li key={h.id} className="text-sm text-fg-muted flex gap-2">
+ <span className="tabular-nums text-fg-subtle shrink-0">
+ {formatPlanDate(h.date, timezone)}
+ </span>
+ <span className="min-w-0">
+ {h.friend_names.join(', ')}
+ {h.what_we_did ? ` — ${h.what_we_did}` : ''}
+ </span>
+ </li>
+ ))}
+ </ul>
  </div>
  )}
  </div>

@@ -7,3 +7,4 @@
 # Build caches / stray local files
 *.tsbuildinfo
 /management.db
+backend/.env

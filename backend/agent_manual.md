@@ -44,6 +44,7 @@ Tokens carry a subset of these scopes. A `403` with `required_scope` tells you w
 | `write:persons` | `PUT /persons/{id}` with **only** `last_check_in_date` and/or `notes` |
 | `write:notes` | create/edit/restore notes with `kind='personal'` only; never transcripts |
 | `write:daily` | daily goals and must-do items |
+| `write:social` | add friends and log hangouts (Social) |
 
 ## Conventions
 
@@ -52,6 +53,8 @@ Tokens carry a subset of these scopes. A `403` with `required_scope` tells you w
 - Focus: a todo is "in focus" when `is_focused=true`; `focus_order` (ascending) is its rank. Moving focus = setting these on the affected todos, or one call to `PUT /todos/reorder-focus`.
 - Check-in ("ping"): each person may be a direct report with `check_in_interval_days` and `last_check_in_date`. A person is **overdue** when `today − last_check_in_date > check_in_interval_days` (or there is no date). Recording a check-in = `POST /persons/{id}/check-in`; the server keeps the date forward-only.
 - Tags: inline `#tag` / `#tag/sub` in a note body are indexed automatically. Tag segments must start with a letter and contain only letters, digits, `_` (no hyphens) — `#report/2026-w35` would index as just `report`. Reports: weekly `#report/weekly #report/w<yyyy>_<ww>` (e.g. `#report/w2026_35`); daily `#report/daily #report/d<yyyymmdd>`. The bundled `report daily|weekly` helper renders these from the digest.
+- Social cadence: each friend has `cadence_days` and `last_hangout_date`. Derived fields come back on every friend, so do not compute them yourself: `days_since_hangout`, `days_until_due` (negative = overdue), `cadence_tier` (elapsed time alone) and `status`, which is what the user is shown. `status` is `planned` (something is arranged — **do not nudge**), `needs_confirm` (a plan's date passed and nobody said whether it happened), `never`, `ok`, `due_soon` (≥80% of the cadence), `slipping` (≥95%) or `overdue`. A plan outranks the cadence, and an unconfirmed past plan outranks everything.
+- A hangout is either `happened` or `planned`. Only `happened` entries dated today or earlier count toward `last_hangout_date`, so a plan that falls through can never silently mute the nudge. Unlike person check-ins this is **not** a forward-only watermark: the log is the source of truth, so deleting, re-dating or confirming an entry recomputes the date.
 - Soft deletes: never delete. If something should go away, tell the user.
 - Every mutating request you make is logged (method, path, status, body) and visible to the user in Settings → API tokens. Act as if the user will read it.
 - Every mutation returns the updated object — show the user a before/after for anything non-trivial. Prefer one-at-a-time updates; confirm with the user before touching more than ~10 items.
@@ -107,6 +110,26 @@ POST /notes
 Append to an existing personal note: `GET /notes/{id}`, then `PUT /notes/{id} {"content": old_content + "\n\n…"}`. Never overwrite a note you have not just read.
 
 Daily planning: `PUT /daily-goals/{date} {"content":"…"}`; `POST /must-do/{date} {"text":"…","section":"morning"}`.
+
+Social — who to reach out to: `GET /friends/due` returns friends who are overdue, due soon, or never logged, most overdue first. `GET /friends` takes `?status=overdue|due_soon|never|ok`. A friend's history is `GET /friends/{id}/hangouts` (newest first).
+
+Log time spent with a friend, **only after it actually happened**:
+```
+POST /friends/{id}/hangouts
+{"date":"YYYY-MM-DD", "what_we_did":"ramen + walk along the river", "also_friend_ids":[4,7]}
+```
+Empty body = today, just that friend. Returns the updated friend with its new status. For a group occasion with no primary friend use `POST /hangouts {"friend_ids":[2,4,7], "what_we_did":"…"}`. Add someone with `POST /friends {"name":"Alex","cadence_days":30}` — `cadence_days` is how often the user wants to see them (default 30).
+
+Plan something for the future (the user has *arranged* to see them, not seen them):
+```
+POST /friends/{id}/plans
+{"date":"YYYY-MM-DD", "what_we_did":"dinner at theirs", "also_friend_ids":[4]}
+```
+`date` is required and must not be in the past. While the plan is upcoming the friend's `status` is `planned` and they drop off `GET /friends/due`. Once the date passes the status becomes `needs_confirm` and nudging resumes until someone answers: `POST /hangouts/{id}/confirm` turns it into history and advances the cadence, or the user deletes it if it fell through. `GET /plans` lists everything still `planned`, soonest first — the past-dated ones are the ones needing an answer.
+
+Do not confirm a plan, or log a hangout, on your own initiative — both assert that time was actually spent. Ask the user first.
+
+Editing a friend is `PUT /friends/{id}` (`name`, `notes`, `cadence_days`). Archiving a friend, purging one, and deleting a hangout or plan are **not** reachable with a token — ask the user.
 
 ## Errors
 

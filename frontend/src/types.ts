@@ -129,7 +129,52 @@ export interface TagOut {
   note_count: number
 }
 
-export type ApiTokenScope = 'read' | 'write:todos' | 'write:persons' | 'write:notes' | 'write:daily'
+export type SocialStatus =
+  | 'planned'
+  | 'needs_confirm'
+  | 'never'
+  | 'ok'
+  | 'due_soon'
+  | 'slipping'
+  | 'overdue'
+
+export type HangoutStatus = 'planned' | 'happened'
+
+export interface Friend {
+  id: number
+  name: string
+  notes: string | null
+  cadence_days: number
+  last_hangout_date: string | null
+  display_order: number
+  deleted_at: string | null
+  /** Derived server-side — never recompute these in the UI. */
+  days_since_hangout: number | null
+  days_until_due: number | null
+  status: SocialStatus
+  /** The cadence tier ignoring any plan — "overdue, but you're seeing them Friday". */
+  cadence_tier: SocialStatus
+  hangout_count: number
+  last_hangout_what: string | null
+  next_plan_date: string | null
+  next_plan_what: string | null
+  next_plan_id: number | null
+  days_until_plan: number | null
+  unconfirmed_plan_id: number | null
+  unconfirmed_plan_date: string | null
+}
+
+export interface Hangout {
+  id: number
+  date: string
+  what_we_did: string | null
+  status: HangoutStatus
+  friend_ids: number[]
+  friend_names: string[]
+  created_at: string | null
+}
+
+export type ApiTokenScope = 'read' | 'write:todos' | 'write:persons' | 'write:notes' | 'write:daily' | 'write:social'
 
 export interface ApiToken {
   id: number

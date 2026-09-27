@@ -329,6 +329,7 @@ _SCOPE_HINTS = {
     "read": "Read todos, projects, people, goals, notes, the manual",
     "write:todos": "Create / edit / complete / focus todos",
     "write:persons": "Record check-ins",
+    "write:social": "Add friends and log hangouts",
     "write:notes": "Create and edit personal notes (reports)",
     "write:daily": "Daily goals and must-do items",
 }
@@ -577,6 +578,77 @@ def check_in(person_id: int, date: Optional[str] = None) -> dict:
     with M.SessionLocal() as db:
         return _audited(tid, "check_in", {"person_id": person_id, "date": date},
                         lambda: _out(M.check_in_person(person_id, M.CheckInIn(date=date) if date else None, db)))
+
+
+@mcp.tool()
+def list_friends(status: Optional[str] = None) -> list:
+    """Friends with social cadence status. Each carries days_since_hangout, days_until_due and status (never/ok/due_soon/overdue). Filter with status=."""
+    _need("read")
+    with M.SessionLocal() as db:
+        return _read(lambda: _out(M.list_friends(status=status, db=db)))
+
+
+@mcp.tool()
+def list_due_friends() -> list:
+    """Friends you are due to reach out to (overdue, due soon, or never logged), most overdue first."""
+    _need("read")
+    with M.SessionLocal() as db:
+        return _read(lambda: _out(M.list_due_friends(db)))
+
+
+@mcp.tool()
+def list_friend_hangouts(friend_id: int) -> list:
+    """One friend's hangout log, newest first."""
+    _need("read")
+    with M.SessionLocal() as db:
+        return _read(lambda: _out(M.list_friend_hangouts(friend_id, db)))
+
+
+@mcp.tool()
+def add_friend(name: str, cadence_days: Optional[int] = None, notes: Optional[str] = None) -> dict:
+    """Add someone to the Social list. cadence_days is how often you want to see them (default 30)."""
+    tid = _need("write:social")
+    with M.SessionLocal() as db:
+        return _audited(tid, "add_friend", {"name": name, "cadence_days": cadence_days},
+                        lambda: _out(M.create_friend(
+                            M.FriendCreate(name=name, cadence_days=cadence_days, notes=notes), db)))
+
+
+@mcp.tool()
+def log_hangout(friend_ids: list, date: Optional[str] = None, what_we_did: Optional[str] = None) -> dict:
+    """Record time spent with one or more friends (default today). Resets their cadence. Only after it actually happened."""
+    tid = _need("write:social")
+    with M.SessionLocal() as db:
+        return _audited(tid, "log_hangout", {"friend_ids": friend_ids, "date": date, "what_we_did": what_we_did},
+                        lambda: _out(M.create_hangout(
+                            M.HangoutCreate(friend_ids=friend_ids, date=date, what_we_did=what_we_did), db)))
+
+
+@mcp.tool()
+def plan_hangout(friend_id: int, date: str, what_we_did: Optional[str] = None) -> dict:
+    """Record something arranged with a friend for a future date. Stops the nudges until then; after the date it must be confirmed. Use this when the user says they have made a plan, not that they met."""
+    tid = _need("write:social")
+    with M.SessionLocal() as db:
+        return _audited(tid, "plan_hangout", {"friend_id": friend_id, "date": date},
+                        lambda: _out(M.plan_hangout(
+                            friend_id, M.HangoutForFriend(date=date, what_we_did=what_we_did), db)))
+
+
+@mcp.tool()
+def list_plans() -> list:
+    """Upcoming plans, plus past-dated ones still waiting to be confirmed or cancelled."""
+    _need("read")
+    with M.SessionLocal() as db:
+        return _read(lambda: _out(M.list_plans(db)))
+
+
+@mcp.tool()
+def confirm_hangout(hangout_id: int) -> dict:
+    """Confirm a plan actually happened, turning it into history and advancing everyone's cadence. Only after the user says it took place."""
+    tid = _need("write:social")
+    with M.SessionLocal() as db:
+        return _audited(tid, "confirm_hangout", {"hangout_id": hangout_id},
+                        lambda: _out(M.confirm_hangout(hangout_id, db)))
 
 
 @mcp.tool()
