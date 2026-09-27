@@ -13,6 +13,7 @@ import {
  useMeetingNoteSort,
  useHotkeys,
  useFontSize,
+ useFontFamily,
  useThemeVariant,
  useNavLayout,
  formatHotkey,
@@ -31,6 +32,7 @@ import ChangePasswordSection from '../components/ChangePasswordSection'
 import UsersSection from '../components/UsersSection'
 import type { ApiToken, ApiTokenScope } from '../types'
 import { listThemes, type ThemeName } from '../theme'
+import { FONT_FAMILIES, loadAllFontFamilies, REFERENCE_X_HEIGHT, type FontFamily } from '../theme/fonts'
 import { Select } from '../components/ui'
 import { LOCKED_NAV_ROUTE, orderNavItems } from '../navItems'
 
@@ -791,6 +793,9 @@ export default function SettingsPage() {
  const { sortBy, setSortBy } = useMeetingNoteSort()
  const { resetToDefaults } = useHotkeys()
  const { size: fontSize, setSize: setFontSize } = useFontSize()
+ const { family: fontFamily, setFamily: setFontFamily } = useFontFamily()
+ // Load the web fallbacks so each choice previews in its own face
+ useEffect(loadAllFontFamilies, [])
  const { variant: themeVariant, setVariant: setThemeVariant } = useThemeVariant()
  const isOwner = useIsOwner()
  const { data: persons = [] } = useQuery({ queryKey: ['persons'], queryFn: fetchPersons, enabled: isOwner })
@@ -858,6 +863,34 @@ export default function SettingsPage() {
      <option key={opt.name} value={opt.name}>{opt.label}</option>
    ))}
  </Select>
+ </div>
+ </div>
+ <div className="px-6 py-5 border-t border-border">
+ <h2 className="text-sm font-semibold text-fg">Font</h2>
+ <p className="text-sm text-fg-muted mt-0.5">
+ Apple fonts show on Mac, iPhone and iPad; elsewhere a close match is used.
+ </p>
+ <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
+ {(Object.keys(FONT_FAMILIES) as FontFamily[]).map((f) => {
+ const opt = FONT_FAMILIES[f]
+ const active = fontFamily === f
+ return (
+ <button
+ key={f}
+ onClick={() => setFontFamily(f)}
+ title={'note' in opt ? opt.note : undefined}
+ className={`text-left px-3 py-2.5 rounded-lg border transition-colors ${
+ active
+ ? 'border-accent bg-accent-1 text-fg'
+ : 'border-border text-fg-muted hover:text-fg hover:border-border-strong'
+ }`}
+ style={opt.stack ? { fontFamily: opt.stack, fontSizeAdjust: REFERENCE_X_HEIGHT } : undefined}
+ >
+ <span className="block text-xl leading-none">Aa</span>
+ <span className="block text-sm font-medium mt-1.5">{opt.label}</span>
+ </button>
+ )
+ })}
  </div>
  </div>
  <div className="px-6 py-5 border-t border-border flex items-center justify-between gap-4">

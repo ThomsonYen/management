@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { fetchSettings, updateSettings, type UserSettings, type UserSettingsPatch } from './api'
 import { applyTheme, DEFAULT_THEME, THEMES, type ThemeName } from './theme'
+import { applyFontFamily, DEFAULT_FONT_FAMILY, isFontFamily, type FontFamily } from './theme/fonts'
 import { useOptionalSession } from './hooks/useSession'
 
 // ─── Defaults (authoritative on the frontend too, so first paint has real values) ───
@@ -102,6 +103,7 @@ function buildInitial(): UserSettings {
     theme: cache.theme ?? getInitialTheme(),
     theme_variant: cache.theme_variant ?? DEFAULT_THEME,
     font_size: cache.font_size ?? getInitialFontSize(),
+    font_family: isFontFamily(cache.font_family) ? cache.font_family : DEFAULT_FONT_FAMILY,
     meeting_note_sort: cache.meeting_note_sort ?? 'updated_at',
     todo_defaults: {
       assignee_name: '',
@@ -121,6 +123,7 @@ function buildInitial(): UserSettings {
 const initial = buildInitial()
 document.documentElement.classList.toggle('dark', initial.theme === 'dark')
 applyFontSize(initial.font_size)
+applyFontFamily(initial.font_family as FontFamily)
 applyTheme((initial.theme_variant in THEMES ? initial.theme_variant : DEFAULT_THEME) as ThemeName)
 
 // ─── Hotkey helpers ─────────────────────────────────────────────────────────
@@ -202,6 +205,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
           font_size: (['sm', 'md', 'lg', 'xl'] as FontSize[]).includes(server.font_size)
             ? server.font_size
             : 'md',
+          font_family: isFontFamily(server.font_family) ? server.font_family : DEFAULT_FONT_FAMILY,
           hotkeys: { ...DEFAULT_HOTKEYS, ...(server.hotkeys ?? {}) },
           nav_order: server.nav_order ?? [],
           nav_hidden: server.nav_hidden ?? [],
@@ -225,6 +229,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     saveCache(settings)
     document.documentElement.classList.toggle('dark', settings.theme === 'dark')
     applyFontSize(settings.font_size)
+    applyFontFamily(settings.font_family as FontFamily)
     applyTheme((settings.theme_variant in THEMES ? settings.theme_variant : DEFAULT_THEME) as ThemeName)
   }, [settings])
 
@@ -332,6 +337,13 @@ export function useFontSize() {
   const { settings, patch } = useSettings()
   const setSize = useCallback((next: FontSize) => patch({ font_size: next }), [patch])
   return { size: settings.font_size, setSize }
+}
+
+export function useFontFamily() {
+  const { settings, patch } = useSettings()
+  const family = isFontFamily(settings.font_family) ? settings.font_family : DEFAULT_FONT_FAMILY
+  const setFamily = useCallback((next: FontFamily) => patch({ font_family: next }), [patch])
+  return { family, setFamily }
 }
 
 export function useThemeVariant() {

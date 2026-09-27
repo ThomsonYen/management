@@ -84,6 +84,8 @@ DEFAULT_USER_SETTINGS: dict = {
     "theme": "light",
     "theme_variant": "linear-emerald",
     "font_size": "md",
+    # Interface font id from frontend/src/theme/fonts.ts; "theme" = the theme's own font.
+    "font_family": "theme",
     "meeting_note_sort": "updated_at",
     "todo_defaults": {
         "assignee_name": "",
@@ -5349,12 +5351,17 @@ class UserSettingsPatch(BaseModel):
     theme: Optional[str] = None
     theme_variant: Optional[str] = None
     font_size: Optional[str] = None
+    font_family: Optional[str] = None
     meeting_note_sort: Optional[str] = None
     todo_defaults: Optional[TodoDefaultsPatch] = None
     hotkeys: Optional[dict] = None
     nav_order: Optional[list[str]] = None
     nav_hidden: Optional[list[str]] = None
     nav_folded: Optional[list[str]] = None
+
+
+# Keep in sync with FONT_FAMILIES in frontend/src/theme/fonts.ts.
+FONT_FAMILIES = ("theme", "avenir", "gill-sans", "futura", "helvetica", "system", "dm-sans")
 
 
 def _validate_patch(patch: UserSettingsPatch) -> None:
@@ -5368,6 +5375,8 @@ def _validate_patch(patch: UserSettingsPatch) -> None:
         raise HTTPException(400, f"Unknown theme: {patch.theme}")
     if patch.font_size is not None and patch.font_size not in ("sm", "md", "lg", "xl"):
         raise HTTPException(400, f"Unknown font_size: {patch.font_size}")
+    if patch.font_family is not None and patch.font_family not in FONT_FAMILIES:
+        raise HTTPException(400, f"Unknown font_family: {patch.font_family}")
     if patch.meeting_note_sort is not None and patch.meeting_note_sort not in ("created_at", "updated_at"):
         raise HTTPException(400, f"Unknown meeting_note_sort: {patch.meeting_note_sort}")
     if patch.todo_defaults and patch.todo_defaults.importance is not None:

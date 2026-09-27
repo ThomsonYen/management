@@ -493,6 +493,7 @@ export interface UserSettings {
   theme: 'light' | 'dark'
   theme_variant: string
   font_size: 'sm' | 'md' | 'lg' | 'xl'
+  font_family: string
   meeting_note_sort: 'created_at' | 'updated_at'
   todo_defaults: {
     assignee_name: string
