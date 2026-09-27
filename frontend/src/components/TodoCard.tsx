@@ -6,6 +6,7 @@ import { createTodo, createSubTodo, deleteTodo, restoreTodo, updateSubTodo, upda
 import { useToast } from '../ToastContext'
 import DatePicker from './DatePicker'
 import type { Todo, Person, Project } from '../types'
+import { pickableProjects, projectOptionLabel } from '../utils/projects'
 import { useTimezone } from '../SettingsContext'
 import { isOverdue as checkOverdue, getTodayString } from '../dateUtils'
 import { todoToMarkdown } from '../utils/todoMarkdown'
@@ -470,8 +471,8 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
  className="text-xs border border-accent-2 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-accent"
  >
  <option value="">— None —</option>
- {projects.map((p) => (
- <option key={p.id} value={p.id}>{p.name}</option>
+ {pickableProjects(projects, todo.project_id).map((p) => (
+ <option key={p.id} value={p.id}>{projectOptionLabel(p)}</option>
  ))}
  </select>
  ) : (

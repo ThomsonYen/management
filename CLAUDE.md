@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Personal productivity app (todos, projects, meetings, daily goals) with audio recording and AI transcription. React/TypeScript frontend + Python FastAPI backend, SQLite database.
 
+**Read `claude_readmes/design_principles.md` before designing any feature, table or endpoint.** It sets out the rules the app is built on — above all *deprecate, don't delete* (active → deprecated → soft-deleted → purged, each step reversible except the last) — and a checklist for new entities.
+
 ## Running the App
 
 **Backend:**
@@ -45,6 +47,7 @@ There are no automated tests or linters configured.
 
 - File-based storage for meeting notes (`meeting_notes/`), audio (`meeting_audio/`), transcripts (`meeting_transcripts/`), and templates (`meeting_templates/`) — keyed by meeting note ID
 - Soft deletes for meeting notes (`hidden` flag)
+- Project lifecycle: `deprecated_at` (retired but kept — out of pickers and the board, todos untouched; cascades down, reactivation cascades up) before `deleted_at` (soft delete, Recently Deleted) before purge. Pickers use `pickableProjects()` in `frontend/src/utils/projects.ts`
 - Many-to-many association tables for meeting attendees, projects, and todos
 
 ## Agent-facing API

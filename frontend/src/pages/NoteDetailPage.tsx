@@ -19,6 +19,7 @@ import {
  AlertTriangle,
 } from 'lucide-react'
 import type { Person, Project } from '../types'
+import { pickableProjects, projectOptionLabel } from '../utils/projects'
 import DatePicker from '../components/DatePicker'
 import { useSuggestedNotes } from '../SuggestedNotesContext'
 import {
@@ -372,7 +373,7 @@ export default function NoteDetailPage() {
  <FolderKanban size={12} /> Projects
  </h3>
  <div className="flex flex-wrap gap-1.5">
- {projects.map((p) => (
+ {pickableProjects(projects, projectIds).map((p) => (
  <button
  key={p.id}
  onClick={() => toggleProject(p.id)}
@@ -769,8 +770,8 @@ function TodoEditModal({
  className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-surface text-fg focus:outline-none focus:ring-2 focus:ring-accent"
  >
  <option value="">None</option>
- {projects.map((p) => (
- <option key={p.id} value={p.id}>{p.name}</option>
+ {pickableProjects(projects, draft.project_id).map((p) => (
+ <option key={p.id} value={p.id}>{projectOptionLabel(p)}</option>
  ))}
  </select>
  </div>

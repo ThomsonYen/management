@@ -1,12 +1,12 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useResizableSidebar } from '../hooks/useResizableSidebar'
 import { useHotkey } from '../hooks/useHotkey'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ChevronLeft, ChevronsLeft, ChevronsRight } from 'lucide-react'
+import { Archive, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react'
 import { useIsDesktop } from '../hooks/useMediaQuery'
 import ProjectNotes from '../components/ProjectNotes'
-import { fetchProjectTree, fetchProjects, fetchTodos, fetchPersons, createProject, createTodo, deleteProject, restoreProject, updateProject, reorderProjects } from '../api'
+import { fetchProjectTree, fetchProjects, fetchTodos, fetchPersons, createProject, createTodo, deleteProject, restoreProject, deprecateProject, undeprecateProject, updateProject, reorderProjects } from '../api'
 import { useToast } from '../ToastContext'
 import type { ProjectTree, Project, Todo } from '../types'
 import DatePicker from '../components/DatePicker'
@@ -28,8 +28,28 @@ const IMPORTANCE_DOT: Record<string, string> = {
  high: 'bg-danger',
 }
 
+/**
+ * Split the tree into the active tree (deprecated nodes pruned) and the tops of
+ * the deprecated subtrees. Deprecation cascades down and reactivation up, so a
+ * deprecated node's whole subtree is deprecated too.
+ */
+function splitDeprecated(tree: ProjectTree[]): { active: ProjectTree[]; deprecated: ProjectTree[] } {
+ const deprecated: ProjectTree[] = []
+ const prune = (nodes: ProjectTree[]): ProjectTree[] =>
+ nodes.flatMap((n) => {
+ if (n.deprecated_at) {
+ deprecated.push(n)
+ return []
+ }
+ return [{ ...n, subprojects: prune(n.subprojects) }]
+ })
+ const active = prune(tree)
+ return { active, deprecated }
+}
+
 function ProjectNode({
  node,
+ muted = false,
  siblings,
  depth,
  selectedId,
@@ -58,6 +78,8 @@ function ProjectNode({
  onDragLeave: (id: number) => void
  onDrop: (fromId: number, beforeId: number, siblings: ProjectTree[]) => void
  onDragEnd: () => void
+ /** Deprecated: dimmed, not draggable, no "add subproject". */
+ muted?: boolean
 }) {
  const [open, setOpen] = useState(true)
  const [editing, setEditing] = useState(false)
@@ -94,7 +116,7 @@ function ProjectNode({
  return (
  <div>
  <div
- draggable
+ draggable={!muted}
  onDragStart={(e) => {
  onDragStart(node.id)
  e.dataTransfer.effectAllowed = 'move'
@@ -115,6 +137,8 @@ function ProjectNode({
  className={`flex items-center gap-1 group cursor-pointer rounded-lg px-2 py-1.5 text-sm transition-colors ${
  selectedId === node.id
  ? 'bg-accent-2 text-accent-fg dark:bg-accent-1 dark:text-accent-fg font-semibold'
+ : muted
+ ? 'text-fg-subtle hover:bg-inset dark:hover:bg-elevated'
  : 'text-fg hover:bg-inset dark:hover:bg-elevated'
  } ${isDropTarget ? 'outline outline-2 outline-accent' : ''} ${isDragSource ? 'opacity-40' : ''}`}
  style={{ paddingLeft: `${8 + depth * 16}px` }}
@@ -163,7 +187,7 @@ function ProjectNode({
  {node.name}
  </span>
  )}
- <button
+ {!muted && <button
  onClick={(e) => {
  e.stopPropagation()
  onAddSub(node.id)
@@ -174,7 +198,7 @@ function ProjectNode({
  onDragStart={(e) => e.preventDefault()}
  >
  +
- </button>
+ </button>}
  </div>
  {hasChildren && open && (
  <div>
@@ -182,6 +206,7 @@ function ProjectNode({
  <ProjectNode
  key={sp.id}
  node={sp}
+ muted={muted}
  siblings={node.subprojects}
  depth={depth + 1}
  selectedId={selectedId}
@@ -361,6 +386,8 @@ export default function ProjectsPage({ onOpenTodo }: { onOpenTodo: (id: number) 
  queryKey: ['projects-tree'],
  queryFn: fetchProjectTree,
  })
+ const { active: activeTree, deprecated: deprecatedRoots } = useMemo(() => splitDeprecated(tree), [tree])
+ const [showDeprecated, setShowDeprecated] = useState(false)
 
  const { data: projects = [] } = useQuery<Project[]>({
  queryKey: ['projects'],
@@ -395,6 +422,30 @@ export default function ProjectsPage({ onOpenTodo }: { onOpenTodo: (id: number) 
  },
  },
  })
+ },
+ })
+
+ const deprecateMutation = useMutation({
+ mutationFn: deprecateProject,
+ onSuccess: (project) => {
+ invalidateProjects()
+ showToast({
+ message: `Deprecated "${project.name}" — its todos and notes are kept`,
+ action: {
+ label: 'Undo',
+ onClick: async () => {
+ await undeprecateProject(project.id)
+ invalidateProjects()
+ },
+ },
+ })
+ },
+ })
+ const undeprecateMutation = useMutation({
+ mutationFn: undeprecateProject,
+ onSuccess: (project) => {
+ invalidateProjects()
+ showToast({ message: `Reactivated "${project.name}"` })
  },
  })
 
@@ -514,6 +565,29 @@ export default function ProjectsPage({ onOpenTodo }: { onOpenTodo: (id: number) 
  setAddSubParentId(null)
  }
 
+ // Handlers shared by every tree node, active or deprecated.
+ const nodeProps = {
+ depth: 0,
+ selectedId: selectedProjectId,
+ dragProjectId,
+ dragOverProjectId,
+ onSelect: setSelectedProjectId,
+ onAddSub: handleAddSub,
+ onCycleImportance: cycleImportance,
+ onDragStart: (id: number) => setDragProjectId(id),
+ onDragOver: (id: number) => setDragOverProjectId(id),
+ onDragLeave: (id: number) => setDragOverProjectId((cur) => (cur === id ? null : cur)),
+ onDrop: (fromId: number, beforeId: number, siblings: ProjectTree[]) => {
+ commitTreeReorder(fromId, beforeId, siblings)
+ setDragProjectId(null)
+ setDragOverProjectId(null)
+ },
+ onDragEnd: () => {
+ setDragProjectId(null)
+ setDragOverProjectId(null)
+ },
+ }
+
  const todoQueryKeys: unknown[][] = selectedProjectId
  ? [['todos', 'project', selectedProjectId], ['todos']]
  : [['todos']]
@@ -552,34 +626,27 @@ export default function ProjectsPage({ onOpenTodo }: { onOpenTodo: (id: number) 
  {tree.length === 0 ? (
  <p className="px-4 py-3 text-xs text-fg-subtle">No projects yet</p>
  ) : (
- tree.map((node) => (
- <ProjectNode
- key={node.id}
- node={node}
- siblings={tree}
- depth={0}
- selectedId={selectedProjectId}
- dragProjectId={dragProjectId}
- dragOverProjectId={dragOverProjectId}
- onSelect={setSelectedProjectId}
- onAddSub={handleAddSub}
- onCycleImportance={cycleImportance}
- onDragStart={(id) => setDragProjectId(id)}
- onDragOver={(id) => setDragOverProjectId(id)}
- onDragLeave={(id) =>
- setDragOverProjectId((cur) => (cur === id ? null : cur))
- }
- onDrop={(fromId, beforeId, siblings) => {
- commitTreeReorder(fromId, beforeId, siblings)
- setDragProjectId(null)
- setDragOverProjectId(null)
- }}
- onDragEnd={() => {
- setDragProjectId(null)
- setDragOverProjectId(null)
- }}
- />
- ))
+ <>
+ {activeTree.map((node) => (
+ <ProjectNode key={node.id} node={node} siblings={activeTree} {...nodeProps} />
+ ))}
+ {deprecatedRoots.length > 0 && (
+ <div className="mt-2 pt-2 mx-2 border-t border-border">
+ <button
+ onClick={() => setShowDeprecated((v) => !v)}
+ aria-expanded={showDeprecated}
+ className="w-full flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium text-fg-subtle hover:bg-inset hover:text-fg-muted transition-colors"
+ >
+ <ChevronRight size={12} className={`transition-transform ${showDeprecated ? 'rotate-90' : ''}`} />
+ Deprecated
+ <span className="ml-auto tabular-nums">{deprecatedRoots.length}</span>
+ </button>
+ {showDeprecated && deprecatedRoots.map((node) => (
+ <ProjectNode key={node.id} node={node} siblings={deprecatedRoots} muted {...nodeProps} />
+ ))}
+ </div>
+ )}
+ </>
  )}
  </div>
  <div className="hidden md:block px-2 py-2 border-t border-border">
@@ -638,6 +705,12 @@ export default function ProjectsPage({ onOpenTodo }: { onOpenTodo: (id: number) 
  <span className={`w-2 h-2 rounded-full ${IMPORTANCE_DOT[selectedProject.importance] ?? IMPORTANCE_DOT.medium}`} />
  {selectedProject.importance}
  </button>
+ {selectedProject.deprecated_at && (
+ <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wide border border-border text-fg-muted">
+ <Archive size={10} />
+ Deprecated
+ </span>
+ )}
  </div>
  {editingName ? (
  <input
@@ -671,6 +744,11 @@ export default function ProjectsPage({ onOpenTodo }: { onOpenTodo: (id: number) 
  Deadline: <span className="font-medium">{selectedProject.deadline}</span>
  </p>
  )}
+ {selectedProject.deprecated_at && (
+ <p className="text-xs text-fg-subtle mt-1">
+ Deprecated {selectedProject.deprecated_at.slice(0, 10)}. Kept with all its todos and notes, but left out of project pickers and the board.
+ </p>
+ )}
  </div>
  <div className="flex gap-2 flex-shrink-0">
  <button
@@ -679,6 +757,25 @@ export default function ProjectsPage({ onOpenTodo }: { onOpenTodo: (id: number) 
  >
  + Add Todo
  </button>
+ {selectedProject.deprecated_at ? (
+ <button
+ onClick={() => undeprecateMutation.mutate(selectedProject.id)}
+ disabled={undeprecateMutation.isPending}
+ title="Make this project and its parents active again"
+ className="bg-inset text-fg border border-border px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-accent-1 transition-colors disabled:opacity-50"
+ >
+ Reactivate
+ </button>
+ ) : (
+ <button
+ onClick={() => deprecateMutation.mutate(selectedProject.id)}
+ disabled={deprecateMutation.isPending}
+ title="Retire this project and its subprojects without deleting anything"
+ className="bg-inset text-fg-muted border border-border px-3 py-1.5 rounded-lg text-xs font-semibold hover:text-fg hover:bg-accent-1 transition-colors disabled:opacity-50"
+ >
+ Deprecate
+ </button>
+ )}
  <button
  onClick={() => deleteMutation.mutate(selectedProjectId)}
  disabled={deleteMutation.isPending}

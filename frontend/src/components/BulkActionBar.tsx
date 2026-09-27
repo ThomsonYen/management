@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { fetchPersons, fetchProjects, updateTodo } from '../api'
 import type { Person, Project, Todo } from '../types'
+import { pickableProjects } from '../utils/projects'
 import DatePicker from './DatePicker'
 import { buildTodoPatch } from '../utils/optimisticTodo'
 
@@ -106,7 +107,7 @@ export default function BulkActionBar({ selectedIds, onClearSelection, queryKeys
  >
  <option value="">Pick a project...</option>
  <option value="__none__">-- Remove project --</option>
- {projects.map((p) => (
+ {pickableProjects(projects).map((p) => (
  <option key={p.id} value={p.id}>{p.name}</option>
  ))}
  </select>

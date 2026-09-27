@@ -21,6 +21,7 @@ export interface Project {
   parent_id?: number
   deadline?: string
   deleted_at?: string
+  deprecated_at?: string | null
   display_order: number
   importance: string
   board_hidden: boolean

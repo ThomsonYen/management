@@ -556,11 +556,13 @@ def set_focus(todo_ids: list[int]) -> list:
 
 
 @mcp.tool()
-def list_projects() -> list:
-    """Projects as a tree (id, name, children)."""
+def list_projects(include_deprecated: bool = True) -> list:
+    """Projects as a tree (id, name, children). Deprecated projects are retired
+    but kept and carry a deprecated_at timestamp; pass include_deprecated=false
+    for only the active ones, e.g. when choosing a project for new work."""
     _need("read")
     with M.SessionLocal() as db:
-        return _read(lambda: _out(M.projects_tree(db)))
+        return _read(lambda: _out(M.projects_tree(include_deprecated, db)))
 
 
 @mcp.tool()

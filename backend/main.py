@@ -340,6 +340,10 @@ class Project(Base):
     display_order = Column(Integer, nullable=False, default=0)
     importance = Column(String, nullable=False, default="medium")
     board_hidden = Column(Integer, nullable=False, default=0)  # SQLite-friendly bool
+    # Deprecated = retired but kept: out of the active tree, pickers and board,
+    # with every todo, note and link intact. Reversible; see
+    # claude_readmes/design_principles.md ("Deprecate, don't delete").
+    deprecated_at = Column(String, nullable=True)
     subprojects = relationship(
         "Project", back_populates="parent", cascade="all, delete-orphan"
     )
@@ -637,6 +641,9 @@ with engine.connect() as _conn:
         _conn.commit()
     if "board_hidden" not in _project_cols:
         _conn.execute(text("ALTER TABLE projects ADD COLUMN board_hidden INTEGER NOT NULL DEFAULT 0"))
+        _conn.commit()
+    if "deprecated_at" not in _project_cols:
+        _conn.execute(text("ALTER TABLE projects ADD COLUMN deprecated_at TEXT"))
         _conn.commit()
     _person_cols = [c["name"] for c in _insp.get_columns("persons")]
     if "notes" not in _person_cols:
@@ -1139,6 +1146,7 @@ class ProjectOut(BaseModel):
     parent_id: Optional[int] = None
     deadline: Optional[str] = None
     deleted_at: Optional[str] = None
+    deprecated_at: Optional[str] = None
     display_order: int = 0
     importance: str = "medium"
     board_hidden: bool = False
@@ -1155,6 +1163,7 @@ class ProjectTreeOut(BaseModel):
     display_order: int = 0
     importance: str = "medium"
     board_hidden: bool = False
+    deprecated_at: Optional[str] = None
     subprojects: List["ProjectTreeOut"] = []
     model_config = {"from_attributes": True}
 
@@ -1429,7 +1438,7 @@ def todo_to_out(t: Todo, viewer: "Optional[Viewer]" = None) -> TodoOut:
     )
 
 
-def project_to_tree(p: Project) -> ProjectTreeOut:
+def project_to_tree(p: Project, include_deprecated: bool = True) -> ProjectTreeOut:
     return ProjectTreeOut(
         id=p.id,
         name=p.name,
@@ -1440,9 +1449,13 @@ def project_to_tree(p: Project) -> ProjectTreeOut:
         display_order=p.display_order or 0,
         importance=p.importance or "medium",
         board_hidden=bool(p.board_hidden),
+        deprecated_at=p.deprecated_at,
         subprojects=[
-            project_to_tree(sp) for sp in sorted(
-                (sp for sp in p.subprojects if sp.deleted_at is None),
+            project_to_tree(sp, include_deprecated) for sp in sorted(
+                (
+                    sp for sp in p.subprojects
+                    if sp.deleted_at is None and (include_deprecated or sp.deprecated_at is None)
+                ),
                 key=lambda sp: (sp.display_order or 0, sp.id),
             )
         ],
@@ -4053,16 +4066,25 @@ def delete_hangout(hangout_id: int, db: Session = Depends(get_db)):
 # ─── Projects ────────────────────────────────────────────────────────────────
 
 
-@app.get("/projects", response_model=List[ProjectOut])
-def list_projects(db: Session = Depends(get_db), viewer: Viewer = Depends(get_viewer)):
+_INCLUDE_DEPRECATED = Query(
+    True,
+    description="Include deprecated projects (marked by deprecated_at). Pass false for only the active "
+    "ones, e.g. when choosing a project for new work.",
+)
+
+
+@app.get("/projects", response_model=List[ProjectOut], summary="List projects (flat)")
+def list_projects(
+    include_deprecated: bool = _INCLUDE_DEPRECATED,
+    db: Session = Depends(get_db),
+    viewer: Viewer = Depends(get_viewer),
+):
     """Owner: every project. Member: only the projects they can see, as
     MemberProjectOut (id, name, parent_id) — no description, notes or dates."""
-    rows = (
-        db.query(Project)
-        .filter(Project.deleted_at == None)
-        .order_by(Project.display_order, Project.id)
-        .all()
-    )
+    q = db.query(Project).filter(Project.deleted_at == None)
+    if not include_deprecated:
+        q = q.filter(Project.deprecated_at == None)
+    rows = q.order_by(Project.display_order, Project.id).all()
     if viewer.is_owner:
         return rows
     visible = _visible_project_ids(db, viewer) or set()
@@ -4076,15 +4098,13 @@ def list_projects(db: Session = Depends(get_db), viewer: Viewer = Depends(get_vi
     return JSONResponse(jsonable_encoder(out))
 
 
-@app.get("/projects/tree", response_model=List[ProjectTreeOut])
-def projects_tree(db: Session = Depends(get_db)):
-    roots = (
-        db.query(Project)
-        .filter(Project.parent_id == None, Project.deleted_at == None)
-        .order_by(Project.display_order, Project.id)
-        .all()
-    )
-    return [project_to_tree(r) for r in roots]
+@app.get("/projects/tree", response_model=List[ProjectTreeOut], summary="List projects with nesting")
+def projects_tree(include_deprecated: bool = _INCLUDE_DEPRECATED, db: Session = Depends(get_db)):
+    q = db.query(Project).filter(Project.parent_id == None, Project.deleted_at == None)
+    if not include_deprecated:
+        q = q.filter(Project.deprecated_at == None)
+    roots = q.order_by(Project.display_order, Project.id).all()
+    return [project_to_tree(r, include_deprecated) for r in roots]
 
 
 @app.post("/projects", response_model=ProjectOut)
@@ -4095,6 +4115,8 @@ def create_project(data: ProjectCreate, db: Session = Depends(get_db)):
         raise HTTPException(400, f"importance must be one of {sorted(PROJECT_IMPORTANCE_VALUES)}")
     p = Project(**payload)
     db.add(p)
+    db.flush()
+    _inherit_deprecation(p)
     db.commit()
     db.refresh(p)
     return p
@@ -4120,9 +4142,18 @@ def update_project(project_id: int, data: ProjectUpdate, db: Session = Depends(g
         raise HTTPException(400, f"importance must be one of {sorted(PROJECT_IMPORTANCE_VALUES)}")
     for k, v in payload.items():
         setattr(p, k, v)
+    if "parent_id" in payload:
+        db.flush()
+        _inherit_deprecation(p)
     db.commit()
     db.refresh(p)
     return p
+
+
+def _inherit_deprecation(p: Project) -> None:
+    """A project placed under a deprecated parent is deprecated with it."""
+    if p.parent is not None and p.parent.deprecated_at is not None:
+        _cascade_deprecate_project(p, p.parent.deprecated_at)
 
 
 def _cascade_soft_delete_project(p: Project, ts: str) -> None:
@@ -4138,6 +4169,50 @@ def _cascade_restore_project(p: Project) -> None:
     for child in p.subprojects:
         if child.deleted_at is not None:
             _cascade_restore_project(child)
+
+
+def _cascade_deprecate_project(p: Project, ts: str) -> None:
+    if p.deprecated_at is None:
+        p.deprecated_at = ts
+    for child in p.subprojects:
+        _cascade_deprecate_project(child, ts)
+
+
+@app.post("/projects/{project_id}/deprecate", response_model=ProjectOut, summary="Deprecate a project")
+def deprecate_project(project_id: int, db: Session = Depends(get_db)):
+    """Retire a project without deleting anything: it and its subprojects leave
+    the active tree, pickers and board, and keep their todos, notes and links.
+    Idempotent; an already-deprecated project keeps its original timestamp."""
+    p = db.query(Project).get(project_id)
+    if not p or p.deleted_at is not None:
+        raise HTTPException(404, "Project not found")
+    _cascade_deprecate_project(p, datetime.now(timezone.utc).isoformat())
+    db.commit()
+    db.refresh(p)
+    return p
+
+
+@app.post("/projects/{project_id}/undeprecate", response_model=ProjectOut, summary="Reactivate a deprecated project")
+def undeprecate_project(project_id: int, db: Session = Depends(get_db)):
+    """Make a project active again, with its subprojects and its ancestors (an
+    active project never sits under a deprecated one). Idempotent."""
+    p = db.query(Project).get(project_id)
+    if not p or p.deleted_at is not None:
+        raise HTTPException(404, "Project not found")
+
+    def down(node: Project) -> None:
+        node.deprecated_at = None
+        for child in node.subprojects:
+            down(child)
+
+    down(p)
+    ancestor = p.parent
+    while ancestor is not None:
+        ancestor.deprecated_at = None
+        ancestor = ancestor.parent
+    db.commit()
+    db.refresh(p)
+    return p
 
 
 @app.delete("/projects/{project_id}")

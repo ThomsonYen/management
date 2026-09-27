@@ -56,6 +56,7 @@ Tokens carry a subset of these scopes. A `403` with `required_scope` tells you w
 - Social cadence: each friend has `cadence_days` and `last_hangout_date`. Derived fields come back on every friend, so do not compute them yourself: `days_since_hangout`, `days_until_due` (negative = overdue), `cadence_tier` (elapsed time alone) and `status`, which is what the user is shown. `status` is `planned` (something is arranged — **do not nudge**), `needs_confirm` (a plan's date passed and nobody said whether it happened), `never`, `ok`, `due_soon` (≥80% of the cadence), `slipping` (≥95%) or `overdue`. A plan outranks the cadence, and an unconfirmed past plan outranks everything.
 - A hangout is either `happened` or `planned`. Only `happened` entries dated today or earlier count toward `last_hangout_date`, so a plan that falls through can never silently mute the nudge. Unlike person check-ins this is **not** a forward-only watermark: the log is the source of truth, so deleting, re-dating or confirming an entry recomputes the date.
 - Soft deletes: never delete. If something should go away, tell the user.
+- Deprecated projects: a project with a non-null `deprecated_at` is retired but kept — its todos and notes are intact and still readable. Listings include them by default so every `project_id` still resolves to a name; pass `?include_deprecated=false` (MCP: `include_deprecated=false`) for only the active ones. Never file new todos under a deprecated project unless the user names it. Deprecating and reactivating are the owner's call in the app; tokens cannot do either.
 - Every mutating request you make is logged (method, path, status, body) and visible to the user in Settings → API tokens. Act as if the user will read it.
 - Every mutation returns the updated object — show the user a before/after for anything non-trivial. Prefer one-at-a-time updates; confirm with the user before touching more than ~10 items.
 
@@ -70,7 +71,7 @@ GET /todos                            todos (filters: project_id, assignee_id, s
 GET /todos/recently-done              done in the last few days
 GET /persons                          people; derive overdue check-ins from the check_in fields
 GET /persons/progress                 per-person open/done counts
-GET /projects/tree                    projects with nesting
+GET /projects/tree                    projects with nesting (?include_deprecated=false → active only)
 GET /must-do/{today}                  today's must-do items
 GET /daily-goals                      goal text per date
 GET /schedule/reminders               due/overdue deadline reminders

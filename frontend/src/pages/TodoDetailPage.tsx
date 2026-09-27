@@ -16,6 +16,7 @@ import {
 } from '../api'
 import { useToast } from '../ToastContext'
 import type { SubTodo, Todo, Person, Project } from '../types'
+import { pickableProjects, projectOptionLabel } from '../utils/projects'
 import DatePicker from '../components/DatePicker'
 import TodoModal from '../components/TodoModal'
 import { BlockerTreeNode, BlockingTreeNode } from '../components/BlockerTree'
@@ -543,7 +544,7 @@ export default function TodoDetailPage() {
  className="text-sm w-full bg-transparent border-b border-accent focus:outline-none"
  >
  <option value="">— None —</option>
- {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+ {pickableProjects(projects, todo.project_id).map((p) => <option key={p.id} value={p.id}>{projectOptionLabel(p)}</option>)}
  </select>
  ) : (
  <p className="text-sm font-medium text-fg">

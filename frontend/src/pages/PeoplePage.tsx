@@ -272,7 +272,7 @@ function PersonProjects({
 }) {
  const [picking, setPicking] = useState(false)
  const assignedIds = person.project_ids ?? []
- const available = projects.filter((p) => !assignedIds.includes(p.id) && !p.deleted_at)
+ const available = projects.filter((p) => !assignedIds.includes(p.id) && !p.deleted_at && !p.deprecated_at)
  const projectById = new Map(projects.map((p) => [p.id, p]))
 
  const add = (pid: number) => {

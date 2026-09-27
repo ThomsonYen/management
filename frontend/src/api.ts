@@ -226,6 +226,12 @@ export const reorderProjects = (
   items: { id: number; display_order: number }[],
 ): Promise<void> => api.put('/projects/reorder', items).then((r) => r.data)
 
+export const deprecateProject = (id: number): Promise<Project> =>
+  api.post(`/projects/${id}/deprecate`).then((r) => r.data)
+
+export const undeprecateProject = (id: number): Promise<Project> =>
+  api.post(`/projects/${id}/undeprecate`).then((r) => r.data)
+
 export const deleteProject = (id: number): Promise<void> =>
   api.delete(`/projects/${id}`).then((r) => r.data)
 

@@ -87,20 +87,23 @@ export default function PersonProjectBoard({
  return map
  }, [persons, projects])
 
+ // Deprecated projects leave the board entirely (not even under "hidden");
+ // they come back by reactivating them on the Projects page.
+ const activeProjects = useMemo(() => projects.filter((p) => !p.deprecated_at), [projects])
  const visibleProjects = useMemo(
- () => projects.filter((p) => !p.board_hidden),
- [projects],
+ () => activeProjects.filter((p) => !p.board_hidden),
+ [activeProjects],
  )
  const hiddenProjects = useMemo(
- () => projects.filter((p) => p.board_hidden),
- [projects],
+ () => activeProjects.filter((p) => p.board_hidden),
+ [activeProjects],
  )
 
  // Auto-close floating notes if its project goes away or is hidden.
  useEffect(() => {
  if (openedProjectId === null) return
  const proj = projectById.get(openedProjectId)
- if (!proj || proj.board_hidden) setOpenedProjectId(null)
+ if (!proj || proj.board_hidden || proj.deprecated_at) setOpenedProjectId(null)
  }, [openedProjectId, projectById])
 
  const dragPerson =
@@ -263,7 +266,7 @@ export default function PersonProjectBoard({
  </div>
  )}
  <div className="flex-1 min-h-0 p-3 overflow-hidden">
- {projects.length === 0 ? (
+ {activeProjects.length === 0 ? (
  <div className="text-sm italic text-fg-subtle px-2">
  No projects yet — create one to start assigning people.
  </div>

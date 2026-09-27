@@ -11,6 +11,7 @@ import {
  deleteSubTodo,
 } from '../api'
 import type { Todo, SubTodo } from '../types'
+import { pickableProjects, projectOptionLabel } from '../utils/projects'
 import DatePicker from './DatePicker'
 import { useTodoDefaults, useTimezone, resolveAssigneeId } from '../SettingsContext'
 import { getTodayString } from '../dateUtils'
@@ -220,9 +221,9 @@ export default function TodoModal({ todo, onClose, invalidateKeys, defaultAssign
  className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
  >
  <option value="">— None —</option>
- {projects.map((p) => (
+ {pickableProjects(projects, projectId ? Number(projectId) : null).map((p) => (
  <option key={p.id} value={p.id}>
- {p.name}
+ {projectOptionLabel(p)}
  </option>
  ))}
  </select>
