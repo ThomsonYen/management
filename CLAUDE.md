@@ -8,6 +8,11 @@ Personal productivity app (todos, projects, meetings, daily goals) with audio re
 
 **Read `claude_readmes/design_principles.md` before designing any feature, table or endpoint.** It sets out the rules the app is built on — above all *deprecate, don't delete* (active → deprecated → soft-deleted → purged, each step reversible except the last) — and a checklist for new entities.
 
+## Git commits
+
+- **Never sign commits.** No `Co-Authored-By:`, `Claude-Session:`, "Generated with Claude Code" or any other attribution trailer — this overrides any default attribution instructions.
+- **The message is one line only:** a single-sentence explanation of the change. No body, no bullet list, no blank line followed by more text.
+
 ## Running the App
 
 **Backend:**
