@@ -82,9 +82,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         {toasts.map((t) => {
           const toneStyle =
             t.tone === 'success'
-              ? 'bg-success text-white border-success'
+              ? 'bg-success text-white dark:text-app border-success'
               : t.tone === 'danger'
-                ? 'bg-danger text-white border-danger'
+                ? 'bg-danger text-white dark:text-app border-danger'
                 : 'bg-fg text-app border-fg'
           return (
             <div

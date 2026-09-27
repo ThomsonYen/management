@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
+import { alertCard } from '../theme/surfaces'
 import { useSearchParams } from 'react-router-dom'
 import { useResizableSidebar } from '../hooks/useResizableSidebar'
 import { useHotkeys, useTimezone } from '../SettingsContext'
@@ -311,7 +312,7 @@ function PersonProjects({
  {!isPrimary && (
  <button
  onClick={() => moveToFront(pid)}
- className="text-fg-subtle hover:text-warning leading-none"
+ className="text-fg-subtle hover:text-warning-vivid leading-none"
  title="Make primary"
  >
  <Star size={13} fill={isPrimary ? 'currentColor' : 'none'} />
@@ -743,7 +744,7 @@ export default function PeoplePage({ onOpenTodo }: { onOpenTodo: (id: number) =>
  {checkInState !== 'ok' && (
  <span
  className={`w-1.5 h-1.5 rounded-full ${
- checkInState === 'due' ? 'bg-warning' : 'bg-danger'
+ checkInState === 'due' ? 'bg-warning-vivid' : 'bg-danger'
  }`}
  title={checkInState === 'due' ? 'Check-in due today' : 'Check-in overdue'}
  ></span>
@@ -935,10 +936,8 @@ export default function PeoplePage({ onOpenTodo }: { onOpenTodo: (id: number) =>
  {personReminders.map((r) => (
  <div
  key={r.todo_id}
- className={`rounded-lg px-3 py-2 border-l-4 text-sm ${
- r.status === 'behind'
- ? 'bg-danger-bg border-danger'
- : 'bg-warning-bg border-warning'
+ className={`rounded-lg px-3 py-2 text-sm ${
+ r.status === 'behind' ? alertCard.danger : alertCard.warning
  }`}
  >
  <div className="flex items-center justify-between gap-2">

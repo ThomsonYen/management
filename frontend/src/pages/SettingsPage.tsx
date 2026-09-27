@@ -161,7 +161,7 @@ function RecordingSection() {
  </p>
  <button
  onClick={requestPermission}
- className="text-xs font-medium px-3 py-1.5 bg-warning text-white rounded-md hover:bg-amber-700 transition-colors flex-shrink-0"
+ className="text-xs font-medium px-3 py-1.5 bg-warning text-white dark:text-app rounded-md hover:opacity-90 transition-colors flex-shrink-0"
  >
  Grant access
  </button>

@@ -1,10 +1,14 @@
 import type { ThemePreset } from './types'
 
-// Cool, high-contrast, vibrant. Blue accent.
+// Cool zinc neutrals with a clean blue accent. Status colours are clear, bright
+// hues on airy, pale tints (not saturated fills), so danger / due-soon / info /
+// done read at a glance without shouting. Text on its tint ≥ 4.5:1 in light,
+// ≥ 5.5:1 in dark. Due-soon is a golden yellow: deep gold text on a pale-yellow
+// tint, since brighter yellow text would be unreadable on white.
 export const vercelDark: ThemePreset = {
   name: 'vercel-dark',
   label: 'Vercel (Cool)',
-  description: 'Cool zinc neutrals with a vibrant blue accent.',
+  description: 'Cool zinc neutrals, a clean blue accent and light, clear status colours.',
   colors: {
     light: {
       bgApp:         '250 250 250',
@@ -25,21 +29,27 @@ export const vercelDark: ThemePreset = {
 
       accent1:       '239 246 255',
       accent2:       '219 234 254',
-      accent:        '37 99 235',
-      accentHover:   '29 78 216',
-      accentActive:  '30 64 175',
+      accent:        '38 100 222',
+      accentHover:   '30 84 194',
+      accentActive:  '26 70 164',
       accentFg:      '30 58 138',
 
-      danger:        '220 38 38',
-      dangerBg:      '254 242 242',
-      warning:       '217 119 6',
-      warningBg:     '254 243 199',
-      success:       '22 163 74',
-      successBg:     '220 252 231',
-      info:          '8 145 178',
-      infoBg:        '207 250 254',
+      danger:        '204 44 56',
+      dangerBg:      '254 242 243',
+      warning:       '152 102 0',
+      warningBg:     '255 245 204',
+      warningVivid:  '236 178 10',
+      success:       '22 128 80',
+      successBg:     '233 247 239',
+      info:          '18 112 156',
+      infoBg:        '231 244 250',
 
-      focusRing:     '59 130 246',
+      prioCritical:  '190 32 72',
+      prioCriticalBg:'253 240 243',
+      prioHigh:      '180 76 12',
+      prioHighBg:    '255 241 230',
+
+      focusRing:     '64 124 236',
     },
     dark: {
       bgApp:         '0 0 0',
@@ -60,21 +70,27 @@ export const vercelDark: ThemePreset = {
 
       accent1:       '15 23 42',
       accent2:       '30 41 59',
-      accent:        '59 130 246',
-      accentHover:   '96 165 250',
-      accentActive:  '147 197 253',
+      accent:        '66 132 244',
+      accentHover:   '102 158 248',
+      accentActive:  '144 186 250',
       accentFg:      '191 219 254',
 
-      danger:        '248 113 113',
-      dangerBg:      '60 20 20',
-      warning:       '250 204 21',
-      warningBg:     '60 40 10',
-      success:       '52 211 153',
-      successBg:     '12 46 33',
-      info:          '34 211 238',
-      infoBg:        '18 46 58',
+      danger:        '242 106 112',
+      dangerBg:      '52 24 26',
+      warning:       '250 204 80',
+      warningBg:     '50 42 14',
+      warningVivid:  '250 204 80',
+      success:       '88 204 146',
+      successBg:     '18 44 32',
+      info:          '96 184 230',
+      infoBg:        '18 38 52',
 
-      focusRing:     '96 165 250',
+      prioCritical:  '244 114 150',
+      prioCriticalBg:'56 22 34',
+      prioHigh:      '248 150 86',
+      prioHighBg:    '56 34 18',
+
+      focusRing:     '102 158 248',
     },
   },
   typography: {

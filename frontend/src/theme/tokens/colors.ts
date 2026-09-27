@@ -35,10 +35,18 @@ export interface ColorScheme {
   dangerBg: string
   warning: string
   warningBg: string
+  warningVivid: string // decorative marks only (stars, stripes, dots) — never text
   success: string
   successBg: string
   info: string
   infoBg: string
+
+  // Importance (todo/project priority) — its own scale, apart from the status
+  // colours above, so HIGH doesn't read as "due soon" nor CRITICAL as "overdue".
+  prioCritical: string
+  prioCriticalBg: string
+  prioHigh: string
+  prioHighBg: string
 
   // Focus ring
   focusRing: string
@@ -70,6 +78,11 @@ export const COLOR_VAR_MAP: Record<keyof ColorScheme, string> = {
   dangerBg: '--danger-bg',
   warning: '--warning',
   warningBg: '--warning-bg',
+  warningVivid: '--warning-vivid',
+  prioCritical: '--prio-critical',
+  prioCriticalBg: '--prio-critical-bg',
+  prioHigh: '--prio-high',
+  prioHighBg: '--prio-high-bg',
   success: '--success',
   successBg: '--success-bg',
   info: '--info',

@@ -25,7 +25,7 @@ const IMPORTANCE_CYCLE: Record<string, string> = {
 const IMPORTANCE_DOT: Record<string, string> = {
  low: 'bg-border dark:bg-inset',
  medium: 'bg-info',
- high: 'bg-danger',
+ high: 'bg-prio-high',
 }
 
 /**
@@ -645,7 +645,7 @@ export default function ProjectsPage({ onOpenTodo }: { onOpenTodo: (id: number) 
  title={`Importance: ${selectedProject.importance} (click to cycle)`}
  className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-2xs font-semibold uppercase tracking-wide border border-border hover:bg-inset transition-colors ${
  selectedProject.importance === 'high'
- ? 'text-danger'
+ ? 'text-prio-high'
  : selectedProject.importance === 'medium'
  ? 'text-info'
  : 'text-fg-muted'

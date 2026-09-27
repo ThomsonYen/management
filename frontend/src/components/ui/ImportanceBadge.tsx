@@ -1,11 +1,11 @@
 import { Badge, type BadgeSize } from './Badge'
 
 // Replaces the three duplicated `importanceBadge()` helpers.
-// low / medium / high / critical -> semantic tone.
+// low / medium / high / critical -> importance tone (its own scale, not the status colours).
 
 const TONE_MAP = {
-  critical: 'danger',
-  high:     'warning',
+  critical: 'critical',
+  high:     'high',
   medium:   'info',
   low:      'neutral',
 } as const

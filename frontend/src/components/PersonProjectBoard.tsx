@@ -20,13 +20,13 @@ const IMPORTANCE_CYCLE: Record<string, string> = {
 const IMPORTANCE_DOT: Record<string, string> = {
  low: 'bg-border dark:bg-inset',
  medium: 'bg-info',
- high: 'bg-danger',
+ high: 'bg-prio-high',
 }
 
 const IMPORTANCE_RING: Record<string, string> = {
  low: '',
  medium: '',
- high: 'ring-1 ring-red-200 dark:ring-red-900/40',
+ high: 'ring-1 ring-prio-high/25',
 }
 
 export default function PersonProjectBoard({

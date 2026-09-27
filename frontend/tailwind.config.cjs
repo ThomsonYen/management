@@ -51,9 +51,15 @@ module.exports = {
 
         // Semantic tones
         danger:  { DEFAULT: withVar('--danger'),  bg: withVar('--danger-bg')  },
-        warning: { DEFAULT: withVar('--warning'), bg: withVar('--warning-bg') },
+        warning: { DEFAULT: withVar('--warning'), bg: withVar('--warning-bg'), vivid: withVar('--warning-vivid') },
         success: { DEFAULT: withVar('--success'), bg: withVar('--success-bg') },
         info:    { DEFAULT: withVar('--info'),    bg: withVar('--info-bg')    },
+        prio: {
+          critical:      withVar('--prio-critical'),
+          'critical-bg': withVar('--prio-critical-bg'),
+          high:          withVar('--prio-high'),
+          'high-bg':     withVar('--prio-high-bg'),
+        },
       },
       // Values come from src/theme/tokens/radii.ts via --radius-* (see applyTheme);
       // --radius-k enlarges them where corner-shape: squircle is supported (index.css).

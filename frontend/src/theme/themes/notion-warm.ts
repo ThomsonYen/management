@@ -34,10 +34,16 @@ export const notionWarm: ThemePreset = {
       dangerBg:      '255 241 242',
       warning:       '202 138 4',
       warningBg:     '254 249 195',
+      warningVivid:  '202 138 4',
       success:       '22 163 74',
       successBg:     '220 252 231',
       info:          '30 64 175',
       infoBg:        '224 231 255',
+
+      prioCritical:  '190 18 60',
+      prioCriticalBg:'255 241 242',
+      prioHigh:      '202 138 4',
+      prioHighBg:    '254 249 195',
 
       focusRing:     '217 119 6',
     },
@@ -69,10 +75,16 @@ export const notionWarm: ThemePreset = {
       dangerBg:      '60 20 30',
       warning:       '250 204 21',
       warningBg:     '58 44 8',
+      warningVivid:  '250 204 21',
       success:       '74 222 128',
       successBg:     '20 46 30',
       info:          '129 140 248',
       infoBg:        '30 30 60',
+
+      prioCritical:  '251 113 133',
+      prioCriticalBg:'60 20 30',
+      prioHigh:      '250 204 21',
+      prioHighBg:    '58 44 8',
 
       focusRing:     '251 191 36',
     },

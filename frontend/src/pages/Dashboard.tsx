@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { alertCard } from '../theme/surfaces'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { fetchReminders, fetchRecentlyDone, fetchTodos, fetchPersons, fetchDueFriends, fetchPlans, updateTodo } from '../api'
@@ -120,7 +121,7 @@ function ScheduleCard({ item, allTodos, persons, onOpenTodo }: { item: ScheduleS
  e.dataTransfer.setData('application/x-todo-id', String(item.todo_id))
  e.dataTransfer.effectAllowed = 'link'
  }}
- className={`rounded-lg border-l-4 cursor-grab active:cursor-grabbing ${isBehind ? 'bg-danger-bg border-danger' : 'bg-warning-bg border-warning'}`}
+ className={`rounded-lg cursor-grab active:cursor-grabbing ${isBehind ? alertCard.danger : alertCard.warning}`}
  >
  <div className="p-4">
  <div className="flex items-start justify-between gap-2">
@@ -182,8 +183,8 @@ function ScheduleCard({ item, allTodos, persons, onOpenTodo }: { item: ScheduleS
  title={isFocused ? 'Remove from Focus' : 'Add to Focus'}
  className={`text-sm px-1.5 py-0.5 rounded transition-colors ${
  isFocused
- ? 'text-warning hover:text-warning'
- : 'text-fg-faint hover:text-warning'
+ ? 'text-warning-vivid hover:text-warning-vivid'
+ : 'text-fg-faint hover:text-warning-vivid'
  }`}
  >
  <Star size={15} fill={isFocused ? 'currentColor' : 'none'} />
@@ -319,8 +320,8 @@ function CheckInCard({ person, timezone, onOpen }: { person: Person; timezone: s
  const isOverdue = state === 'overdue' || state === 'never'
  return (
  <div
- className={`rounded-lg border-l-4 px-4 py-3 flex items-center justify-between gap-3 ${
- isOverdue ? 'bg-danger-bg border-danger' : 'bg-warning-bg border-warning'
+ className={`rounded-lg px-4 py-3 flex items-center justify-between gap-3 ${
+ isOverdue ? alertCard.danger : alertCard.warning
  }`}
  >
  <button onClick={onOpen} className="flex items-center gap-3 min-w-0 text-left group">
@@ -516,8 +517,8 @@ export default function Dashboard({ onOpenTodo }: { onOpenTodo: (id: number) => 
  f.status === 'needs_confirm'
  ? 'bg-accent-1 border-accent/30 hover:border-accent/60'
  : f.status === 'overdue' || f.status === 'slipping'
- ? 'bg-danger-bg border-danger/30 hover:border-danger/60'
- : 'bg-warning-bg border-warning/30 hover:border-warning/60'
+ ? `${alertCard.danger} hover:border-border-strong`
+ : `${alertCard.warning} hover:border-border-strong`
  }`}
  >
  <div className="font-medium text-fg">{nudgeCopy(f).headline}</div>

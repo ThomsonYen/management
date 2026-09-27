@@ -734,7 +734,7 @@ function TodoEditModal({
  >
  <div className="flex items-center justify-between px-5 py-4 border-b border-border">
  <h3 className="text-base font-semibold text-fg flex items-center gap-2">
- <Sparkles size={16} className="text-warning" />
+ <Sparkles size={16} className="text-warning-vivid" />
  Edit Suggested Todo
  </h3>
  <button onClick={onClose} className="p-1 text-fg-subtle hover:text-fg-muted dark:hover:text-fg">

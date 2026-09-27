@@ -1,4 +1,4 @@
-import { ArrowUpRight, Calendar, ChevronDown, ChevronUp, Folder, GripVertical, Star, Timer, User } from 'lucide-react'
+import { AlarmClock, ArrowUpRight, Calendar, ChevronDown, ChevronUp, Folder, GripVertical, Star, Timer, User } from 'lucide-react'
 import { useState, useEffect, useRef } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
@@ -305,8 +305,8 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
  title={todo.is_focused ? 'Remove from Focus' : 'Add to Focus'}
  className={`col-start-1 row-start-1 p-2 -m-2 mt-[-6px] text-lg leading-none flex-shrink-0 transition-colors ${
  todo.is_focused
- ? 'text-warning hover:text-warning'
- : 'text-fg-faint dark:text-fg-muted hover:text-warning'
+ ? 'text-warning-vivid hover:text-warning-vivid'
+ : 'text-fg-faint dark:text-fg-muted hover:text-warning-vivid'
  }`}
  >
  <Star size={17} fill={todo.is_focused ? 'currentColor' : 'none'} />
@@ -359,8 +359,9 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
  </span>
  )}
  {isOverdue && (
- <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-danger text-white">
- OVERDUE
+ <span className="inline-flex items-center gap-1 text-xs font-semibold text-danger">
+ <AlarmClock size={13} className="shrink-0" />
+ Overdue
  </span>
  )}
  </div>

@@ -551,9 +551,9 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  {/* Must Do Today — elevated importance:
       left amber stripe + subtle header tint + stronger shadow. */}
  <div className="relative rounded-xl border border-border bg-surface shadow-md mb-6 overflow-hidden">
- <span aria-hidden className="absolute inset-y-0 left-0 w-1 bg-warning" />
+ <span aria-hidden className="absolute inset-y-0 left-0 w-1 bg-warning-vivid" />
  <div className="pl-6 pr-5 pt-4 pb-2 flex items-center gap-2 border-b border-border-subtle bg-warning-bg/40 dark:bg-warning-bg/25">
- <Star size={17} fill="currentColor" className="text-warning shrink-0" />
+ <Star size={17} fill="currentColor" className="text-warning-vivid shrink-0" />
  <h3 className="text-sm font-bold text-fg uppercase tracking-wide whitespace-nowrap">
  Must Do Today
  </h3>
@@ -949,7 +949,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  setTodaySearchOpen(false)
  }}
  >
- <Star size={12} fill="currentColor" className="text-warning shrink-0" />
+ <Star size={12} fill="currentColor" className="text-warning-vivid shrink-0" />
  {t.title}
  {t.project_name && (
  <span className="ml-auto text-xs text-fg-subtle">{t.project_name}</span>

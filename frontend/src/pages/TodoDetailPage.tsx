@@ -1,4 +1,4 @@
-import { Check, Star, Undo2 } from 'lucide-react'
+import { AlarmClock, Check, Star, Undo2 } from 'lucide-react'
 import { useState, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -402,8 +402,8 @@ export default function TodoDetailPage() {
  title={todo.is_focused ? 'Remove from Focus' : 'Add to Focus'}
  className={`p-2 -m-2 text-xl leading-none transition-colors ${
  todo.is_focused
- ? 'text-warning hover:text-warning'
- : 'text-fg-faint dark:text-fg-muted hover:text-warning'
+ ? 'text-warning-vivid hover:text-warning-vivid'
+ : 'text-fg-faint dark:text-fg-muted hover:text-warning-vivid'
  }`}
  >
  <Star size={20} fill={todo.is_focused ? 'currentColor' : 'none'} />
@@ -441,8 +441,9 @@ export default function TodoDetailPage() {
  </span>
  )}
  {isOverdue && (
- <span className={`${BADGE_BASE} bg-danger text-white border-danger`}>
- overdue
+ <span className="inline-flex items-center gap-1 text-sm font-semibold text-danger">
+ <AlarmClock size={14} className="shrink-0" />
+ Overdue
  </span>
  )}
  </div>

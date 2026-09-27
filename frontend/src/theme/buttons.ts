@@ -12,7 +12,7 @@ export const buttonVariants = {
   secondary: 'bg-inset text-fg border border-border hover:bg-border-subtle hover:border-border-strong',
   ghost:     'text-fg-muted hover:text-fg hover:bg-inset',
   outline:   'border border-border text-fg hover:bg-inset hover:border-border-strong',
-  danger:    'bg-danger text-white hover:opacity-90 active:opacity-80',
+  danger:    'bg-danger text-white dark:text-app hover:opacity-90 active:opacity-80',
   soft:      'bg-accent-1 text-accent-fg hover:bg-accent-2 border border-transparent',
   link:      'text-accent hover:underline underline-offset-2 h-auto p-0',
 } as const

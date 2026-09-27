@@ -3,8 +3,8 @@
 // Prefer the <Badge> / <ImportanceBadge> primitives when possible.
 
 const IMPORTANCE_CLASSES: Record<string, string> = {
-  critical: 'bg-danger-bg text-danger border-danger/30',
-  high:     'bg-warning-bg text-warning border-warning/30',
+  critical: 'bg-prio-critical-bg text-prio-critical border-prio-critical/30',
+  high:     'bg-prio-high-bg text-prio-high border-prio-high/30',
   medium:   'bg-info-bg text-info border-info/30',
   low:      'bg-inset text-fg-muted border-border',
 }

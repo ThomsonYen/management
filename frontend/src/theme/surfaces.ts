@@ -9,6 +9,13 @@ export const cardInteractive =
   'hover:border-accent/30 hover:shadow-md hover:-translate-y-px'
 export const cardElevated = 'shadow-sm'
 
+// Status cards (schedule alerts, check-ins, nudges): a bold coloured edge over a
+// light wash of the status tint (half-strength, so the text stays on a near-neutral ground).
+export const alertCard = {
+  danger:  'bg-danger-bg/50 border border-border border-l-[5px] border-l-danger',
+  warning: 'bg-warning-bg/50 border border-border border-l-[5px] border-l-warning-vivid',
+} as const
+
 export const modalOverlay =
   'fixed inset-0 z-50 bg-black/40 backdrop-blur-[2px] flex items-center justify-center p-4'
 export const modalPanel =

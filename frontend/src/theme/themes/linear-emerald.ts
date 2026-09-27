@@ -34,10 +34,16 @@ export const linearEmerald: ThemePreset = {
       dangerBg:      '254 242 242',
       warning:       '217 119 6',
       warningBg:     '254 243 199',
+      warningVivid:  '217 119 6',
       success:       '5 150 105',
       successBg:     '209 250 229',
       info:          '37 99 235',
       infoBg:        '219 234 254',
+
+      prioCritical:  '220 38 38',
+      prioCriticalBg:'254 242 242',
+      prioHigh:      '217 119 6',
+      prioHighBg:    '254 243 199',
 
       focusRing:     '16 185 129',
     },
@@ -69,10 +75,16 @@ export const linearEmerald: ThemePreset = {
       dangerBg:      '60 20 20',
       warning:       '251 191 36',
       warningBg:     '60 40 10',
+      warningVivid:  '251 191 36',
       success:       '52 211 153',
       successBg:     '12 46 33',
       info:          '96 165 250',
       infoBg:        '18 32 62',
+
+      prioCritical:  '248 113 113',
+      prioCriticalBg:'60 20 20',
+      prioHigh:      '251 191 36',
+      prioHighBg:    '60 40 10',
 
       focusRing:     '52 211 153',
     },
