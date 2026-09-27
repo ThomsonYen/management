@@ -1,3 +1,4 @@
+import { Check, Star, Undo2 } from 'lucide-react'
 import { useState, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -405,7 +406,7 @@ export default function TodoDetailPage() {
  : 'text-fg-faint dark:text-fg-muted hover:text-warning'
  }`}
  >
- {todo.is_focused ? '★' : '☆'}
+ <Star size={20} fill={todo.is_focused ? 'currentColor' : 'none'} />
  </button>
  {editingField === 'importance' ? (
  <select
@@ -453,14 +454,14 @@ export default function TodoDetailPage() {
  onClick={() => handleDoneCheck(false)}
  className={`${ACTION_BASE} bg-inset text-fg-muted border-border hover:bg-border-subtle`}
  >
- ↩ Reopen
+ <Undo2 size={13} className="inline-block shrink-0 align-[-0.15em] mr-1" />Reopen
  </button>
  ) : (
  <button
  onClick={() => handleDoneCheck(true)}
  className={`${ACTION_BASE} bg-success-bg text-success border-success/30 hover:bg-success hover:text-white`}
  >
- ✓ Mark done
+ <Check size={13} className="inline-block shrink-0 align-[-0.15em] mr-1" />Mark done
  </button>
  )}
  <button

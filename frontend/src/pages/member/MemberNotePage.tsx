@@ -2,7 +2,7 @@ import { useCallback } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import MDEditor from '@uiw/react-md-editor'
-import { AlertTriangle, ArrowLeft, CheckSquare, FolderKanban, SearchX, Users } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, CalendarDays, CheckSquare, FolderKanban, SearchX, Users } from 'lucide-react'
 import { fetchNote } from '../../api'
 import type { Note } from '../../types'
 import { useTheme, useTimezone } from '../../SettingsContext'
@@ -60,7 +60,7 @@ export default function MemberNotePage() {
               </Badge>
             </div>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-xs text-fg-muted">
-              {note.date && <span>📅 {formatDayLabel(note.date, timezone)}</span>}
+              {note.date && <span className="inline-flex items-center gap-1"><CalendarDays size={13} className="shrink-0" />{formatDayLabel(note.date, timezone)}</span>}
               {note.attendee_names.length > 0 && (
                 <span className="flex items-center gap-1"><Users size={12} /> {note.attendee_names.join(', ')}</span>
               )}

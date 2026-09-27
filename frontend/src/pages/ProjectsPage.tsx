@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { useResizableSidebar } from '../hooks/useResizableSidebar'
 import { useHotkey } from '../hooks/useHotkey'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Archive, ChevronLeft, ChevronsLeft, ChevronsRight } from 'lucide-react'
+import { Archive, ChevronDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react'
 import { useIsDesktop } from '../hooks/useMediaQuery'
 import ProjectNotes from '../components/ProjectNotes'
 import { fetchProjectTree, fetchProjects, fetchTodos, fetchPersons, createProject, createTodo, deprecateProject, undeprecateProject, updateProject, reorderProjects } from '../api'
@@ -122,7 +122,7 @@ function ProjectNode({
  onDrop(dragProjectId!, node.id, siblings)
  }}
  onDragEnd={onDragEnd}
- className={`flex items-center gap-1 group cursor-pointer rounded-lg px-2 py-1.5 text-sm transition-colors ${
+ className={`flex items-center gap-1.5 group cursor-pointer rounded-lg px-2 py-1.5 text-base transition-colors ${
  selectedId === node.id
  ? 'bg-accent-2 text-accent-fg dark:bg-accent-1 dark:text-accent-fg font-semibold'
  : 'text-fg hover:bg-inset dark:hover:bg-elevated'
@@ -132,11 +132,11 @@ function ProjectNode({
  >
  <button
  onClick={(e) => { e.stopPropagation(); setOpen((o) => !o) }}
- className="w-4 flex-shrink-0 text-fg-subtle text-xs"
+ className="w-4 flex-shrink-0 flex items-center justify-center text-fg-subtle"
  draggable={false}
  onDragStart={(e) => e.preventDefault()}
  >
- {hasChildren ? (open ? '▼' : '▶') : ' '}
+ {hasChildren && (open ? <ChevronDown size={14} /> : <ChevronRight size={14} />)}
  </button>
  <button
  onClick={(e) => {
@@ -144,7 +144,7 @@ function ProjectNode({
  onCycleImportance(node)
  }}
  title={`Importance: ${node.importance} (click to cycle)`}
- className={`w-2 h-2 rounded-full flex-shrink-0 ${IMPORTANCE_DOT[node.importance] ?? IMPORTANCE_DOT.medium}`}
+ className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${IMPORTANCE_DOT[node.importance] ?? IMPORTANCE_DOT.medium}`}
  draggable={false}
  onDragStart={(e) => e.preventDefault()}
  />
@@ -159,7 +159,7 @@ function ProjectNode({
  if (e.key === 'Escape') { setEditName(node.name); setEditing(false) }
  }}
  onClick={(e) => e.stopPropagation()}
- className="flex-1 bg-surface border border-accent rounded px-1 py-0 text-sm outline-none"
+ className="flex-1 bg-surface border border-accent rounded px-1 py-0 text-base outline-none"
  />
  ) : (
  <span

@@ -1,3 +1,4 @@
+import { Check, Folder, User } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { fetchRecentlyDone } from '../api'
@@ -85,14 +86,14 @@ export default function RecentlyDonePage() {
  idx < items.length - 1 ? 'border-b border-border-subtle' : ''
  }`}
  >
- <span className="text-success flex-shrink-0">✓</span>
+ <Check size={14} className="text-success flex-shrink-0" />
  <div className="flex-1 min-w-0">
  <p className="text-sm font-medium text-fg truncate line-through decoration-slate-300 dark:decoration-slate-600">
  {todo.title}
  </p>
  <div className="flex items-center gap-2 mt-0.5 text-xs text-fg-subtle">
- {todo.assignee_name && <span>◉ {todo.assignee_name}</span>}
- {todo.project_name && <span>◈ {todo.project_name}</span>}
+ {todo.assignee_name && <span className="inline-flex items-center gap-1"><User size={12} className="shrink-0" />{todo.assignee_name}</span>}
+ {todo.project_name && <span className="inline-flex items-center gap-1"><Folder size={12} className="shrink-0" />{todo.project_name}</span>}
  </div>
  </div>
  <div className="flex items-center gap-2 flex-shrink-0">

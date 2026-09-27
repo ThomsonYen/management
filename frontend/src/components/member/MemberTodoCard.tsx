@@ -1,3 +1,4 @@
+import { CalendarDays, Folder, Timer, User } from 'lucide-react'
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import ReactMarkdown from 'react-markdown'
@@ -151,7 +152,7 @@ export default function MemberTodoCard({ todo, editable, showAssignee, expanded,
 
               {editable ? (
                 <span onClick={(e) => e.stopPropagation()} className={`flex items-center gap-1 ${deadlineTone}`}>
-                  <span>📅</span>
+                  <CalendarDays size={12} className="shrink-0" />
                   <DatePicker
                     value={todo.deadline ?? ''}
                     onChange={(v) => saveField('deadline', v || null)}
@@ -161,7 +162,7 @@ export default function MemberTodoCard({ todo, editable, showAssignee, expanded,
                   {deadline && deadline.tone !== 'neutral' && <span>· {deadline.label}</span>}
                 </span>
               ) : (
-                deadline && <span className={`flex items-center gap-1 ${deadlineTone}`}>📅 {deadline.label}</span>
+                deadline && <span className={`flex items-center gap-1 ${deadlineTone}`}><CalendarDays size={12} className="shrink-0" />{deadline.label}</span>
               )}
 
               {editingField === 'estimated_hours' ? (
@@ -186,12 +187,12 @@ export default function MemberTodoCard({ todo, editable, showAssignee, expanded,
                   title={editable ? 'Click to change estimated hours' : undefined}
                   className={`flex items-center gap-1 ${editable ? 'cursor-pointer hover:text-accent transition-colors' : ''}`}
                 >
-                  ⏱ {todo.estimated_hours}h
+                  <Timer size={12} className="shrink-0" />{todo.estimated_hours}h
                 </span>
               )}
 
-              {todo.project_name && <span>◈ {todo.project_name}</span>}
-              {showAssignee && todo.assignee_name && <span>◉ {todo.assignee_name}</span>}
+              {todo.project_name && <span className="flex items-center gap-1"><Folder size={12} className="shrink-0" />{todo.project_name}</span>}
+              {showAssignee && todo.assignee_name && <span className="flex items-center gap-1"><User size={12} className="shrink-0" />{todo.assignee_name}</span>}
             </div>
 
             {totalSubs > 0 && (

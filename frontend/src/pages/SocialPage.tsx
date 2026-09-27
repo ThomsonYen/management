@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { HeartHandshake, Plus, Trash2 } from 'lucide-react'
+import { CalendarDays, HeartHandshake, Plus, Trash2 } from 'lucide-react'
 import {
   confirmHangout,
   createFriend,
@@ -90,7 +90,7 @@ function FriendRow({ friend, onLog, onPlan }: { friend: Friend; onLog: (f: Frien
 
   return (
     <Card className="flex flex-col gap-2">
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-semibold text-fg truncate">{friend.name}</span>
@@ -140,7 +140,7 @@ function FriendRow({ friend, onLog, onPlan }: { friend: Friend; onLog: (f: Frien
       {friend.status === 'planned' && friend.next_plan_id !== null && (
         <div className="flex items-center gap-2 flex-wrap text-sm text-fg-muted">
           <span>
-            📅 {friend.next_plan_date}
+            <CalendarDays size={14} className="inline-block shrink-0 align-[-0.15em] mr-1" />{friend.next_plan_date}
             {friend.next_plan_what ? ` — ${friend.next_plan_what}` : ''}
           </span>
           <button

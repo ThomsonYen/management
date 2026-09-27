@@ -4,7 +4,7 @@ import { useResizableSidebar } from '../hooks/useResizableSidebar'
 import { useHotkeys, useTimezone } from '../SettingsContext'
 import { useHotkey } from '../hooks/useHotkey'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Archive, ChevronLeft, ChevronsLeft, ChevronsRight, ChevronDown, ChevronRight, LayoutGrid, List, Maximize2, Minimize2, Plus, RotateCcw, Trash2, X } from 'lucide-react'
+import { Archive, ChevronDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, GripVertical, LayoutGrid, List, Maximize2, Minimize2, Plus, RotateCcw, Star, Trash2, X } from 'lucide-react'
 import { useIsDesktop } from '../hooks/useMediaQuery'
 import {
  fetchPersons,
@@ -306,7 +306,7 @@ function PersonProjects({
  ? 'bg-accent-1 text-accent-fg font-semibold'
  : 'bg-inset text-fg'
  }`}
- title={isPrimary ? 'Primary affiliation' : 'Click ★ to make primary'}
+ title={isPrimary ? 'Primary affiliation' : 'Click the star to make primary'}
  >
  {!isPrimary && (
  <button
@@ -314,7 +314,7 @@ function PersonProjects({
  className="text-fg-subtle hover:text-warning leading-none"
  title="Make primary"
  >
- ★
+ <Star size={13} fill={isPrimary ? 'currentColor' : 'none'} />
  </button>
  )}
  <span className="truncate max-w-[10rem]">{proj.name}</span>
@@ -722,7 +722,7 @@ export default function PeoplePage({ onOpenTodo }: { onOpenTodo: (id: number) =>
  >
  <div className="flex items-center justify-between gap-2">
  <div className="flex items-center gap-2 min-w-0">
- <span className="text-fg-faint dark:text-fg-muted text-2xs leading-none cursor-grab opacity-0 group-hover:opacity-100 transition-opacity select-none">⠿</span>
+ <GripVertical size={11} className="shrink-0 text-fg-faint dark:text-fg-muted cursor-grab opacity-0 group-hover:opacity-100 transition-opacity" />
  <div className="w-5 h-5 rounded-full bg-accent-2 text-accent-fg flex items-center justify-center text-2xs font-bold flex-shrink-0">
  {person.name.charAt(0).toUpperCase()}
  </div>

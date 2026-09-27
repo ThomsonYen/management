@@ -1,3 +1,4 @@
+import { ArrowUpRight, Calendar, ChevronDown, ChevronUp, Folder, GripVertical, Star, Timer, User } from 'lucide-react'
 import { useState, useEffect, useRef } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
@@ -308,7 +309,7 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
  : 'text-fg-faint dark:text-fg-muted hover:text-warning'
  }`}
  >
- {todo.is_focused ? '★' : '☆'}
+ <Star size={17} fill={todo.is_focused ? 'currentColor' : 'none'} />
  </button>
  {/* Done checkbox */}
  <input
@@ -402,7 +403,7 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
  title="Open todo page"
  className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium text-accent bg-accent-1 hover:bg-accent-2 border border-accent-2 transition-colors"
  >
- <span>↗</span><span className="hidden md:inline"> Open</span>
+ <ArrowUpRight size={13} /><span className="hidden md:inline">Open</span>
  </button>
  )}
  <button
@@ -413,7 +414,7 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
  {totalSubs > 0 && (
  <span className="text-fg-subtle">{doneSubs}/{totalSubs}</span>
  )}
- <span>{expanded ? '▲' : '▼'}</span>
+ {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
  </button>
  </div>
  </div>
@@ -444,14 +445,14 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
  title="Click to change assignee"
  className="flex items-center gap-1 cursor-pointer hover:text-accent transition-colors"
  >
- <span>◉</span>
+ <User size={12} className="shrink-0" />
  {todo.assignee_name ?? <em className="text-fg-faint dark:text-fg-muted not-italic">+ person</em>}
  </span>
  )}
 
  {/* Deadline */}
  <span className={`flex items-center gap-1 ${isOverdue ? 'text-danger font-semibold' : ''}`}>
- <span>◷</span>
+ <Calendar size={12} className="shrink-0" />
  <DatePicker
  value={todo.deadline || ''}
  onChange={(v) => saveField('deadline', v || null)}
@@ -483,7 +484,7 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
  title="Click to change project"
  className="flex items-center gap-1 cursor-pointer hover:text-accent transition-colors"
  >
- <span>◈</span>
+ <Folder size={12} className="shrink-0" />
  {todo.project_name ?? <em className="text-fg-faint dark:text-fg-muted not-italic">+ project</em>}
  </span>
  )}
@@ -511,7 +512,7 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
  title="Click to change estimated hours"
  className="flex items-center gap-1 cursor-pointer hover:text-accent transition-colors"
  >
- <span>⏱</span> {todo.estimated_hours}h
+ <Timer size={12} className="shrink-0" /> {todo.estimated_hours}h
  </span>
  )}
  </div>
@@ -645,9 +646,9 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
  e.dataTransfer.effectAllowed = 'move'
  setSubDragId(s.id)
  }}
- className="text-fg-faint dark:text-fg-muted text-xs select-none cursor-grab active:cursor-grabbing"
+ className="flex text-fg-faint dark:text-fg-muted select-none cursor-grab active:cursor-grabbing"
  title="Drag to reorder"
- >⠿</span>
+ ><GripVertical size={12} /></span>
  <input
  type="checkbox"
  checked={s.done}

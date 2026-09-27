@@ -1,3 +1,4 @@
+import { Check } from 'lucide-react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { checkInPerson } from '../api'
 import { useTimezone } from '../SettingsContext'
@@ -45,7 +46,7 @@ export default function CheckInButton({ person, size = 'sm' }: Props) {
       title={alreadyToday ? 'Already checked in today' : `Record a check-in with ${person.name} today`}
       className={`${pad} rounded-lg bg-success-bg text-success border border-success/30 hover:bg-success hover:text-white transition-colors font-medium whitespace-nowrap disabled:opacity-40 disabled:hover:bg-success-bg disabled:hover:text-success`}
     >
-      ✓ {alreadyToday ? 'Checked in' : 'Check in'}
+      <Check size={12} className="inline-block shrink-0 align-[-0.15em] mr-1" />{alreadyToday ? 'Checked in' : 'Check in'}
     </button>
   )
 }

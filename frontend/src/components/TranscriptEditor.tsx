@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { ChevronDown, ChevronRight, FileText, Loader2, Sparkles } from 'lucide-react'
+import { AlertTriangle, ChevronDown, ChevronRight, FileText, Loader2, Sparkles } from 'lucide-react'
 import { transcribeNote } from '../api'
 
 interface TranscriptEditorProps {
@@ -88,7 +88,7 @@ export default function TranscriptEditor({ noteId, transcript, hasAudio, onSave 
  </div>
  {transcribeMutation.isError && (
  <div className="mx-3 mb-2 px-3 py-2 rounded-md bg-danger-bg border border-danger/30 text-xs text-danger flex items-start gap-2">
- <span className="text-danger mt-0.5 flex-shrink-0">⚠</span>
+ <AlertTriangle size={14} className="text-danger mt-0.5 flex-shrink-0" />
  <span>
  {(transcribeMutation.error as Error)?.message?.includes('503')
  ? 'OpenAI API key not configured. Set keys.openai_key in project_config.yaml.'

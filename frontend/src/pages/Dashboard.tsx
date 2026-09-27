@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { fetchReminders, fetchRecentlyDone, fetchTodos, fetchPersons, fetchDueFriends, fetchPlans, updateTodo } from '../api'
 import type { ScheduleStatus, Todo, Person, Friend, Hangout } from '../types'
-import { ListTodo, CheckCircle2, ShieldAlert, ExternalLink, type LucideIcon } from 'lucide-react'
+import { CheckCircle2, ExternalLink, ListTodo, ShieldAlert, Star, type LucideIcon } from 'lucide-react'
 import { nudgeCopy } from '../socialCopy'
 import { BlockerTreeNode } from '../components/BlockerTree'
 import CheckInButton from '../components/CheckInButton'
@@ -186,7 +186,7 @@ function ScheduleCard({ item, allTodos, persons, onOpenTodo }: { item: ScheduleS
  : 'text-fg-faint hover:text-warning'
  }`}
  >
- {isFocused ? '★' : '☆'}
+ <Star size={15} fill={isFocused ? 'currentColor' : 'none'} />
  </button>
  {/* Open detail */}
  <button

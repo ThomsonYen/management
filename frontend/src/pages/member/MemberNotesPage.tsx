@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { NotebookPen, Search, X } from 'lucide-react'
+import { Folder, NotebookPen, Search, Users, X } from 'lucide-react'
 import { fetchNotes, searchNotes } from '../../api'
 import type { NoteSearchResult, NoteSummary } from '../../types'
 import { useTimezone } from '../../SettingsContext'
@@ -21,8 +21,8 @@ function NoteRow({ note, timezone, onClick }: { note: NoteSummary; timezone: str
           <h3 className="font-semibold text-fg truncate">{note.title}</h3>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1 text-xs text-fg-muted">
             <span>{when}</span>
-            {note.attendee_names.length > 0 && <span>◉ {note.attendee_names.join(', ')}</span>}
-            {note.project_names.length > 0 && <span>◈ {note.project_names.join(', ')}</span>}
+            {note.attendee_names.length > 0 && <span className="inline-flex items-center gap-1"><Users size={12} className="shrink-0" />{note.attendee_names.join(', ')}</span>}
+            {note.project_names.length > 0 && <span className="inline-flex items-center gap-1"><Folder size={12} className="shrink-0" />{note.project_names.join(', ')}</span>}
           </div>
           {note.tags.length > 0 && (
             <div className="flex flex-wrap gap-1 mt-2" onClick={(e) => e.stopPropagation()}>

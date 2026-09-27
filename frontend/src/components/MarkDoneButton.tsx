@@ -1,3 +1,4 @@
+import { Check, Undo2 } from 'lucide-react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { updateTodo } from '../api'
 import { useToast } from '../ToastContext'
@@ -51,7 +52,7 @@ export default function MarkDoneButton({ todo, queryKeys }: Props) {
  disabled={updateMutation.isPending}
  className="text-xs px-2.5 py-1 rounded-lg bg-inset text-fg-muted border border-border hover:bg-inset transition-colors font-medium disabled:opacity-40"
  >
- ↩ Reopen
+ <Undo2 size={12} className="inline-block shrink-0 align-[-0.15em] mr-1" />Reopen
  </button>
  )
  }
@@ -62,7 +63,7 @@ export default function MarkDoneButton({ todo, queryKeys }: Props) {
  disabled={updateMutation.isPending}
  className="text-xs px-2.5 py-1 rounded-lg bg-success-bg text-success border border-success/30 hover:bg-success hover:text-white transition-colors font-medium disabled:opacity-40"
  >
- ✓ Done
+ <Check size={12} className="inline-block shrink-0 align-[-0.15em] mr-1" />Done
  </button>
  )
 }

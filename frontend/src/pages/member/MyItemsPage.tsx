@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ListChecks, Plus } from 'lucide-react'
+import { CalendarDays, ListChecks, Plus, Timer } from 'lucide-react'
 import { createTodo, fetchProjects, fetchTodos } from '../../api'
 import type { Project, Todo } from '../../types'
 import { useSession } from '../../hooks/useSession'
@@ -171,7 +171,7 @@ export default function MyItemsPage() {
               ))}
             </select>
             <span className="flex items-center gap-1">
-              📅 <DatePicker value={deadline} onChange={setDeadline} variant="inline" placeholder="Deadline" />
+              <CalendarDays size={13} className="shrink-0" /> <DatePicker value={deadline} onChange={setDeadline} variant="inline" placeholder="Deadline" />
             </span>
             <select
               value={importance}
@@ -183,7 +183,7 @@ export default function MyItemsPage() {
               ))}
             </select>
             <label className="flex items-center gap-1">
-              ⏱
+              <Timer size={13} className="shrink-0" />
               <input
                 type="number"
                 min="0.25"

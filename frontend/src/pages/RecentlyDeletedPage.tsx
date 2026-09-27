@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Archive } from 'lucide-react'
+import { Archive, Folder, Undo2, User, X } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
  fetchDeletedTodos,
@@ -172,14 +172,14 @@ export default function RecentlyDeletedPage() {
  idx < todos.length - 1 ? 'border-b border-border-subtle' : ''
  }`}
  >
- <span className="text-fg-faint dark:text-fg-muted flex-shrink-0">✕</span>
+ <X size={14} className="text-fg-faint dark:text-fg-muted flex-shrink-0" />
  <div className="flex-1 min-w-0">
  <p className="text-sm font-medium text-fg truncate">
  {todo.title}
  </p>
  <div className="flex items-center gap-2 mt-0.5 text-xs text-fg-subtle">
- {todo.assignee_name && <span>◉ {todo.assignee_name}</span>}
- {todo.project_name && <span>◈ {todo.project_name}</span>}
+ {todo.assignee_name && <span className="inline-flex items-center gap-1"><User size={12} className="shrink-0" />{todo.assignee_name}</span>}
+ {todo.project_name && <span className="inline-flex items-center gap-1"><Folder size={12} className="shrink-0" />{todo.project_name}</span>}
  <span>deleted {timeAgo(todo.deleted_at)}</span>
  </div>
  </div>
@@ -189,7 +189,7 @@ export default function RecentlyDeletedPage() {
  disabled={restoreTodoMut.isPending}
  className="text-xs px-2.5 py-1 rounded-lg bg-accent-1 text-accent-fg dark:text-accent border border-accent-2 dark:border-accent-active hover:bg-accent-2 dark:hover:bg-accent-active transition-colors font-medium disabled:opacity-40"
  >
- ↩ Restore
+ <Undo2 size={12} className="inline-block shrink-0 align-[-0.15em] mr-1" />Restore
  </button>
  <button
  onClick={() => onPurgeTodo(todo)}
@@ -224,7 +224,7 @@ export default function RecentlyDeletedPage() {
  disabled={reactivateMut.isPending}
  className="text-xs px-2.5 py-1 rounded-lg bg-accent-1 text-accent-fg dark:text-accent border border-accent-2 dark:border-accent-active hover:bg-accent-2 dark:hover:bg-accent-active transition-colors font-medium disabled:opacity-40 flex-shrink-0"
  >
- ↩ Reactivate
+ <Undo2 size={12} className="inline-block shrink-0 align-[-0.15em] mr-1" />Reactivate
  </button>
  </div>
  ))}
@@ -235,7 +235,7 @@ export default function RecentlyDeletedPage() {
  key={project.id}
  className="flex items-center gap-3 px-5 py-3.5 border-b border-border-subtle last:border-b-0"
  >
- <span className="text-fg-faint dark:text-fg-muted flex-shrink-0">✕</span>
+ <X size={14} className="text-fg-faint dark:text-fg-muted flex-shrink-0" />
  <div className="flex-1 min-w-0">
  <p className="text-sm font-medium text-fg truncate">
  {project.name}
@@ -251,7 +251,7 @@ export default function RecentlyDeletedPage() {
  disabled={restoreProjectMut.isPending}
  className="text-xs px-2.5 py-1 rounded-lg bg-accent-1 text-accent-fg dark:text-accent border border-accent-2 dark:border-accent-active hover:bg-accent-2 dark:hover:bg-accent-active transition-colors font-medium disabled:opacity-40"
  >
- ↩ Restore
+ <Undo2 size={12} className="inline-block shrink-0 align-[-0.15em] mr-1" />Restore
  </button>
  <button
  onClick={() => onPurgeProject(project)}
