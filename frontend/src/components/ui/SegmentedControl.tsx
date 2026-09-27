@@ -18,7 +18,7 @@ export function SegmentedControl<T extends string>({ value, onChange, options, s
   const paddings = { sm: 'px-2.5 text-xs', md: 'px-3 text-sm' }
   return (
     <div className={cn(
-      'inline-flex items-center bg-inset border border-border rounded-md p-0.5 gap-0.5',
+      'inline-flex items-center bg-inset border border-border rounded-full p-0.5 gap-0.5',
       heights[size],
       className,
     )}>
@@ -30,7 +30,7 @@ export function SegmentedControl<T extends string>({ value, onChange, options, s
             type="button"
             onClick={() => onChange(opt.value)}
             className={cn(
-              'inline-flex items-center rounded-sm h-full font-medium transition-colors',
+              'inline-flex items-center rounded-full h-full font-medium transition-colors',
               paddings[size],
               active
                 ? 'bg-surface text-fg shadow-xs'

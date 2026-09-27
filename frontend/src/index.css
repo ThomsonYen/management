@@ -21,6 +21,37 @@ html.dark {
   color-scheme: dark;
 }
 
+/* ─── Shape: squircles for containers, ovals for tokens ───
+   --radius-* are written by applyTheme() (src/theme/tokens/radii.ts); these
+   defaults only cover the first paint. Where corner-shape is supported every
+   rounded corner becomes a squircle, and --radius-k enlarges the radius so the
+   smoother curve keeps the same visual size. rounded-full stays a true oval. */
+:root {
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 20px;
+  --radius-k: 1;
+}
+
+@supports (corner-shape: squircle) {
+  :root {
+    --radius-k: 1.6;
+  }
+  [class*='rounded']:not([class*='rounded-full']) {
+    corner-shape: squircle;
+  }
+}
+
+/* Translucent app chrome (mobile header, tab bar), as on the personal site */
+.chrome-glass {
+  background-color: rgb(var(--bg-app) / 0.9);
+  -webkit-backdrop-filter: saturate(180%) blur(16px);
+  backdrop-filter: saturate(180%) blur(16px);
+}
+
 body {
   margin: 0;
   font-family: var(--font-sans, 'Inter', system-ui, sans-serif);

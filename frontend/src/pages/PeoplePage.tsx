@@ -154,12 +154,12 @@ function PersonNotes({ person }: { person: Person }) {
  return (
  <div className="bg-surface rounded-xl border border-border px-4 py-3 mb-3">
  <div className="flex items-center justify-between mb-1.5">
- <h3 className="text-[11px] font-semibold text-fg-muted uppercase tracking-wide">Notes</h3>
+ <h3 className="text-xs font-semibold text-fg-muted uppercase tracking-wide">Notes</h3>
  <div className="flex items-center gap-3">
  <SaveIndicator state={saveState} />
  <button
  onClick={() => setShowRaw(v => !v)}
- className="text-[10px] font-mono text-fg-subtle hover:text-fg-muted dark:hover:text-fg transition-colors"
+ className="text-2xs font-mono text-fg-subtle hover:text-fg-muted dark:hover:text-fg transition-colors"
  >
  {showRaw ? 'Hide raw' : 'Raw'}
  </button>
@@ -290,7 +290,7 @@ function PersonProjects({
  return (
  <div className="bg-surface rounded-xl border border-border px-4 py-2.5 mb-3">
  <div className="flex items-center gap-2 flex-wrap">
- <h3 className="text-[11px] font-semibold text-fg-muted uppercase tracking-wide mr-1">Projects</h3>
+ <h3 className="text-xs font-semibold text-fg-muted uppercase tracking-wide mr-1">Projects</h3>
  {assignedIds.length === 0 && (
  <span className="text-xs italic text-fg-subtle">None — assign to surface in the sidebar</span>
  )}
@@ -401,7 +401,7 @@ function ArchivedPeopleSection({
  <Archive size={12} />
  Archived
  </span>
- <span className="font-mono text-[11px]">{archived.length}</span>
+ <span className="font-mono text-xs">{archived.length}</span>
  </button>
  {open && (
  <div className="pb-1">
@@ -414,7 +414,7 @@ function ArchivedPeopleSection({
  onClick={() => onSelect(person.id)}
  className="flex items-center gap-2 flex-1 min-w-0 text-left hover:text-fg dark:hover:text-fg"
  >
- <div className="w-5 h-5 rounded-full bg-inset text-fg-muted flex items-center justify-center text-[10px] font-bold flex-shrink-0">
+ <div className="w-5 h-5 rounded-full bg-inset text-fg-muted flex items-center justify-center text-2xs font-bold flex-shrink-0">
  {person.name.charAt(0).toUpperCase()}
  </div>
  <span className="truncate italic">{person.name}</span>
@@ -722,8 +722,8 @@ export default function PeoplePage({ onOpenTodo }: { onOpenTodo: (id: number) =>
  >
  <div className="flex items-center justify-between gap-2">
  <div className="flex items-center gap-2 min-w-0">
- <span className="text-fg-faint dark:text-fg-muted text-[10px] leading-none cursor-grab opacity-0 group-hover:opacity-100 transition-opacity select-none">⠿</span>
- <div className="w-5 h-5 rounded-full bg-accent-2 text-accent-fg flex items-center justify-center text-[10px] font-bold flex-shrink-0">
+ <span className="text-fg-faint dark:text-fg-muted text-2xs leading-none cursor-grab opacity-0 group-hover:opacity-100 transition-opacity select-none">⠿</span>
+ <div className="w-5 h-5 rounded-full bg-accent-2 text-accent-fg flex items-center justify-center text-2xs font-bold flex-shrink-0">
  {person.name.charAt(0).toUpperCase()}
  </div>
  <span className={`truncate ${isDirectReport && !isSelected ? 'font-semibold' : ''}`}>
@@ -731,7 +731,7 @@ export default function PeoplePage({ onOpenTodo }: { onOpenTodo: (id: number) =>
  </span>
  {!panelExpanded && person.project_names.length > 0 && (
  <span
- className={`text-[11px] truncate ${isSelected ? 'text-accent' : 'text-fg-subtle'}`}
+ className={`text-xs truncate ${isSelected ? 'text-accent' : 'text-fg-subtle'}`}
  title={person.project_names.join(' · ')}
  >
  · {person.project_names[0]}
@@ -751,7 +751,7 @@ export default function PeoplePage({ onOpenTodo }: { onOpenTodo: (id: number) =>
  {hasAlerts && (
  <span className="w-1.5 h-1.5 rounded-full bg-danger" title="Has schedule alerts"></span>
  )}
- <span className="text-[11px] text-fg-subtle font-normal tabular-nums">{count}</span>
+ <span className="text-xs text-fg-subtle font-normal tabular-nums">{count}</span>
  </div>
  </div>
  {panelExpanded && person.project_names.length > 0 && (
@@ -759,7 +759,7 @@ export default function PeoplePage({ onOpenTodo }: { onOpenTodo: (id: number) =>
  {person.project_names.map((pn, i) => (
  <span
  key={`${person.project_ids[i]}-${pn}`}
- className={`text-[10px] px-1.5 py-0.5 rounded ${
+ className={`text-2xs px-1.5 py-0.5 rounded ${
  isSelected
  ? 'bg-accent-2/60 dark:bg-accent/60 text-accent-fg dark:text-accent-fg'
  : 'bg-inset text-fg-muted'
@@ -928,7 +928,7 @@ export default function PeoplePage({ onOpenTodo }: { onOpenTodo: (id: number) =>
  {/* Schedule alerts for person */}
  {personReminders.length > 0 && (
  <div className="mb-3">
- <h3 className="text-[11px] font-semibold text-fg-muted uppercase tracking-wide mb-1.5">
+ <h3 className="text-xs font-semibold text-fg-muted uppercase tracking-wide mb-1.5">
  Schedule Alerts
  </h3>
  <div className="space-y-1.5">
@@ -944,7 +944,7 @@ export default function PeoplePage({ onOpenTodo }: { onOpenTodo: (id: number) =>
  <div className="flex items-center justify-between gap-2">
  <span className="font-medium text-fg truncate">{r.title}</span>
  <span
- className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 ${
+ className={`text-2xs font-bold px-2 py-0.5 rounded-full flex-shrink-0 ${
  r.status === 'behind'
  ? 'bg-danger-bg text-danger'
  : 'bg-warning-bg text-warning'
@@ -953,7 +953,7 @@ export default function PeoplePage({ onOpenTodo }: { onOpenTodo: (id: number) =>
  {r.status === 'behind' ? 'BEHIND' : 'WARNING'}
  </span>
  </div>
- <div className="text-[11px] text-fg-muted mt-0.5 flex gap-3">
+ <div className="text-xs text-fg-muted mt-0.5 flex gap-3">
  <span>Deadline: {r.deadline}</span>
  <span>Est: {r.estimated_hours}h</span>
  <span>Available: {r.available_hours}h</span>
@@ -974,7 +974,7 @@ export default function PeoplePage({ onOpenTodo }: { onOpenTodo: (id: number) =>
  if (todos.length === 0) return null
  return (
  <div key={status} className="mb-4">
- <h3 className={`text-[11px] font-bold uppercase tracking-wide mb-1.5 ${statusColor[status]}`}>
+ <h3 className={`text-xs font-bold uppercase tracking-wide mb-1.5 ${statusColor[status]}`}>
  {statusLabel[status]} ({todos.length})
  </h3>
  <div className="space-y-2">

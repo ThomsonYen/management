@@ -2,6 +2,7 @@ import { linearEmerald } from './themes/linear-emerald'
 import { notionWarm } from './themes/notion-warm'
 import { vercelDark } from './themes/vercel-dark'
 import { COLOR_VAR_MAP, type ColorScheme } from './tokens/colors'
+import { DEFAULT_RADII, RADIUS_STEPS } from './tokens/radii'
 import type { ThemePreset } from './themes/types'
 
 export * from './tokens/typography'
@@ -68,7 +69,7 @@ function ensureStyleTag(): HTMLStyleElement {
 export function applyTheme(name: ThemeName): void {
   const preset = THEMES[name] ?? THEMES[DEFAULT_THEME]
 
-  // 1) color CSS variables (light + dark)
+  // 1) color CSS variables (light + dark), typography and radii
   const css = [
     emitColorVars(preset.colors.light, 'light'),
     emitColorVars(preset.colors.dark, 'dark'),
@@ -77,6 +78,7 @@ export function applyTheme(name: ThemeName): void {
   --font-sans: ${preset.typography.fontSans};
   --font-mono: ${preset.typography.fontMono ?? 'ui-monospace, monospace'};
   --font-feature-settings: ${preset.typography.featureSettings ?? 'normal'};
+${RADIUS_STEPS.map((k) => `  --radius-${k}: ${preset.radii?.[k] ?? DEFAULT_RADII[k]};`).join('\n')}
 }`,
   ].join('\n')
   ensureStyleTag().textContent = css

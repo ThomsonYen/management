@@ -9,7 +9,7 @@ interface Props {
 
 export default function TagPill({ name, count, active, size = 'xs' }: Props) {
  const px = size === 'sm' ? 'px-2.5 py-1' : 'px-2 py-0.5'
- const text = size === 'sm' ? 'text-xs' : 'text-[11px]'
+ const text = size === 'sm' ? 'text-xs' : 'text-xs'
  return (
  <Link
  to={`/notes?tag=${encodeURIComponent(name)}`}

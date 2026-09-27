@@ -26,7 +26,7 @@ export default function TagSidebar({ kind }: Props) {
  <p className="text-xs text-fg-subtle">Loading...</p>
  ) : tags.length === 0 ? (
  <p className="text-xs text-fg-subtle">
- No tags yet. Type <code className="font-mono text-[10px]">#foo</code> in a note.
+ No tags yet. Type <code className="font-mono text-2xs">#foo</code> in a note.
  </p>
  ) : (
  <ul className="flex flex-wrap gap-1 md:block md:space-y-0.5">

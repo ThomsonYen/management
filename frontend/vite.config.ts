@@ -2,6 +2,7 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import yaml from 'js-yaml'
@@ -104,8 +105,11 @@ export default defineConfig({
     ),
   },
   server: {
-    host: DEV_HOST,
+    // start_local.sh sets VITE_DEV_HOST=0.0.0.0 so other tailnet devices can open
+    // http://<this machine>:5173; plain `npm run dev` stays on loopback.
+    host: process.env.VITE_DEV_HOST || DEV_HOST,
     port: DEV_PORT,
+    allowedHosts: ['.ts.net', os.hostname().split('.')[0].toLowerCase()],
     ...(httpsConfig ? { https: httpsConfig } : {}),
     proxy: {
       '/api': {

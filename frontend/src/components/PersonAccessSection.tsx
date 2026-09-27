@@ -135,7 +135,7 @@ export default function PersonAccessSection({ person, projects }: Props) {
   return (
     <div className="bg-surface rounded-xl border border-border px-4 py-3 mb-3">
       <div className="flex items-center gap-2 flex-wrap">
-        <h3 className="text-[11px] font-semibold text-fg-muted uppercase tracking-wide mr-1 flex items-center gap-1">
+        <h3 className="text-xs font-semibold text-fg-muted uppercase tracking-wide mr-1 flex items-center gap-1">
           <KeyRound size={11} /> App access
         </h3>
         {isLoading && <span className="text-xs text-fg-subtle">Loading…</span>}
@@ -228,7 +228,7 @@ export default function PersonAccessSection({ person, projects }: Props) {
           </div>
 
           <div>
-            <p className="text-[11px] font-semibold text-fg-muted uppercase tracking-wide mb-1">Sees every todo in</p>
+            <p className="text-xs font-semibold text-fg-muted uppercase tracking-wide mb-1">Sees every todo in</p>
             <div className="flex flex-wrap items-center gap-1.5">
               {projectGrants.length === 0 && (
                 <span className="text-xs italic text-fg-subtle">only their own todos</span>
@@ -273,11 +273,11 @@ export default function PersonAccessSection({ person, projects }: Props) {
                 )
               )}
             </div>
-            <p className="text-[11px] text-fg-subtle mt-1">A project grant includes its subprojects; those todos are read-only for them.</p>
+            <p className="text-xs text-fg-subtle mt-1">A project grant includes its subprojects; those todos are read-only for them.</p>
           </div>
 
           <div>
-            <p className="text-[11px] font-semibold text-fg-muted uppercase tracking-wide mb-1">Shared notes</p>
+            <p className="text-xs font-semibold text-fg-muted uppercase tracking-wide mb-1">Shared notes</p>
             <div className="flex flex-wrap items-center gap-1.5">
               {noteGrants.length === 0 && <span className="text-xs italic text-fg-subtle">none — share from a note's page</span>}
               {noteGrants.map((g) => (

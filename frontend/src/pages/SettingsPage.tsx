@@ -342,13 +342,13 @@ function VaultsSection() {
  <div className="flex items-center gap-2">
  <span className="text-sm font-medium text-fg">{v.name}</span>
  {v.is_managed && (
- <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-accent-1 text-accent-fg uppercase tracking-wider">Managed</span>
+ <span className="text-2xs px-1.5 py-0.5 rounded-full bg-accent-1 text-accent-fg uppercase tracking-wider">Managed</span>
  )}
  <span className="text-xs text-fg-subtle">{v.note_count} note{v.note_count !== 1 ? 's' : ''}</span>
  </div>
  <p className="text-xs text-fg-muted font-mono truncate">{v.root_path}</p>
  {v.last_scan_at && (
- <p className="text-[10px] text-fg-subtle mt-0.5">Last scan: {new Date(v.last_scan_at).toLocaleString()}</p>
+ <p className="text-2xs text-fg-subtle mt-0.5">Last scan: {new Date(v.last_scan_at).toLocaleString()}</p>
  )}
  </div>
  <div className="flex items-center gap-1 flex-shrink-0">
@@ -582,12 +582,12 @@ function ApiTokensSection() {
  <div className="min-w-0">
  <div className="flex items-center gap-2 flex-wrap">
  <span className="text-sm font-medium text-fg font-mono">{t.name}</span>
- <span className={`text-[10px] px-1.5 py-0.5 rounded-full uppercase tracking-wider ${state.cls}`}>{state.label}</span>
+ <span className={`text-2xs px-1.5 py-0.5 rounded-full uppercase tracking-wider ${state.cls}`}>{state.label}</span>
  {t.scopes.map((s) => (
- <span key={s} className="text-[10px] px-1.5 py-0.5 rounded-full bg-accent-1 text-accent-fg font-mono">{s}</span>
+ <span key={s} className="text-2xs px-1.5 py-0.5 rounded-full bg-accent-1 text-accent-fg font-mono">{s}</span>
  ))}
  </div>
- <p className="text-[11px] text-fg-subtle mt-0.5">
+ <p className="text-xs text-fg-subtle mt-0.5">
  Expires {new Date(t.expires_at).toLocaleDateString()}
  {' · '}
  {t.last_used_at ? `Last used ${new Date(t.last_used_at).toLocaleString()}` : 'Never used'}
@@ -802,7 +802,7 @@ export default function SettingsPage() {
 
  return (
  <div className="p-4 md:p-8 max-w-2xl">
- <h1 className="text-2xl font-bold text-fg mb-6">Settings</h1>
+ <h1 className="hidden md:block text-2xl font-semibold tracking-tight text-fg mb-6">Settings</h1>
 
  <div className="space-y-4">
  <AccountSection />

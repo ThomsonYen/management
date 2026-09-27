@@ -185,8 +185,9 @@ export default function TodosPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
 
  return (
  <div className="p-4 md:p-6 max-w-4xl mx-auto">
- <div className="flex items-center justify-between mb-6">
- <h2 className="text-2xl font-bold text-fg">Todos</h2>
+ {/* On phones the header's "+" adds a todo, so this row is desktop-only */}
+ <div className="hidden md:flex items-center justify-between mb-6">
+ <h2 className="text-2xl font-semibold tracking-tight text-fg">Todos</h2>
  <button
  onClick={() => setShowModal(true)}
  className="bg-accent text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-accent-hover transition-colors"
@@ -196,16 +197,16 @@ export default function TodosPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  </div>
 
  {/* Filter bar */}
- <div className="bg-surface rounded-xl border border-border shadow-sm p-4 mb-6">
- <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+ <div className="md:bg-surface md:rounded-xl md:border md:border-border md:shadow-sm md:p-4 mb-4 md:mb-6">
+ <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
  <div>
- <label className="block text-xs font-semibold text-fg-muted uppercase tracking-wide mb-1">
+ <label className="hidden md:block text-xs font-semibold text-fg-muted uppercase tracking-wide mb-1">
  Person
  </label>
  <select
  value={selectedPerson}
  onChange={(e) => setSelectedPerson(e.target.value)}
- className="w-full border border-border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+ className="w-full bg-surface border border-border rounded-full md:rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
  >
  <option value="">All people</option>
  {persons.map((p) => (
@@ -216,13 +217,13 @@ export default function TodosPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  </select>
  </div>
  <div>
- <label className="block text-xs font-semibold text-fg-muted uppercase tracking-wide mb-1">
+ <label className="hidden md:block text-xs font-semibold text-fg-muted uppercase tracking-wide mb-1">
  Project
  </label>
  <select
  value={selectedProject}
  onChange={(e) => setSelectedProject(e.target.value)}
- className="w-full border border-border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+ className="w-full bg-surface border border-border rounded-full md:rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
  >
  <option value="">All projects</option>
  {projects.map((p) => (
@@ -233,13 +234,13 @@ export default function TodosPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  </select>
  </div>
  <div>
- <label className="block text-xs font-semibold text-fg-muted uppercase tracking-wide mb-1">
+ <label className="hidden md:block text-xs font-semibold text-fg-muted uppercase tracking-wide mb-1">
  Status
  </label>
  <select
  value={selectedStatus}
  onChange={(e) => setSelectedStatus(e.target.value)}
- className="w-full border border-border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+ className="w-full bg-surface border border-border rounded-full md:rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
  >
  {STATUS_OPTIONS.map((o) => (
  <option key={o} value={o}>
@@ -249,13 +250,13 @@ export default function TodosPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  </select>
  </div>
  <div>
- <label className="block text-xs font-semibold text-fg-muted uppercase tracking-wide mb-1">
+ <label className="hidden md:block text-xs font-semibold text-fg-muted uppercase tracking-wide mb-1">
  Importance
  </label>
  <select
  value={selectedImportance}
  onChange={(e) => setSelectedImportance(e.target.value)}
- className="w-full border border-border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+ className="w-full bg-surface border border-border rounded-full md:rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
  >
  {IMPORTANCE_OPTIONS.map((o) => (
  <option key={o} value={o}>

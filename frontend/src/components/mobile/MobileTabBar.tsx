@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { MoreHorizontal } from 'lucide-react'
 import { primaryNavItems, secondaryNavItems, settingsNavItem, type NavItem } from '../../navItems'
@@ -20,6 +20,21 @@ const COLS: Record<number, string> = {
   6: 'grid-cols-6',
 }
 
+const TAB = 'flex flex-col items-center justify-center gap-1 pt-1.5 pb-1 min-h-[3.5rem] transition-colors'
+
+/** Oval behind the active tab's icon. */
+function TabPill({ active, children }: { active: boolean; children: ReactNode }) {
+  return (
+    <span
+      className={`flex items-center justify-center h-7 w-14 rounded-full transition-colors duration-200 ${
+        active ? 'bg-accent-1' : ''
+      }`}
+    >
+      {children}
+    </span>
+  )
+}
+
 export default function MobileTabBar({ items = primaryNavItems, moreItems = [...secondaryNavItems, settingsNavItem] }: Props) {
   const [moreOpen, setMoreOpen] = useState(false)
   const location = useLocation()
@@ -31,7 +46,7 @@ export default function MobileTabBar({ items = primaryNavItems, moreItems = [...
 
   return (
     <>
-      <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-surface border-t border-border pb-[env(safe-area-inset-bottom)]">
+      <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 chrome-glass border-t border-border/60 pb-[env(safe-area-inset-bottom)]">
         <div className={`grid ${cols}`}>
           {items.map((item) => {
             const Icon = item.icon
@@ -40,26 +55,24 @@ export default function MobileTabBar({ items = primaryNavItems, moreItems = [...
                 key={item.to}
                 to={item.to}
                 end={item.end}
-                className={({ isActive }) =>
-                  `flex flex-col items-center justify-center gap-1 py-2 min-h-[3.5rem] transition-colors ${
-                    isActive ? 'text-accent-fg' : 'text-fg-muted'
-                  }`
-                }
+                className={({ isActive }) => `${TAB} ${isActive ? 'text-accent-fg' : 'text-fg-muted'}`}
               >
-                <Icon size={20} />
-                <span className="text-2xs font-medium leading-none">{item.label}</span>
+                {({ isActive }) => (
+                  <>
+                    <TabPill active={isActive}><Icon size={20} /></TabPill>
+                    <span className={`text-2xs leading-none ${isActive ? 'font-semibold' : 'font-medium'}`}>{item.label}</span>
+                  </>
+                )}
               </NavLink>
             )
           })}
           {hasMore && (
             <button
               onClick={() => setMoreOpen(true)}
-              className={`flex flex-col items-center justify-center gap-1 py-2 min-h-[3.5rem] transition-colors ${
-                onSecondaryRoute ? 'text-accent-fg' : 'text-fg-muted'
-              }`}
+              className={`${TAB} ${onSecondaryRoute ? 'text-accent-fg' : 'text-fg-muted'}`}
             >
-              <MoreHorizontal size={20} />
-              <span className="text-2xs font-medium leading-none">More</span>
+              <TabPill active={onSecondaryRoute}><MoreHorizontal size={20} /></TabPill>
+              <span className={`text-2xs leading-none ${onSecondaryRoute ? 'font-semibold' : 'font-medium'}`}>More</span>
             </button>
           )}
         </div>

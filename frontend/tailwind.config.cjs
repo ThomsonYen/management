@@ -4,6 +4,7 @@
 // The actual values come from CSS variables set by src/theme/index.ts (applyTheme).
 
 const withVar = (name) => `rgb(var(${name}) / <alpha-value>)`
+const radius = (step) => `calc(var(--radius-${step}) * var(--radius-k, 1))`
 
 module.exports = {
   content: [
@@ -54,13 +55,16 @@ module.exports = {
         success: { DEFAULT: withVar('--success'), bg: withVar('--success-bg') },
         info:    { DEFAULT: withVar('--info'),    bg: withVar('--info-bg')    },
       },
+      // Values come from src/theme/tokens/radii.ts via --radius-* (see applyTheme);
+      // --radius-k enlarges them where corner-shape: squircle is supported (index.css).
       borderRadius: {
-        xs:    '3px',
-        sm:    '4px',
-        md:    '6px',
-        lg:    '8px',
-        xl:    '12px',
-        '2xl': '16px',
+        xs:    radius('xs'),
+        sm:    radius('sm'),
+        DEFAULT: radius('sm'),
+        md:    radius('md'),
+        lg:    radius('lg'),
+        xl:    radius('xl'),
+        '2xl': radius('2xl'),
       },
       boxShadow: {
         xs:      '0 1px 0 rgb(0 0 0 / 0.04)',
@@ -78,15 +82,15 @@ module.exports = {
           `calc(${lh}px * var(--font-scale, 1))`,
         ]
         return {
-          '2xs': scale(10, 14),
-          xs:    scale(11, 16),
-          sm:    scale(13, 18),
-          base:  scale(14, 20),
-          md:    scale(15, 22),
-          lg:    scale(16, 24),
-          xl:    scale(18, 26),
-          '2xl': scale(22, 28),
-          '3xl': scale(28, 34),
+          '2xs': scale(11, 15),
+          xs:    scale(12, 17),
+          sm:    scale(14, 20),
+          base:  scale(15, 22),
+          md:    scale(16, 24),
+          lg:    scale(17, 25),
+          xl:    scale(19, 27),
+          '2xl': scale(24, 30),
+          '3xl': scale(30, 36),
         }
       })(),
       fontFamily: {

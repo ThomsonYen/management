@@ -337,7 +337,7 @@ export default function WeeklyGoalsPage() {
  <div className="p-4 md:p-6 max-w-[1400px] mx-auto">
  <div className="flex flex-wrap items-center justify-between gap-y-2 mb-5">
  <div>
- <h2 className="text-2xl font-bold text-fg">Goals</h2>
+ <h2 className="hidden md:block text-2xl font-semibold tracking-tight text-fg">Goals</h2>
  <p className="text-sm text-fg-muted mt-1">
  {formatDateFull(rangeFrom)} &ndash; {formatDateFull(rangeTo)}
  <span className="ml-2 text-xs text-fg-subtle">
@@ -377,7 +377,7 @@ export default function WeeklyGoalsPage() {
 
  <div className="flex items-center gap-3">
  <div className="flex items-center gap-1">
- <span className="text-[10px] uppercase tracking-wide text-fg-subtle mr-0.5">Before</span>
+ <span className="text-2xs uppercase tracking-wide text-fg-subtle mr-0.5">Before</span>
  <button
  onClick={() => setDaysBefore((v) => Math.max(0, v - 1))}
  className="w-5 h-5 rounded flex items-center justify-center text-xs font-bold text-fg-subtle hover:text-fg-muted dark:text-fg-subtle dark:hover:text-fg-faint hover:bg-inset dark:hover:bg-elevated transition-colors"
@@ -389,7 +389,7 @@ export default function WeeklyGoalsPage() {
  >+</button>
  </div>
  <div className="flex items-center gap-1">
- <span className="text-[10px] uppercase tracking-wide text-fg-subtle mr-0.5">After</span>
+ <span className="text-2xs uppercase tracking-wide text-fg-subtle mr-0.5">After</span>
  <button
  onClick={() => setDaysAfter((v) => Math.max(0, v - 1))}
  className="w-5 h-5 rounded flex items-center justify-center text-xs font-bold text-fg-subtle hover:text-fg-muted dark:text-fg-subtle dark:hover:text-fg-faint hover:bg-inset dark:hover:bg-elevated transition-colors"
@@ -486,7 +486,7 @@ export default function WeeklyGoalsPage() {
  <span className="text-sm font-bold">{getDayName(date)}</span>
  <span className="text-xs opacity-70">{formatDate(date)}</span>
  {isAnchor && (
- <span className="text-[10px] font-bold uppercase tracking-wider bg-accent text-white px-1.5 py-0.5 rounded">Anchor</span>
+ <span className="text-2xs font-bold uppercase tracking-wider bg-accent text-white px-1.5 py-0.5 rounded">Anchor</span>
  )}
  </div>
  <div className="flex items-center gap-2">

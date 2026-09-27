@@ -33,8 +33,8 @@ const toneClasses: Record<BadgeVariant, Record<BadgeTone, string>> = {
 }
 
 const sizeClasses: Record<BadgeSize, string> = {
-  sm: 'text-2xs h-4 px-1.5 gap-1',
-  md: 'text-xs h-5 px-2 gap-1',
+  sm: 'text-2xs h-4 px-2 gap-1',
+  md: 'text-xs h-5 px-2.5 gap-1',
 }
 
 export interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {
@@ -48,7 +48,7 @@ export function Badge({ tone = 'neutral', variant = 'soft', size = 'md', classNa
   return (
     <span
       className={cn(
-        'inline-flex items-center rounded-xs font-medium border whitespace-nowrap',
+        'inline-flex items-center rounded-full font-medium border whitespace-nowrap',
         sizeClasses[size],
         toneClasses[variant][tone],
         className,

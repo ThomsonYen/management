@@ -329,14 +329,14 @@ function CheckInCard({ person, timezone, onOpen }: { person: Person; timezone: s
  </div>
  <div className="min-w-0">
  <p className="font-medium text-fg truncate group-hover:underline">{person.name}</p>
- <p className="text-[11px] text-fg-muted truncate">
+ <p className="text-xs text-fg-muted truncate">
  {describeCheckIn(person, timezone)} · every {interval} day{interval === 1 ? '' : 's'}
  </p>
  </div>
  </button>
  <div className="flex items-center gap-2 flex-shrink-0">
  <span
- className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+ className={`text-2xs font-bold px-2 py-0.5 rounded-full ${
  isOverdue ? 'bg-danger-bg text-danger' : 'bg-warning-bg text-warning'
  }`}
  >
@@ -348,16 +348,24 @@ function CheckInCard({ person, timezone, onOpen }: { person: Person; timezone: s
  )
 }
 
-function StatCard({ label, value, color, icon: Icon }: { label: string; value: number; color: string; icon: LucideIcon }) {
- return (
- <div className={`rounded-xl p-5 text-white ${color}`}>
- <div className="flex items-start justify-between">
- <p className="text-3xl font-bold">{value}</p>
- <Icon size={20} className="opacity-70 mt-1" />
- </div>
- <p className="text-sm opacity-90 mt-1">{label}</p>
- </div>
- )
+const STAT_TONES = {
+  accent: 'bg-accent-1 text-accent',
+  info:   'bg-info-bg text-info',
+  muted:  'bg-inset text-fg-subtle',
+} as const
+
+function StatCard({ label, value, tone, icon: Icon }: { label: string; value: number; tone: keyof typeof STAT_TONES; icon: LucideIcon }) {
+  return (
+    <div className="bg-surface border border-border rounded-xl shadow-sm p-3 md:p-5 flex flex-col md:flex-row md:items-center gap-2 md:gap-4">
+      <span className={`flex items-center justify-center h-9 w-9 md:h-11 md:w-11 rounded-full flex-shrink-0 ${STAT_TONES[tone]}`}>
+        <Icon size={18} />
+      </span>
+      <div className="min-w-0">
+        <p className="text-2xl md:text-3xl font-semibold tracking-tight tabular-nums text-fg leading-none">{value}</p>
+        <p className="text-sm text-fg-muted mt-1 leading-snug">{label}</p>
+      </div>
+    </div>
+  )
 }
 
 export default function Dashboard({ onOpenTodo }: { onOpenTodo: (id: number) => void }) {
@@ -434,13 +442,13 @@ export default function Dashboard({ onOpenTodo }: { onOpenTodo: (id: number) => 
 
  return (
  <div className="p-4 md:p-6 max-w-5xl mx-auto">
- <h2 className="text-2xl font-bold text-fg mb-6">Dashboard</h2>
+ <h2 className="hidden md:block text-2xl font-semibold tracking-tight text-fg mb-6">Dashboard</h2>
 
  {/* Stats */}
- <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
- <StatCard label="Total Todos" value={todos.length} color="bg-accent" icon={ListTodo} />
- <StatCard label="Completed (past 7 days)" value={recentlyDone.length} color="bg-info" icon={CheckCircle2} />
- <StatCard label="Blocked" value={todos.filter((t) => t.is_blocked).length} color="bg-fg-subtle" icon={ShieldAlert} />
+ <div className="grid grid-cols-3 gap-2.5 md:gap-4 mb-8">
+ <StatCard label="Total Todos" value={todos.length} tone="accent" icon={ListTodo} />
+ <StatCard label="Completed (past 7 days)" value={recentlyDone.length} tone="info" icon={CheckCircle2} />
+ <StatCard label="Blocked" value={todos.filter((t) => t.is_blocked).length} tone="muted" icon={ShieldAlert} />
  </div>
 
  {/* Check-ins with direct reports */}

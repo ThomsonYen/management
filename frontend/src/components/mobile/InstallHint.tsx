@@ -25,9 +25,11 @@ export default function InstallHint() {
   }
 
   return (
-    <div className="fixed bottom-[calc(4rem+env(safe-area-inset-bottom))] md:bottom-0 inset-x-0 z-50 md:pb-[env(safe-area-inset-bottom)] bg-elevated border-t border-border shadow-lg">
-      <div className="flex items-center gap-3 px-4 py-3 text-sm text-fg">
-        <Share size={18} className="text-accent flex-shrink-0" />
+    <div className="fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom))] md:bottom-[calc(1rem+env(safe-area-inset-bottom))] inset-x-3 md:inset-x-auto md:right-4 md:max-w-sm z-50 bg-elevated border border-border rounded-2xl shadow-lg">
+      <div className="flex items-center gap-3 pl-3 pr-4 py-2.5 text-sm text-fg">
+        <span className="flex items-center justify-center h-8 w-8 rounded-full bg-accent-1 text-accent flex-shrink-0">
+          <Share size={16} />
+        </span>
         <span>
           Install this app: tap <span className="font-medium">Share</span>, then{' '}
           <span className="font-medium">Add to Home Screen</span>

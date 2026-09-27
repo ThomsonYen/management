@@ -18,9 +18,9 @@ export default function MobileHeader({ onNewTodo, onOpenSearch, title }: Props) 
   const { isRecording, noteId, duration, isUploading, stop } = useRecording()
 
   return (
-    <header className="md:hidden sticky top-0 z-30 bg-surface/95 backdrop-blur border-b border-border pt-[env(safe-area-inset-top)]">
+    <header className="md:hidden sticky top-0 z-30 chrome-glass border-b border-border/60 pt-[env(safe-area-inset-top)]">
       <div className="flex items-center gap-2 px-4 h-12">
-        <h1 className="flex-1 min-w-0 truncate text-base font-semibold text-fg">
+        <h1 className="flex-1 min-w-0 truncate text-lg font-semibold tracking-tight text-fg">
           {title ?? routeTitle(location.pathname)}
         </h1>
         {(isRecording || isUploading) && noteId != null && (
@@ -57,7 +57,7 @@ export default function MobileHeader({ onNewTodo, onOpenSearch, title }: Props) 
         {onNewTodo && (
           <button
             onClick={onNewTodo}
-            className="p-2.5 -mr-1 rounded-md text-fg-muted active:bg-inset transition-colors"
+            className="p-2.5 -mr-1 rounded-full text-fg-muted active:bg-inset transition-colors"
             title="New todo"
           >
             <Plus size={20} />
@@ -66,7 +66,7 @@ export default function MobileHeader({ onNewTodo, onOpenSearch, title }: Props) 
         {onOpenSearch && (
           <button
             onClick={onOpenSearch}
-            className="p-2.5 -mr-2 rounded-md text-fg-muted active:bg-inset transition-colors"
+            className="p-2.5 -mr-2 rounded-full text-fg-muted active:bg-inset transition-colors"
             title="Search"
           >
             <Search size={20} />

@@ -2140,8 +2140,10 @@ _cors_origins = [
         "https://dev.localhost:5173",
         "http://dev.localhost:5173",
         "http://localhost:5173",
+        # Local dev only: start_local.sh lists the tailnet URLs of this machine here.
+        *os.environ.get("DEV_EXTRA_ORIGINS", "").split(","),
     )
-    if origin
+    if origin.strip()
 ]
 
 app.add_middleware(

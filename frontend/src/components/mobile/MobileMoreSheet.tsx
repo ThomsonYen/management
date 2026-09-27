@@ -12,9 +12,9 @@ export default function MobileMoreSheet({ onClose, items = [...secondaryNavItems
   const { theme, setTheme } = useTheme()
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 md:hidden" onClick={onClose}>
+    <div className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-[2px] md:hidden" onClick={onClose}>
       <div
-        className="absolute bottom-0 inset-x-0 bg-elevated border-t border-border rounded-t-2xl max-h-[75dvh] overflow-y-auto pb-[calc(0.5rem+env(safe-area-inset-bottom))]"
+        className="absolute bottom-0 inset-x-0 bg-elevated border-t border-border rounded-t-2xl shadow-overlay max-h-[80dvh] overflow-y-auto px-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))]"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex justify-center py-2.5">
@@ -29,7 +29,7 @@ export default function MobileMoreSheet({ onClose, items = [...secondaryNavItems
               end={item.end}
               onClick={onClose}
               className={({ isActive }) =>
-                `flex items-center gap-3 px-4 py-3 text-sm font-medium transition-colors ${
+                `flex items-center gap-3 px-3 py-3 rounded-xl text-md font-medium transition-colors ${
                   isActive ? 'bg-accent-1 text-accent-fg' : 'text-fg-muted active:bg-inset'
                 }`
               }
@@ -39,10 +39,10 @@ export default function MobileMoreSheet({ onClose, items = [...secondaryNavItems
             </NavLink>
           )
         })}
-        <div className="border-t border-border mt-1 pt-1">
+        <div className="border-t border-border mx-1 mt-1 pt-1">
           <button
             onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-            className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-fg-muted active:bg-inset transition-colors"
+            className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-md font-medium text-fg-muted active:bg-inset transition-colors"
           >
             {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
             {theme === 'dark' ? 'Light mode' : 'Dark mode'}

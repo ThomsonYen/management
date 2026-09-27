@@ -643,7 +643,7 @@ export default function ProjectsPage({ onOpenTodo }: { onOpenTodo: (id: number) 
  importanceMutation.mutate({ id: selectedProject.id, importance: next })
  }}
  title={`Importance: ${selectedProject.importance} (click to cycle)`}
- className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wide border border-border hover:bg-inset transition-colors ${
+ className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-2xs font-semibold uppercase tracking-wide border border-border hover:bg-inset transition-colors ${
  selectedProject.importance === 'high'
  ? 'text-danger'
  : selectedProject.importance === 'medium'
@@ -655,7 +655,7 @@ export default function ProjectsPage({ onOpenTodo }: { onOpenTodo: (id: number) 
  {selectedProject.importance}
  </button>
  {selectedProject.deprecated_at && (
- <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wide border border-border text-fg-muted">
+ <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-2xs font-semibold uppercase tracking-wide border border-border text-fg-muted">
  <Archive size={10} />
  Deprecated
  </span>

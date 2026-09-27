@@ -288,11 +288,13 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
  }}
  onMouseDown={handleCardMouseDown}
  onClick={handleCardClick}
- className={`bg-surface rounded-xl shadow-sm border overflow-hidden cursor-grab active:cursor-grabbing ${isSelected ? 'border-accent ring-2 ring-accent/40 dark:ring-accent' : 'border-border'}`}
+ className={`bg-surface rounded-xl shadow-sm border overflow-hidden cursor-grab active:cursor-grabbing transition-shadow duration-200 hover:shadow-md ${isSelected ? 'border-accent ring-2 ring-accent/40 dark:ring-accent' : 'border-border'}`}
  >
  {/* Header */}
  <div className="px-4 py-3 md:px-5 md:py-4">
- <div className="flex items-start gap-3">
+ {/* Grid, not flex: on phones the title spans under the actions instead of
+     being squeezed into a narrow column beside them. */}
+ <div className="grid grid-cols-[auto_auto_minmax(0,1fr)_auto] items-start gap-x-3">
  {/* Focus toggle */}
  <button
  onClick={(e) => {
@@ -300,7 +302,7 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
  handleFocusToggle()
  }}
  title={todo.is_focused ? 'Remove from Focus' : 'Add to Focus'}
- className={`p-2 -m-2 mt-[-6px] text-lg leading-none flex-shrink-0 transition-colors ${
+ className={`col-start-1 row-start-1 p-2 -m-2 mt-[-6px] text-lg leading-none flex-shrink-0 transition-colors ${
  todo.is_focused
  ? 'text-warning hover:text-warning'
  : 'text-fg-faint dark:text-fg-muted hover:text-warning'
@@ -315,11 +317,11 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
  onChange={(e) => handleDoneCheck(e.target.checked)}
  onClick={(e) => e.stopPropagation()}
  title="Mark as done"
- className="mt-1 w-4 h-4 rounded cursor-pointer accent-green-600 flex-shrink-0"
+ className="col-start-2 row-start-1 mt-1 w-4 h-4 rounded cursor-pointer accent-green-600 flex-shrink-0"
  />
- <div className="flex-1 min-w-0">
+ <div className="contents">
  {/* Badges row */}
- <div className="flex flex-wrap items-center gap-2 mb-1">
+ <div className="col-start-3 row-start-1 min-w-0 self-center flex flex-wrap items-center gap-2 mb-1">
  {/* Importance badge */}
  {editingField === 'importance' ? (
  <select
@@ -378,13 +380,13 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
  if (e.key === 'Escape') setEditingField(null)
  }}
  onClick={(e) => e.stopPropagation()}
- className="font-semibold text-fg text-base leading-tight w-full border-b-2 border-accent focus:outline-none bg-transparent pb-0.5"
+ className="col-start-3 col-end-5 md:col-end-4 row-start-2 font-semibold text-fg text-base leading-tight w-full border-b-2 border-accent focus:outline-none bg-transparent pb-0.5"
  />
  ) : (
  <h3
  onClick={(e) => startEdit(e, 'title', todo.title)}
  title="Click to edit title"
- className="font-semibold text-fg text-base leading-tight cursor-pointer hover:text-accent transition-colors"
+ className="col-start-3 col-end-5 md:col-end-4 row-start-2 font-semibold text-fg text-base leading-tight cursor-pointer hover:text-accent transition-colors"
  >
  {todo.title}
  </h3>
@@ -392,7 +394,7 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
  </div>
 
  {/* Actions */}
- <div className="flex-shrink-0 flex items-center gap-2">
+ <div className="col-start-4 row-start-1 md:row-end-3 justify-self-end flex items-center gap-1.5 md:gap-2 mb-1 md:mb-0">
  {extraActions}
  {onOpenDetail && (
  <button

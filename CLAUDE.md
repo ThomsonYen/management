@@ -15,6 +15,8 @@ Personal productivity app (todos, projects, meetings, daily goals) with audio re
 
 ## Running the App
 
+**Both at once:** `bash start_local.sh` from the repo root runs the two scripts below together with `[backend]`/`[frontend]`-prefixed output; Ctrl-C stops both. It is set up for opening from other tailnet devices at `http://<hostname>:5173`: Vite listens on all interfaces (`VITE_DEV_HOST`), the session cookie is not Secure (`COOKIE_SECURE=0`), the backend also accepts this machine's tailnet origins (`DEV_EXTRA_ORIGINS`), and the nightly backup is off (`BACKUP_LOOP_ENABLED=0`). None of these are set in production.
+
 **Backend:**
 ```bash
 cd backend

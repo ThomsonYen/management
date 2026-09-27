@@ -77,7 +77,7 @@ export default function ProjectNotes({ project }: { project: Project }) {
  <SaveIndicator state={saveState} />
  <button
  onClick={() => setShowRaw(v => !v)}
- className="text-[10px] font-mono text-fg-subtle hover:text-fg-muted dark:hover:text-fg-faint transition-colors"
+ className="text-2xs font-mono text-fg-subtle hover:text-fg-muted dark:hover:text-fg-faint transition-colors"
  >
  {showRaw ? 'Hide raw' : 'Raw'}
  </button>

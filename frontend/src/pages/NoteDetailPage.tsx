@@ -41,6 +41,7 @@ import { extractTags } from '../utils/markdownTags'
 import TagPill from '../components/TagPill'
 import NoteShareControl from '../components/NoteShareControl'
 import { remarkFixEmptyTasks } from '../utils/remarkFixEmptyTasks'
+import { useIsDesktop } from '../hooks/useMediaQuery'
 
 export default function NoteDetailPage() {
  const { id } = useParams<{ id: string }>()
@@ -233,6 +234,8 @@ export default function NoteDetailPage() {
  )
 
  const localTags = useMemo(() => extractTags(content), [content])
+ // Phones have no room for the side-by-side preview; the toolbar still toggles it.
+ const isDesktop = useIsDesktop()
 
  if (isLoading || !appliedAtRef.current) {
  return <div className="p-6 text-fg-subtle">Loading...</div>
@@ -241,7 +244,7 @@ export default function NoteDetailPage() {
  return (
  <div className="block md:flex md:h-full">
  <div className="flex-1 flex flex-col min-w-0 overflow-auto">
- <div className="p-4 md:p-6 pb-3 md:pb-3 flex items-center gap-3">
+ <div className="p-4 md:p-6 pb-3 md:pb-3 flex items-center gap-2 md:gap-3">
  <button
  onClick={() => navigate(listPath)}
  className="p-1.5 rounded-lg text-fg-subtle hover:text-fg-muted dark:hover:text-fg hover:bg-inset dark:hover:bg-elevated transition-colors"
@@ -274,14 +277,14 @@ export default function NoteDetailPage() {
  </div>
 
  {note && (note.vault_root_path || note.relative_path) && (
- <div className="px-6 pb-1 flex items-center gap-1 text-[11px] font-mono text-fg-subtle truncate">
+ <div className="hidden md:flex px-6 pb-1 items-center gap-1 text-xs font-mono text-fg-subtle truncate">
  <span className="text-fg-faint dark:text-fg-muted">file:</span>
  <span className="truncate" title={`${note.vault_root_path ?? ''}/${note.relative_path ?? note.filename ?? ''}`}>
  {note.vault_root_path ? `${note.vault_root_path}/` : ''}
  {note.relative_path ?? note.filename ?? ''}
  </span>
  {note.vault_name && (
- <span className="ml-2 px-1.5 py-0.5 rounded bg-inset text-fg-muted text-[10px] uppercase tracking-wider">
+ <span className="ml-2 px-1.5 py-0.5 rounded bg-inset text-fg-muted text-2xs uppercase tracking-wider">
  {note.vault_name}
  </span>
  )}
@@ -303,13 +306,13 @@ export default function NoteDetailPage() {
  )}
 
  {!isMeeting && (
- <div className="px-6 pb-3">
+ <div className="px-4 md:px-6 pb-3">
  <NoteShareControl noteId={noteId} attendeeIds={[]} />
  </div>
  )}
 
  {localTags.length > 0 && (
- <div className="px-6 pb-2 flex flex-wrap gap-1.5">
+ <div className="px-4 md:px-6 pb-2 flex flex-wrap gap-1.5">
  {localTags.map((t) => (
  <TagPill key={t} name={t} size="sm" />
  ))}
@@ -317,7 +320,7 @@ export default function NoteDetailPage() {
  )}
 
  <div
- className="flex-1 px-6 pb-3"
+ className="flex-1 px-3 md:px-6 pb-3"
  data-color-mode={theme}
  onKeyDownCapture={editorKeyDown}
  onClick={handlePreviewClick}
@@ -327,14 +330,14 @@ export default function NoteDetailPage() {
  onChange={handleContentChange}
  height="100%"
  style={{ minHeight: 500 }}
- preview={note?.content_unavailable ? 'preview' : 'live'}
+ preview={note?.content_unavailable ? 'preview' : isDesktop ? 'live' : 'edit'}
  visibleDragbar={false}
  previewOptions={{ remarkPlugins: [remarkFixEmptyTasks, remarkHashtag] }}
  />
  </div>
 
  {isMeeting && (
- <div className="px-6 pb-6">
+ <div className="px-4 md:px-6 pb-6">
  <TranscriptEditor
  noteId={noteId}
  transcript={note?.transcript ?? null}

@@ -254,7 +254,7 @@ export default function PersonProjectBoard({
  )
  setPopoverOpen(false)
  }}
- className="w-full text-left px-2 py-1 text-[11px] font-medium text-accent hover:bg-inset"
+ className="w-full text-left px-2 py-1 text-xs font-medium text-accent hover:bg-inset"
  >
  Show all
  </button>
@@ -479,12 +479,12 @@ function BoardColumn({
  onDragStart={(e) => e.preventDefault()}
  >
  <h3
- className="text-[11px] font-semibold text-fg truncate leading-tight"
+ className="text-xs font-semibold text-fg truncate leading-tight"
  title={title}
  >
  {title}
  </h3>
- <p className="text-[9px] text-fg-subtle leading-tight">
+ <p className="text-2xs text-fg-subtle leading-tight">
  {people.length} {people.length === 1 ? 'person' : 'people'}
  </p>
  </button>
@@ -504,7 +504,7 @@ function BoardColumn({
  </div>
  <div className="flex-1 overflow-y-auto p-1.5 space-y-1 min-h-0">
  {people.length === 0 ? (
- <div className="text-[10px] text-fg-faint dark:text-fg-muted italic text-center py-2">
+ <div className="text-2xs text-fg-faint dark:text-fg-muted italic text-center py-2">
  Drop here
  </div>
  ) : (
@@ -513,7 +513,7 @@ function BoardColumn({
  key={person.id}
  className="group/row flex items-center gap-1.5 px-1.5 py-0.5 rounded bg-app/60 text-xs"
  >
- <div className="w-4 h-4 rounded-full bg-accent-2 text-accent-fg flex items-center justify-center text-[9px] font-bold flex-shrink-0">
+ <div className="w-4 h-4 rounded-full bg-accent-2 text-accent-fg flex items-center justify-center text-2xs font-bold flex-shrink-0">
  {person.name.charAt(0).toUpperCase()}
  </div>
  <span className="flex-1 truncate text-fg">

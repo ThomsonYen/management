@@ -1012,15 +1012,15 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  <div className="max-w-4xl mx-auto xl:mx-0">
 
  {/* Options row — sits above the tasks list so it stays within this column and wraps against the column width, not the full toolbar. */}
- <div className="flex justify-end mb-3 px-1">
- <div className="flex items-center gap-0.5 bg-inset rounded-lg p-1 border border-border-subtle flex-wrap justify-end max-w-full min-w-0">
+ <div className="flex justify-end mb-3 md:px-1">
+ <div className="flex flex-wrap md:flex-nowrap items-center gap-0.5 bg-inset rounded-2xl md:rounded-full px-1.5 py-1 border border-border-subtle w-full md:w-auto max-w-full min-w-0">
  {focusedProjects.length > 1 && (
  <>
  <div className="flex items-center">
  <select
  value={selectedProject}
  onChange={(e) => { setSelectedProject(e.target.value); localStorage.setItem('focusSelectedProject', e.target.value) }}
- className="bg-transparent hover:bg-surface border border-transparent rounded-md px-2 py-1 text-sm text-fg-muted hover:text-fg cursor-pointer focus:outline-none focus:ring-1 focus:ring-accent transition-colors"
+ className="min-w-0 bg-transparent hover:bg-surface border border-transparent rounded-full px-2.5 py-1 text-sm text-fg-muted hover:text-fg cursor-pointer focus:outline-none focus:ring-1 focus:ring-accent transition-colors"
  >
  <option value="">All</option>
  {focusedProjects.map((p) => (
@@ -1051,7 +1051,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  setGroupBy(v)
  localStorage.setItem('focusGroupBy', v)
  }}
- className="bg-transparent hover:bg-surface border border-transparent rounded-md px-2 py-1 text-sm text-fg-muted hover:text-fg cursor-pointer focus:outline-none focus:ring-1 focus:ring-accent transition-colors"
+ className="min-w-0 bg-transparent hover:bg-surface border border-transparent rounded-full px-2.5 py-1 text-sm text-fg-muted hover:text-fg cursor-pointer focus:outline-none focus:ring-1 focus:ring-accent transition-colors"
  >
  <option value="none">No group</option>
  <option value="project">Project</option>
@@ -1059,9 +1059,9 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  <option value="both">Proj + User</option>
  </select>
 
- <div className="w-px h-4 bg-border-subtle mx-0.5" />
+ <div className="hidden md:block w-px h-4 bg-border-subtle mx-0.5" />
 
- <div className="relative w-32 max-w-full">
+ <div className="relative basis-full md:basis-auto md:w-32 border-t border-border-subtle md:border-t-0 mt-1 pt-1 md:mt-0 md:pt-0">
  <input
  type="text"
  value={focusSearch}
@@ -1078,7 +1078,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  }
  }}
  placeholder="＋ Add todo…"
- className="w-full bg-transparent hover:bg-surface focus:bg-surface border border-transparent focus:border-border rounded-md px-2 py-1 text-sm text-fg placeholder:text-fg-subtle focus:outline-none focus:ring-1 focus:ring-accent transition-colors"
+ className="w-full bg-transparent hover:bg-surface focus:bg-surface border border-transparent focus:border-border rounded-full px-2.5 py-1 text-sm text-fg placeholder:text-fg-subtle focus:outline-none focus:ring-1 focus:ring-accent transition-colors"
  />
  {focusSearchOpen && focusSearch.trim() && (() => {
  const q = focusSearch.trim().toLowerCase()
@@ -1182,7 +1182,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  <button
  onClick={() => removeFocus.mutate(t.id)}
  title="Remove from Focus"
- className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium text-fg-muted bg-inset hover:bg-danger-bg hover:text-danger border border-border hover:border-danger/30 transition-colors"
+ className="hidden md:flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium text-fg-muted bg-inset hover:bg-danger-bg hover:text-danger border border-border hover:border-danger/30 transition-colors"
  >
  <span>☆</span><span className="hidden md:inline"> Unfocus</span>
  </button>

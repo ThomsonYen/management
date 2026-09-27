@@ -124,7 +124,7 @@ export default function PersonalNotesPage() {
  <div className="flex flex-col md:flex-row md:h-full">
  <div className="flex-1 md:overflow-auto p-4 md:p-6 max-w-5xl mx-auto w-full">
  <div className="flex items-center justify-between mb-6">
- <h1 className="text-2xl font-bold text-fg">Notes</h1>
+ <h1 className="hidden md:block text-2xl font-semibold tracking-tight text-fg">Notes</h1>
  <div className="flex items-center gap-2">
  <button
  onClick={() => setShowTrash(true)}

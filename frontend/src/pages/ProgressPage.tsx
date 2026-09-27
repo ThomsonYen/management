@@ -266,7 +266,7 @@ export default function ProgressPage() {
  return (
  <div className="p-4 md:p-6 max-w-[1400px] mx-auto">
  <div className="flex flex-wrap items-center justify-between gap-y-2 mb-6">
- <h1 className="text-2xl font-bold text-fg dark:text-white">Progress</h1>
+ <h1 className="hidden md:block text-2xl font-semibold tracking-tight text-fg">Progress</h1>
  <div className="flex items-center gap-4">
  {/* Period count */}
  <div className="flex items-center gap-2">
