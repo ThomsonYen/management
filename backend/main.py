@@ -94,9 +94,11 @@ DEFAULT_USER_SETTINGS: dict = {
     "hotkeys": {},
     # Sidebar tabs, by route. nav_order lists routes in the user's order (tabs
     # it omits keep their default position after the listed ones); nav_hidden
-    # lists routes to leave out of the sidebar and mobile bar.
+    # lists routes to leave out of the sidebar and mobile bar; nav_folded lists
+    # routes tucked into the sidebar's collapsible "More" folder.
     "nav_order": [],
     "nav_hidden": [],
+    "nav_folded": [],
 }
 
 
@@ -5275,6 +5277,7 @@ class UserSettingsPatch(BaseModel):
     hotkeys: Optional[dict] = None
     nav_order: Optional[list[str]] = None
     nav_hidden: Optional[list[str]] = None
+    nav_folded: Optional[list[str]] = None
 
 
 def _validate_patch(patch: UserSettingsPatch) -> None:
@@ -5293,14 +5296,14 @@ def _validate_patch(patch: UserSettingsPatch) -> None:
     if patch.todo_defaults and patch.todo_defaults.importance is not None:
         if patch.todo_defaults.importance not in ("low", "medium", "high", "critical"):
             raise HTTPException(400, f"Unknown importance: {patch.todo_defaults.importance}")
-    for field in ("nav_order", "nav_hidden"):
+    for field in ("nav_order", "nav_hidden", "nav_folded"):
         routes = getattr(patch, field)
         if routes is None:
             continue
         if len(routes) > 50 or any(not r.startswith("/") or len(r) > 64 for r in routes):
             raise HTTPException(400, f"Invalid {field}: expected a list of routes")
-        if field == "nav_hidden" and "/" in routes:
-            raise HTTPException(400, "The Dashboard tab cannot be hidden")
+        if field != "nav_order" and "/" in routes:
+            raise HTTPException(400, "The Dashboard tab cannot be hidden or folded")
 
 
 @app.get("/config/settings")

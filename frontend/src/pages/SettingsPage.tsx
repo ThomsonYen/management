@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Moon, Sun, FolderOpen, Plus, RefreshCw, Trash2, Loader2, Mic, LogOut, KeyRound, Copy, Check, ChevronDown, ChevronRight, Ban, ArrowUp, ArrowDown } from 'lucide-react'
+import { Moon, Sun, FolderOpen, Plus, RefreshCw, Trash2, Loader2, Mic, LogOut, KeyRound, Copy, Check, ChevronDown, ChevronRight, Ban, ArrowUp, ArrowDown, FolderInput, FolderOutput } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
  getSystemAudioDevice,
@@ -690,20 +690,25 @@ function AccountSection() {
 }
 
 function SidebarTabsSection() {
- const { order, hidden, setLayout, resetToDefaults } = useNavLayout()
+ const { order, hidden, folded, setLayout, resetToDefaults } = useNavLayout()
  const items = orderNavItems(order)
  const hiddenSet = new Set(hidden)
+ const foldedSet = new Set(folded)
 
  // Always save the full order, so a later default change can't reshuffle it.
  const move = (index: number, delta: number) => {
  const routes = items.map((n) => n.to)
  const [moved] = routes.splice(index, 1)
  routes.splice(index + delta, 0, moved)
- setLayout(routes, hidden)
+ setLayout({ nav_order: routes })
  }
  const toggle = (to: string) => {
  const next = hiddenSet.has(to) ? hidden.filter((r) => r !== to) : [...hidden, to]
- setLayout(items.map((n) => n.to), next)
+ setLayout({ nav_order: items.map((n) => n.to), nav_hidden: next })
+ }
+ const toggleFolded = (to: string) => {
+ const next = foldedSet.has(to) ? folded.filter((r) => r !== to) : [...folded, to]
+ setLayout({ nav_order: items.map((n) => n.to), nav_folded: next })
  }
 
  return (
@@ -713,7 +718,7 @@ function SidebarTabsSection() {
  <div>
  <h2 className="text-sm font-semibold text-fg">Sidebar tabs</h2>
  <p className="text-sm text-fg-muted mt-0.5">
- Choose which tabs appear and in what order. Hidden pages still open from links and shortcuts.
+ Choose which tabs appear and in what order, or tuck rarely used ones into the sidebar's More folder. You can also drag tabs in the sidebar itself. Hidden pages still open from links and shortcuts.
  </p>
  </div>
  <button
@@ -740,7 +745,20 @@ function SidebarTabsSection() {
  className="accent-accent disabled:opacity-50"
  />
  <Icon size={16} className={shown ? 'text-fg-muted' : 'text-fg-subtle'} />
- <span className={`flex-1 text-sm ${shown ? 'text-fg' : 'text-fg-subtle line-through'}`}>{item.label}</span>
+ <span className={`flex-1 text-sm ${shown ? 'text-fg' : 'text-fg-subtle line-through'}`}>
+ {item.label}
+ {foldedSet.has(item.to) && !locked && <span className="ml-2 text-xs text-fg-subtle">in More</span>}
+ </span>
+ {locked ? <span className="w-[22px]" aria-hidden /> : (
+ <button
+ onClick={() => toggleFolded(item.to)}
+ aria-label={foldedSet.has(item.to) ? `Take ${item.label} out of More` : `Move ${item.label} into More`}
+ title={foldedSet.has(item.to) ? 'Take out of More folder' : 'Move into More folder'}
+ className={`p-1 rounded hover:text-fg ${foldedSet.has(item.to) ? 'text-accent-fg' : 'text-fg-subtle'}`}
+ >
+ {foldedSet.has(item.to) ? <FolderOutput size={14} /> : <FolderInput size={14} />}
+ </button>
+ )}
  <button
  onClick={() => move(i, -1)}
  disabled={i === 0}

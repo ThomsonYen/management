@@ -113,6 +113,7 @@ function buildInitial(): UserSettings {
     hotkeys: { ...DEFAULT_HOTKEYS, ...(cache.hotkeys ?? {}) },
     nav_order: cache.nav_order ?? [],
     nav_hidden: cache.nav_hidden ?? [],
+    nav_folded: cache.nav_folded ?? [],
   }
 }
 
@@ -204,6 +205,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
           hotkeys: { ...DEFAULT_HOTKEYS, ...(server.hotkeys ?? {}) },
           nav_order: server.nav_order ?? [],
           nav_hidden: server.nav_hidden ?? [],
+          nav_folded: server.nav_folded ?? [],
         }
         setSettings(merged)
         saveCache(merged)
@@ -350,12 +352,17 @@ export function useHotkeys() {
   return { bindings, setBinding, resetToDefaults }
 }
 
+export type NavLayoutPatch = Pick<UserSettingsPatch, 'nav_order' | 'nav_hidden' | 'nav_folded'>
+
 export function useNavLayout() {
   const { settings, patch } = useSettings()
-  const setLayout = useCallback(
-    (nav_order: string[], nav_hidden: string[]) => patch({ nav_order, nav_hidden }),
-    [patch],
-  )
-  const resetToDefaults = useCallback(() => patch({ nav_order: [], nav_hidden: [] }), [patch])
-  return { order: settings.nav_order, hidden: settings.nav_hidden, setLayout, resetToDefaults }
+  const setLayout = useCallback((next: NavLayoutPatch) => patch(next), [patch])
+  const resetToDefaults = useCallback(() => patch({ nav_order: [], nav_hidden: [], nav_folded: [] }), [patch])
+  return {
+    order: settings.nav_order,
+    hidden: settings.nav_hidden,
+    folded: settings.nav_folded,
+    setLayout,
+    resetToDefaults,
+  }
 }

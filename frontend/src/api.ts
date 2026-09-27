@@ -497,6 +497,7 @@ export interface UserSettings {
   hotkeys: Record<string, string>
   nav_order: string[]
   nav_hidden: string[]
+  nav_folded: string[]
 }
 
 export type UserSettingsPatch = Partial<Omit<UserSettings, 'todo_defaults' | 'hotkeys'>> & {

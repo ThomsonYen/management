@@ -46,14 +46,42 @@ export function orderNavItems(order: string[]): NavItem[] {
     .map(({ item }) => item)
 }
 
-export function layoutNavItems(order: string[], hidden: string[]) {
+export function layoutNavItems(order: string[], hidden: string[], folded: string[] = []) {
   const hiddenSet = new Set(hidden.filter((to) => to !== LOCKED_NAV_ROUTE))
-  const visible = orderNavItems(order).filter((n) => !hiddenSet.has(n.to))
+  const foldedSet = new Set(folded.filter((to) => to !== LOCKED_NAV_ROUTE))
+  const shown = orderNavItems(order).filter((n) => !hiddenSet.has(n.to))
+  const main = shown.filter((n) => !foldedSet.has(n.to))
+  const folder = shown.filter((n) => foldedSet.has(n.to))
+  // On mobile the folder has no place of its own: its tabs go in the More sheet.
+  const primary = main.filter((n) => PRIMARY_TABS.includes(n.to))
   return {
-    visible,
-    primary: visible.filter((n) => PRIMARY_TABS.includes(n.to)),
-    secondary: visible.filter((n) => !PRIMARY_TABS.includes(n.to)),
+    main,
+    folder,
+    primary,
+    secondary: [...main.filter((n) => !primary.includes(n)), ...folder],
   }
+}
+
+/**
+ * Move `route` next to `target` (or to the end when target is null) and put it
+ * in or out of the folder. Returns the full new order and folded list; the
+ * Dashboard tab never goes into the folder.
+ */
+export function moveNavRoute(
+  order: string[],
+  folded: string[],
+  route: string,
+  target: string | null,
+  place: 'before' | 'after',
+  intoFolder: boolean,
+): { nav_order: string[]; nav_folded: string[] } {
+  const routes = orderNavItems(order).map((n) => n.to).filter((to) => to !== route)
+  const at = target == null ? -1 : routes.indexOf(target)
+  if (at === -1) routes.push(route)
+  else routes.splice(place === 'after' ? at + 1 : at, 0, route)
+  const rest = folded.filter((to) => to !== route)
+  const fold = intoFolder && route !== LOCKED_NAV_ROUTE
+  return { nav_order: routes, nav_folded: fold ? [...rest, route] : rest }
 }
 
 export const settingsNavItem: NavItem = { to: '/settings', label: 'Settings', icon: Settings, end: false }

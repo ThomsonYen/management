@@ -37,6 +37,7 @@ import { useSession } from './hooks/useSession'
 import { layoutNavItems, settingsNavItem } from './navItems'
 import MobileHeader from './components/mobile/MobileHeader'
 import MobileTabBar from './components/mobile/MobileTabBar'
+import SidebarNav from './components/SidebarNav'
 
 function AppShell() {
   const navigate = useNavigate()
@@ -46,8 +47,8 @@ function AppShell() {
   const [showCommandPalette, setShowCommandPalette] = useState(false)
   const { width: sidebarWidth, collapsed: sidebarCollapsed, startResize, toggleCollapsed: toggleSidebar } = useResizableSidebar('sidebarWidth', 224)
   const { bindings } = useHotkeys()
-  const { order: navOrder, hidden: navHidden } = useNavLayout()
-  const nav = useMemo(() => layoutNavItems(navOrder, navHidden), [navOrder, navHidden])
+  const { order: navOrder, hidden: navHidden, folded: navFolded } = useNavLayout()
+  const nav = useMemo(() => layoutNavItems(navOrder, navHidden, navFolded), [navOrder, navHidden, navFolded])
   const { theme, setTheme } = useTheme()
   const { timezone } = useTimezone()
   const { isRecording, noteId: recordingNoteId, duration, isUploading, stop: stopRecording } = useRecording()
@@ -154,38 +155,13 @@ function AppShell() {
             )}
           </div>
         </div>
-        <nav className="flex-1 py-3 px-2">
-          {nav.visible.map((item) => {
-            const Icon = item.icon
-            const isFocusItem = item.isDropTarget
-            return (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                end={item.end}
-                title={sidebarCollapsed ? item.label : undefined}
-                onDrop={isFocusItem ? handleDrop : undefined}
-                onDragOver={isFocusItem ? handleDragOver : undefined}
-                onDragLeave={isFocusItem ? handleDragLeave : undefined}
-                className={({ isActive }) =>
-                  `w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'} px-3 py-2 rounded-md text-sm font-medium transition-colors mb-0.5 ${
-                    isFocusItem && dragOverFocus
-                      ? 'bg-accent text-fg-on-accent ring-2 ring-accent/40'
-                      : isActive
-                        ? 'bg-accent-1 text-accent-fg'
-                        : 'text-fg-muted hover:bg-inset hover:text-fg'
-                  }`
-                }
-              >
-                <Icon size={16} />
-                {!sidebarCollapsed && item.label}
-                {!sidebarCollapsed && isFocusItem && dragOverFocus && (
-                  <span className="ml-auto text-xs opacity-75">Drop here</span>
-                )}
-              </NavLink>
-            )
-          })}
-        </nav>
+        <SidebarNav
+          collapsed={sidebarCollapsed}
+          dragOverFocus={dragOverFocus}
+          onFocusDrop={handleDrop}
+          onFocusDragOver={handleDragOver}
+          onFocusDragLeave={handleDragLeave}
+        />
         {/* Global recording indicator */}
         {(isRecording || isUploading) && recordingNoteId != null && (
           <div className="px-2 py-2 border-t border-border">
