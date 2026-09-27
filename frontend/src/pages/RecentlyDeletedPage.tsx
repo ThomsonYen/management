@@ -1,8 +1,12 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { Archive } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
  fetchDeletedTodos,
  fetchDeletedProjects,
+ fetchProjects,
+ undeprecateProject,
  restoreTodo,
  restoreProject,
  purgeTodo,
@@ -41,6 +45,23 @@ export default function RecentlyDeletedPage() {
  queryFn: fetchDeletedProjects,
  })
 
+ // Deprecated projects live here rather than in the project list. Only the top
+ // of each deprecated subtree is listed: reactivating it brings back the rest.
+ const { data: allProjects = [], isLoading: deprecatedLoading } = useQuery<Project[]>({
+ queryKey: ['projects'],
+ queryFn: fetchProjects,
+ })
+ const deprecated = useMemo(() => {
+ const byId = new Map(allProjects.map((p) => [p.id, p]))
+ const isDeprecated = (id: number | undefined) => id != null && !!byId.get(id)?.deprecated_at
+ const subCount = (id: number): number =>
+ allProjects.filter((c) => c.parent_id === id).reduce((n, c) => n + 1 + subCount(c.id), 0)
+ return allProjects
+ .filter((p) => p.deprecated_at && !isDeprecated(p.parent_id))
+ .sort((a, b) => (b.deprecated_at ?? '').localeCompare(a.deprecated_at ?? ''))
+ .map((p) => ({ project: p, subprojects: subCount(p.id) }))
+ }, [allProjects])
+
  const invalidateAll = () => {
  queryClient.invalidateQueries({ queryKey: ['deleted-todos'] })
  queryClient.invalidateQueries({ queryKey: ['deleted-projects'] })
@@ -69,6 +90,14 @@ export default function RecentlyDeletedPage() {
  },
  })
 
+ const reactivateMut = useMutation({
+ mutationFn: undeprecateProject,
+ onSuccess: (project) => {
+ invalidateAll()
+ showToast({ message: `Reactivated project "${project.name}"`, tone: 'success' })
+ },
+ })
+
  const purgeTodoMut = useMutation({
  mutationFn: purgeTodo,
  onSuccess: invalidateAll,
@@ -91,21 +120,22 @@ export default function RecentlyDeletedPage() {
  }
  }
 
- const items = tab === 'todos' ? todos : projects
- const isLoading = tab === 'todos' ? todosLoading : projectsLoading
+ const projectCount = deprecated.length + projects.length
+ const isEmpty = tab === 'todos' ? todos.length === 0 : projectCount === 0
+ const isLoading = tab === 'todos' ? todosLoading : projectsLoading || deprecatedLoading
 
  return (
  <div className="p-4 md:p-6 max-w-3xl mx-auto">
  <div className="mb-6">
  <h1 className="text-xl font-bold text-fg">Recently Deleted</h1>
  <p className="text-sm text-fg-muted mt-0.5">
- Deleted items can be restored here. Items are kept indefinitely until purged.
+ Deprecated projects and deleted items can be brought back here. Nothing is removed until you delete it forever.
  </p>
  </div>
 
  <div className="flex gap-1 mb-4 border-b border-border">
  {(['todos', 'projects'] as const).map((t) => {
- const count = t === 'todos' ? todos.length : projects.length
+ const count = t === 'todos' ? todos.length : projectCount
  return (
  <button
  key={t}
@@ -124,15 +154,15 @@ export default function RecentlyDeletedPage() {
 
  {isLoading && <p className="text-fg-subtle text-sm">Loading...</p>}
 
- {!isLoading && items.length === 0 && (
+ {!isLoading && isEmpty && (
  <div className="bg-surface rounded-xl border border-border shadow-sm p-10 text-center">
  <p className="text-fg-subtle text-sm">
- No deleted {tab} yet.
+ {tab === 'todos' ? 'No deleted todos yet.' : 'No deprecated or deleted projects yet.'}
  </p>
  </div>
  )}
 
- {!isLoading && items.length > 0 && (
+ {!isLoading && !isEmpty && (
  <div className="bg-surface rounded-xl border border-border shadow-sm overflow-hidden">
  {tab === 'todos' &&
  todos.map((todo, idx) => (
@@ -173,12 +203,37 @@ export default function RecentlyDeletedPage() {
  ))}
 
  {tab === 'projects' &&
- projects.map((project, idx) => (
+ deprecated.map(({ project, subprojects }) => (
+ <div key={project.id} className="flex items-center gap-3 px-5 py-3.5 border-b border-border-subtle last:border-b-0">
+ <Archive size={14} className="text-fg-subtle flex-shrink-0" />
+ <div className="flex-1 min-w-0">
+ <Link
+ to={`/projects?project=${project.id}`}
+ className="block text-sm font-medium text-fg truncate hover:text-accent-fg hover:underline"
+ title="Open project (its todos and notes are kept)"
+ >
+ {project.name}
+ </Link>
+ <div className="flex items-center gap-2 mt-0.5 text-xs text-fg-subtle">
+ {subprojects > 0 && <span>+{subprojects} subproject{subprojects === 1 ? '' : 's'}</span>}
+ <span>deprecated {timeAgo(project.deprecated_at ?? undefined)}</span>
+ </div>
+ </div>
+ <button
+ onClick={() => reactivateMut.mutate(project.id)}
+ disabled={reactivateMut.isPending}
+ className="text-xs px-2.5 py-1 rounded-lg bg-accent-1 text-accent-fg dark:text-accent border border-accent-2 dark:border-accent-active hover:bg-accent-2 dark:hover:bg-accent-active transition-colors font-medium disabled:opacity-40 flex-shrink-0"
+ >
+ ↩ Reactivate
+ </button>
+ </div>
+ ))}
+
+ {tab === 'projects' &&
+ projects.map((project) => (
  <div
  key={project.id}
- className={`flex items-center gap-3 px-5 py-3.5 ${
- idx < projects.length - 1 ? 'border-b border-border-subtle' : ''
- }`}
+ className="flex items-center gap-3 px-5 py-3.5 border-b border-border-subtle last:border-b-0"
  >
  <span className="text-fg-faint dark:text-fg-muted flex-shrink-0">✕</span>
  <div className="flex-1 min-w-0">

@@ -12,16 +12,19 @@ one reversible step at a time:
 | Stage | Meaning | Where it shows | How back |
 |---|---|---|---|
 | **Active** | In use | Everywhere | — |
-| **Deprecated** | Retired, kept | Readable in its own "Deprecated" section and by direct link; **left out of pickers, boards and other places that start new work** | Reactivate |
+| **Deprecated** | Retired, kept | Listed on Recently Deleted and readable by direct link; **left out of the main lists, pickers, boards and other places that start new work** | Reactivate |
 | **Deleted** (soft) | Unwanted | Recently Deleted only | Restore |
 | **Purged** | Gone | Nowhere | None — only from Recently Deleted, by explicit user action |
 
 Rules:
 
-- **Offer deprecation before deletion** for anything that other records point
-  at or that has history worth keeping. Projects do this today
+- **Offer deprecation instead of deletion** for anything that other records
+  point at or that has history worth keeping. Projects do this today
   (`projects.deprecated_at`, `POST /projects/{id}/deprecate` and `/undeprecate`).
-  Persons and friends are the next candidates.
+  The project page has a Deprecate button and **no Delete button**, and
+  deprecated projects sit on Recently Deleted with Reactivate. The delete,
+  restore and purge endpoints remain for API callers and for projects deleted
+  before this change. Persons and friends are the next candidates.
 - **Deprecation changes visibility, not data.** Children, links and history are
   untouched. For example, todos stay in a deprecated project with their
   `project_id` as is.

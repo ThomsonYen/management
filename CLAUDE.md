@@ -47,7 +47,7 @@ There are no automated tests or linters configured.
 
 - File-based storage for meeting notes (`meeting_notes/`), audio (`meeting_audio/`), transcripts (`meeting_transcripts/`), and templates (`meeting_templates/`) — keyed by meeting note ID
 - Soft deletes for meeting notes (`hidden` flag)
-- Project lifecycle: `deprecated_at` (retired but kept — out of pickers and the board, todos untouched; cascades down, reactivation cascades up) before `deleted_at` (soft delete, Recently Deleted) before purge. Pickers use `pickableProjects()` in `frontend/src/utils/projects.ts`
+- Project lifecycle: the UI only deprecates (`deprecated_at` — retired but kept, todos untouched; cascades down, reactivation cascades up). Deprecated projects leave the project tree, pickers and board and are listed on Recently Deleted with Reactivate; there is no Delete button. `deleted_at` soft delete and purge remain in the API. Pickers use `pickableProjects()` in `frontend/src/utils/projects.ts`
 - Many-to-many association tables for meeting attendees, projects, and todos
 
 ## Agent-facing API
