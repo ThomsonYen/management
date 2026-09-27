@@ -111,6 +111,8 @@ function buildInitial(): UserSettings {
       ...(cache.todo_defaults ?? {}),
     },
     hotkeys: { ...DEFAULT_HOTKEYS, ...(cache.hotkeys ?? {}) },
+    nav_order: cache.nav_order ?? [],
+    nav_hidden: cache.nav_hidden ?? [],
   }
 }
 
@@ -200,6 +202,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
             ? server.font_size
             : 'md',
           hotkeys: { ...DEFAULT_HOTKEYS, ...(server.hotkeys ?? {}) },
+          nav_order: server.nav_order ?? [],
+          nav_hidden: server.nav_hidden ?? [],
         }
         setSettings(merged)
         saveCache(merged)
@@ -344,4 +348,14 @@ export function useHotkeys() {
   )
   const resetToDefaults = useCallback(() => patch({ hotkeys: { ...DEFAULT_HOTKEYS } }), [patch])
   return { bindings, setBinding, resetToDefaults }
+}
+
+export function useNavLayout() {
+  const { settings, patch } = useSettings()
+  const setLayout = useCallback(
+    (nav_order: string[], nav_hidden: string[]) => patch({ nav_order, nav_hidden }),
+    [patch],
+  )
+  const resetToDefaults = useCallback(() => patch({ nav_order: [], nav_hidden: [] }), [patch])
+  return { order: settings.nav_order, hidden: settings.nav_hidden, setLayout, resetToDefaults }
 }

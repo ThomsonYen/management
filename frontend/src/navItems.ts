@@ -30,6 +30,32 @@ export const PRIMARY_TABS = ['/', '/focus', '/todos', '/notes']
 export const primaryNavItems = PRIMARY_TABS.map((to) => navItems.find((n) => n.to === to)!)
 export const secondaryNavItems = navItems.filter((n) => !PRIMARY_TABS.includes(n.to))
 
+// The home tab: always shown, so the sidebar can never end up empty.
+export const LOCKED_NAV_ROUTE = '/'
+
+/**
+ * Apply a user's saved layout to the owner tabs. `order` lists routes in the
+ * user's order; tabs it doesn't mention (e.g. added in a later release) keep
+ * their default position after the listed ones. Unknown routes are ignored.
+ */
+export function orderNavItems(order: string[]): NavItem[] {
+  const rank = new Map(order.map((to, i) => [to, i]))
+  return navItems
+    .map((item, i) => ({ item, key: rank.get(item.to) ?? order.length + i }))
+    .sort((a, b) => a.key - b.key)
+    .map(({ item }) => item)
+}
+
+export function layoutNavItems(order: string[], hidden: string[]) {
+  const hiddenSet = new Set(hidden.filter((to) => to !== LOCKED_NAV_ROUTE))
+  const visible = orderNavItems(order).filter((n) => !hiddenSet.has(n.to))
+  return {
+    visible,
+    primary: visible.filter((n) => PRIMARY_TABS.includes(n.to)),
+    secondary: visible.filter((n) => !PRIMARY_TABS.includes(n.to)),
+  }
+}
+
 export const settingsNavItem: NavItem = { to: '/settings', label: 'Settings', icon: Settings, end: false }
 
 // Member accounts get a deliberately small shell: their items, what they've

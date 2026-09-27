@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Moon, Sun, FolderOpen, Plus, RefreshCw, Trash2, Loader2, Mic, LogOut, KeyRound, Copy, Check, ChevronDown, ChevronRight, Ban } from 'lucide-react'
+import { Moon, Sun, FolderOpen, Plus, RefreshCw, Trash2, Loader2, Mic, LogOut, KeyRound, Copy, Check, ChevronDown, ChevronRight, Ban, ArrowUp, ArrowDown } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
  getSystemAudioDevice,
@@ -14,6 +14,7 @@ import {
  useHotkeys,
  useFontSize,
  useThemeVariant,
+ useNavLayout,
  formatHotkey,
  eventToBinding,
  type MeetingNoteSortField,
@@ -31,6 +32,7 @@ import UsersSection from '../components/UsersSection'
 import type { ApiToken, ApiTokenScope } from '../types'
 import { listThemes, type ThemeName } from '../theme'
 import { Select } from '../components/ui'
+import { LOCKED_NAV_ROUTE, orderNavItems } from '../navItems'
 
 function HotkeyInput({ label, description, bindingKey }: { label: string; description: string; bindingKey: keyof HotkeyBindings }) {
  const { bindings, setBinding } = useHotkeys()
@@ -687,6 +689,83 @@ function AccountSection() {
  )
 }
 
+function SidebarTabsSection() {
+ const { order, hidden, setLayout, resetToDefaults } = useNavLayout()
+ const items = orderNavItems(order)
+ const hiddenSet = new Set(hidden)
+
+ // Always save the full order, so a later default change can't reshuffle it.
+ const move = (index: number, delta: number) => {
+ const routes = items.map((n) => n.to)
+ const [moved] = routes.splice(index, 1)
+ routes.splice(index + delta, 0, moved)
+ setLayout(routes, hidden)
+ }
+ const toggle = (to: string) => {
+ const next = hiddenSet.has(to) ? hidden.filter((r) => r !== to) : [...hidden, to]
+ setLayout(items.map((n) => n.to), next)
+ }
+
+ return (
+ <div className="bg-surface rounded-xl shadow-sm border border-border">
+ <div className="px-6 py-5">
+ <div className="flex items-center justify-between mb-4">
+ <div>
+ <h2 className="text-sm font-semibold text-fg">Sidebar tabs</h2>
+ <p className="text-sm text-fg-muted mt-0.5">
+ Choose which tabs appear and in what order. Hidden pages still open from links and shortcuts.
+ </p>
+ </div>
+ <button
+ onClick={resetToDefaults}
+ className="text-xs text-fg-subtle hover:text-fg-muted dark:hover:text-fg transition-colors shrink-0 ml-4"
+ >
+ Reset defaults
+ </button>
+ </div>
+ <ul className="space-y-1">
+ {items.map((item, i) => {
+ const Icon = item.icon
+ const locked = item.to === LOCKED_NAV_ROUTE
+ const shown = locked || !hiddenSet.has(item.to)
+ return (
+ <li key={item.to} className="flex items-center gap-3 px-2 py-1.5 rounded-md hover:bg-inset">
+ <input
+ type="checkbox"
+ checked={shown}
+ disabled={locked}
+ onChange={() => toggle(item.to)}
+ aria-label={`Show ${item.label}`}
+ title={locked ? 'Dashboard is always shown' : undefined}
+ className="accent-accent disabled:opacity-50"
+ />
+ <Icon size={16} className={shown ? 'text-fg-muted' : 'text-fg-subtle'} />
+ <span className={`flex-1 text-sm ${shown ? 'text-fg' : 'text-fg-subtle line-through'}`}>{item.label}</span>
+ <button
+ onClick={() => move(i, -1)}
+ disabled={i === 0}
+ aria-label={`Move ${item.label} up`}
+ className="p-1 rounded text-fg-subtle hover:text-fg disabled:opacity-30 disabled:hover:text-fg-subtle"
+ >
+ <ArrowUp size={14} />
+ </button>
+ <button
+ onClick={() => move(i, 1)}
+ disabled={i === items.length - 1}
+ aria-label={`Move ${item.label} down`}
+ className="p-1 rounded text-fg-subtle hover:text-fg disabled:opacity-30 disabled:hover:text-fg-subtle"
+ >
+ <ArrowDown size={14} />
+ </button>
+ </li>
+ )
+ })}
+ </ul>
+ </div>
+ </div>
+ )
+}
+
 export default function SettingsPage() {
  const { theme, setTheme } = useTheme()
  const { defaults, setDefaults } = useTodoDefaults()
@@ -812,6 +891,8 @@ export default function SettingsPage() {
  </select>
  </div>
  </div>
+
+ {isOwner && <SidebarTabsSection />}
 
  {isOwner && <RecordingSection />}
 

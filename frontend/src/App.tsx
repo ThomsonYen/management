@@ -1,10 +1,10 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { Navigate, NavLink, Route, Routes, useNavigate } from 'react-router-dom'
 import { LayoutDashboard, Settings, ChevronsLeft, ChevronsRight, Square, Sun, Moon } from 'lucide-react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { updateTodo, createNote } from './api'
 import { useResizableSidebar } from './hooks/useResizableSidebar'
-import { useHotkeys, useTheme, useTimezone } from './SettingsContext'
+import { useHotkeys, useNavLayout, useTheme, useTimezone } from './SettingsContext'
 import { useHotkey } from './hooks/useHotkey'
 import { useRecording } from './RecordingContext'
 import { getTodayString } from './dateUtils'
@@ -34,7 +34,7 @@ import MemberShell from './components/member/MemberShell'
 import ApiErrorToaster from './components/ApiErrorToaster'
 import { useSession } from './hooks/useSession'
 
-import { navItems } from './navItems'
+import { layoutNavItems, settingsNavItem } from './navItems'
 import MobileHeader from './components/mobile/MobileHeader'
 import MobileTabBar from './components/mobile/MobileTabBar'
 
@@ -46,6 +46,8 @@ function AppShell() {
   const [showCommandPalette, setShowCommandPalette] = useState(false)
   const { width: sidebarWidth, collapsed: sidebarCollapsed, startResize, toggleCollapsed: toggleSidebar } = useResizableSidebar('sidebarWidth', 224)
   const { bindings } = useHotkeys()
+  const { order: navOrder, hidden: navHidden } = useNavLayout()
+  const nav = useMemo(() => layoutNavItems(navOrder, navHidden), [navOrder, navHidden])
   const { theme, setTheme } = useTheme()
   const { timezone } = useTimezone()
   const { isRecording, noteId: recordingNoteId, duration, isUploading, stop: stopRecording } = useRecording()
@@ -153,7 +155,7 @@ function AppShell() {
           </div>
         </div>
         <nav className="flex-1 py-3 px-2">
-          {navItems.map((item) => {
+          {nav.visible.map((item) => {
             const Icon = item.icon
             const isFocusItem = item.isDropTarget
             return (
@@ -297,7 +299,7 @@ function AppShell() {
         </Routes>
       </main>
 
-      <MobileTabBar />
+      <MobileTabBar items={nav.primary} moreItems={[...nav.secondary, settingsNavItem]} />
 
       {/* Global new todo modal */}
       {showNewTodoModal && (
