@@ -405,6 +405,7 @@ class MustDoItem(Base):
     done = Column(Boolean, default=False)
     order = Column(Integer, default=0)
     section = Column(String, default="morning")  # morning | afternoon | evening
+    carried_to = Column(String, nullable=True)  # YYYY-MM-DD this unfinished item was carried over to
     todo = relationship("Todo")
 
 
@@ -627,6 +628,15 @@ with engine.connect() as _conn:
     _cols = [c["name"] for c in _insp.get_columns("must_do_items")]
     if "section" not in _cols:
         _conn.execute(text("ALTER TABLE must_do_items ADD COLUMN section TEXT DEFAULT 'morning'"))
+        _conn.commit()
+    if "carried_to" not in _cols:
+        _conn.execute(text("ALTER TABLE must_do_items ADD COLUMN carried_to TEXT"))
+        # The old carry-over already copied every unfinished item before the latest day forward
+        _conn.execute(text(
+            "UPDATE must_do_items SET carried_to = "
+            "(SELECT MIN(m2.date) FROM must_do_items m2 WHERE m2.date > must_do_items.date) "
+            "WHERE done = 0 AND date < (SELECT MAX(date) FROM must_do_items)"
+        ))
         _conn.commit()
     for _tbl in ("todos", "projects"):
         _tbl_cols = [c["name"] for c in _insp.get_columns(_tbl)]
@@ -4548,27 +4558,29 @@ def list_must_do(date: str, db: Session = Depends(get_db)):
     if items:
         return items
 
-    # Carry over undone items from the most recent previous day
-    prev = (
+    # Carry over the previous day's unfinished items, once each: an item already carried
+    # stays put, so emptying today's list does not bring it back
+    prev_date = db.query(func.max(MustDoItem.date)).filter(MustDoItem.date < date).scalar()
+    if not prev_date:
+        return []
+    carried = (
         db.query(MustDoItem)
-        .filter(MustDoItem.date < date, MustDoItem.done == False)
-        .order_by(MustDoItem.date.desc(), MustDoItem.order)
+        .filter(MustDoItem.date == prev_date, MustDoItem.done == False, MustDoItem.carried_to.is_(None))
+        .order_by(MustDoItem.order)
         .all()
     )
-    if not prev:
+    if not carried:
         return []
-
-    latest_date = prev[0].date
-    carried = [p for p in prev if p.date == latest_date]
     for i, old in enumerate(carried):
-        item = MustDoItem(
+        db.add(MustDoItem(
             date=date,
             todo_id=old.todo_id,
             text=old.text,
             done=False,
             order=i,
-        )
-        db.add(item)
+            section=old.section or "morning",
+        ))
+        old.carried_to = date
     db.commit()
 
     return (

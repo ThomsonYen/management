@@ -72,7 +72,8 @@ GET /todos/recently-done              done in the last few days
 GET /persons                          people; derive overdue check-ins from the check_in fields
 GET /persons/progress                 per-person open/done counts
 GET /projects/tree                    projects with nesting (?include_deprecated=false → active only)
-GET /must-do/{today}                  today's must-do items
+GET /must-do/{today}                  today's must-do items (a day's first read carries the previous
+                                      day's unfinished items over, once each)
 GET /daily-goals                      goal text per date
 GET /schedule/reminders               due/overdue deadline reminders
 GET /notes?kind=personal              personal notes (summaries)
