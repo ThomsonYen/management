@@ -1,5 +1,5 @@
 import { AlarmClock, Check, Star, Undo2 } from 'lucide-react'
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
@@ -37,6 +37,7 @@ import {
 } from '../utils/optimisticTodo'
 
 import { importanceBadgeClass } from '../utils/badgeClasses'
+import { clickOffset, placeCaret } from '../utils/caretFromClick'
 
 const importanceBadge = importanceBadgeClass
 
@@ -127,6 +128,8 @@ export default function TodoDetailPage() {
  const [editingField, setEditingField] = useState<string | null>(null)
  const [editValue, setEditValue] = useState('')
  const [editingSubId, setEditingSubId] = useState<number | null>(null)
+ // Where a click landed in a sub-task, so its editor opens with the caret there
+ const subCaretRef = useRef<number | null>(null)
  const [editingSubTitle, setEditingSubTitle] = useState('')
 
  const { data: todo, isLoading } = useQuery<Todo>({
@@ -657,6 +660,7 @@ export default function TodoDetailPage() {
  {editingSubId === s.id ? (
  <input
  autoFocus
+ ref={placeCaret(subCaretRef)}
  type="text"
  value={editingSubTitle}
  onChange={(e) => setEditingSubTitle(e.target.value)}
@@ -676,7 +680,7 @@ export default function TodoDetailPage() {
  />
  ) : (
  <span
- onClick={() => { setEditingSubId(s.id); setEditingSubTitle(s.title) }}
+ onClick={(e) => { subCaretRef.current = clickOffset(e); setEditingSubId(s.id); setEditingSubTitle(s.title) }}
  title="Click to edit"
  className={`flex-1 text-sm cursor-pointer hover:text-accent transition-colors ${
  s.done ? 'line-through text-fg-subtle' : 'text-fg'

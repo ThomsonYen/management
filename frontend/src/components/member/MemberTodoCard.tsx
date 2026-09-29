@@ -1,5 +1,5 @@
 import { CalendarDays, Folder, Timer, User } from 'lucide-react'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import DescriptionEditor from '../DescriptionEditor'
 import { updateTodo } from '../../api'
@@ -18,6 +18,7 @@ import DatePicker from '../DatePicker'
 import MarkDoneButton from '../MarkDoneButton'
 import { Badge, ImportanceBadge } from '../ui'
 import SubtodoChecklist from './SubtodoChecklist'
+import { clickOffset, placeCaret } from '../../utils/caretFromClick'
 
 const IMPORTANCE_OPTIONS = ['low', 'medium', 'high', 'critical']
 
@@ -61,6 +62,8 @@ export default function MemberTodoCard({ todo, editable, showAssignee, expanded,
   const { timezone } = useTimezone()
   const [editingField, setEditingField] = useState<string | null>(null)
   const [editValue, setEditValue] = useState('')
+  // Where a click landed in the title, so its editor opens with the caret there
+  const caretRef = useRef<number | null>(null)
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['todos'] })
@@ -110,6 +113,7 @@ export default function MemberTodoCard({ todo, editable, showAssignee, expanded,
             {editingField === 'title' ? (
               <input
                 autoFocus
+                ref={placeCaret(caretRef)}
                 value={editValue}
                 onChange={(e) => setEditValue(e.target.value)}
                 onBlur={() => (editValue.trim() ? saveField('title', editValue.trim()) : setEditingField(null))}
@@ -122,7 +126,10 @@ export default function MemberTodoCard({ todo, editable, showAssignee, expanded,
               />
             ) : (
               <p
-                onClick={(e) => startEdit(e, 'title', todo.title)}
+                onClick={(e) => {
+                  caretRef.current = clickOffset(e)
+                  startEdit(e, 'title', todo.title)
+                }}
                 title={editable ? 'Click to rename' : undefined}
                 className={`text-sm font-semibold ${isDone ? 'line-through text-fg-muted' : 'text-fg'} ${
                   editable ? 'hover:text-accent transition-colors' : ''

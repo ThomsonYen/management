@@ -13,6 +13,7 @@ import { useTimezone } from '../SettingsContext'
 import { isOverdue as checkOverdue, getTodayString } from '../dateUtils'
 import { todoToMarkdown } from '../utils/todoMarkdown'
 import { importanceBadgeClass } from '../utils/badgeClasses'
+import { clickOffset, placeCaret } from '../utils/caretFromClick'
 import {
  buildTodoPatch,
  patchSubtodoCaches,
@@ -125,6 +126,8 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
  }, [forceCollapseSignal])
  const [editingField, setEditingField] = useState<string | null>(null)
  const [editValue, setEditValue] = useState('')
+ // Where a click landed in a title, so its editor opens with the caret there
+ const caretRef = useRef<number | null>(null)
  const [newSubTitle, setNewSubTitle] = useState('')
  const [subDragId, setSubDragId] = useState<number | null>(null)
  const [subDropIdx, setSubDropIdx] = useState<number | null>(null)
@@ -296,7 +299,7 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
  }}
  onMouseDown={handleCardMouseDown}
  onClick={handleCardClick}
- className={`bg-surface rounded-xl shadow-sm border overflow-hidden transition-shadow duration-200 hover:shadow-md ${isSelected ? 'border-accent ring-2 ring-accent/40 dark:ring-accent' : 'border-border'}`}
+ className={`bg-surface rounded-xl shadow-sm border overflow-hidden transition-shadow duration-200 hover:shadow-md ${isSelected ? 'border-accent' : 'border-border'}`}
  >
  {/* Header */}
  <div className="px-4 py-3 md:px-5 md:py-4">
@@ -377,6 +380,7 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
  {editingField === 'title' ? (
  <input
  autoFocus
+ ref={placeCaret(caretRef)}
  type="text"
  value={editValue}
  onChange={(e) => setEditValue(e.target.value)}
@@ -389,11 +393,11 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
  if (e.key === 'Escape') setEditingField(null)
  }}
  onClick={(e) => e.stopPropagation()}
- className="col-start-3 col-end-5 md:col-end-4 row-start-2 font-semibold text-fg text-base leading-tight w-full border-b-2 border-accent focus:outline-none bg-transparent pb-0.5"
+ className="col-start-3 col-end-5 md:col-end-4 row-start-2 font-semibold text-fg text-base leading-tight w-full -mx-1.5 px-1.5 rounded-md bg-accent/[0.07] ring-1 ring-inset ring-accent/25 caret-accent focus:outline-none"
  />
  ) : (
  <h3
- onClick={(e) => startEdit(e, 'title', todo.title)}
+ onClick={(e) => { caretRef.current = clickOffset(e); startEdit(e, 'title', todo.title) }}
  title="Click to edit title"
  className="col-start-3 col-end-5 md:col-end-4 row-start-2 font-semibold text-fg text-base leading-tight cursor-pointer hover:text-accent transition-colors"
  >
@@ -638,7 +642,7 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
  // One line tall, growing only as the title wraps, so editing doesn't add a blank line.
  // Phones show 16px in both states: the iOS zoom guard (index.css) forces it on text fields.
  rows={1}
- ref={fitToContent}
+ ref={(el) => { fitToContent(el); placeCaret(caretRef)(el) }}
  onInput={(e) => fitToContent(e.currentTarget)}
  value={editingSubTitle}
  onChange={(e) => setEditingSubTitle(e.target.value)}
@@ -658,7 +662,7 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
  />
  ) : (
  <span
- onClick={() => { setEditingSubId(s.id); setEditingSubTitle(s.title) }}
+ onClick={(e) => { caretRef.current = clickOffset(e); setEditingSubId(s.id); setEditingSubTitle(s.title) }}
  className={`flex-1 min-w-0 text-sm leading-5 max-md:text-base max-md:leading-6 cursor-pointer hover:text-accent transition-colors break-words ${s.done ? 'line-through text-fg-subtle' : 'text-fg'}`}
  >
  {s.title}
