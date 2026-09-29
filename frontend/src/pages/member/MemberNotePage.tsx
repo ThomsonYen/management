@@ -1,14 +1,12 @@
 import { useCallback } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import MDEditor from '@uiw/react-md-editor'
 import { AlertTriangle, ArrowLeft, CalendarDays, CheckSquare, FolderKanban, SearchX, Users } from 'lucide-react'
 import { fetchNote } from '../../api'
 import type { Note } from '../../types'
-import { useTheme, useTimezone } from '../../SettingsContext'
+import { useTimezone } from '../../SettingsContext'
 import { formatDayLabel } from '../../dateUtils'
-import { remarkHashtag } from '../../utils/remarkHashtag'
-import { remarkFixEmptyTasks } from '../../utils/remarkFixEmptyTasks'
+import NoteEditor from '../../components/NoteEditor'
 import TagPill from '../../components/TagPill'
 import { Badge, EmptyState } from '../../components/ui'
 
@@ -17,7 +15,6 @@ export default function MemberNotePage() {
   const { id } = useParams<{ id: string }>()
   const noteId = Number(id)
   const navigate = useNavigate()
-  const { theme } = useTheme()
   const { timezone } = useTimezone()
   const { data: note, isLoading } = useQuery<Note>({
     queryKey: ['note', noteId],
@@ -26,16 +23,8 @@ export default function MemberNotePage() {
     enabled: Number.isFinite(noteId),
   })
 
-  // Hashtag links rendered by remarkHashtag have /notes?tag= hrefs.
-  const handlePreviewClick = useCallback(
-    (e: React.MouseEvent<HTMLDivElement>) => {
-      const link = (e.target as HTMLElement).closest('a.md-hashtag') as HTMLAnchorElement | null
-      if (!link) return
-      const href = link.getAttribute('href')
-      if (!href || !href.startsWith('/')) return
-      e.preventDefault()
-      navigate(href)
-    },
+  const openTag = useCallback(
+    (tag: string) => navigate(`/notes?tag=${encodeURIComponent(tag)}`),
     [navigate],
   )
 
@@ -54,7 +43,7 @@ export default function MemberNotePage() {
         <article className="bg-surface rounded-xl border border-border shadow-sm">
           <header className="px-5 md:px-6 pt-5 pb-3 border-b border-border-subtle">
             <div className="flex items-start justify-between gap-3">
-              <h1 className="text-xl font-bold text-fg">{note.title}</h1>
+              <h1 className="font-note text-2xl font-bold leading-tight text-fg">{note.title}</h1>
               <Badge tone={note.kind === 'meeting' ? 'info' : 'neutral'}>
                 {note.kind === 'meeting' ? 'Meeting' : 'Note'}
               </Badge>
@@ -100,12 +89,8 @@ export default function MemberNotePage() {
               <span>The content of this note is temporarily unavailable.</span>
             </div>
           )}
-          <div className="px-5 md:px-6 py-4" data-color-mode={theme} onClick={handlePreviewClick}>
-            <MDEditor.Markdown
-              source={note.content}
-              remarkPlugins={[remarkFixEmptyTasks, remarkHashtag]}
-              style={{ background: 'transparent' }}
-            />
+          <div className="px-5 md:px-6 pt-5">
+            <NoteEditor value={note.content} readOnly onTagClick={openTag} />
           </div>
         </article>
       )}

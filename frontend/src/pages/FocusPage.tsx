@@ -1,7 +1,7 @@
 import React, { useState, useRef, useCallback } from 'react'
 import { ArrowUpRight, Check, ChevronDown, ChevronUp, GripVertical, ListX, Moon, SquareCheck, Star, StarOff, Sun, Sunrise, X } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { fetchTodos, fetchProjects, fetchPersons, updateTodo, createTodo, reorderFocus, fetchMustDoItems, createMustDoItem, updateMustDoItem, deleteMustDoItem } from '../api'
+import { fetchTodos, fetchProjects, fetchPersons, updateTodo, createTodo, reorderFocus, fetchMustDoItems, createMustDoItem, updateMustDoItem, convertMustDoItem, deleteMustDoItem } from '../api'
 import type { Todo, Project } from '../types'
 import type { MustDoItem } from '../api'
 import TodoCard from '../components/TodoCard'
@@ -12,6 +12,7 @@ import { useTimezone, useHotkeys, useTodoDefaults, resolveAssigneeId } from '../
 import { getTodayString } from '../dateUtils'
 import { useHotkey } from '../hooks/useHotkey'
 import { useUnfocusWithUndo } from '../hooks/useUnfocusWithUndo'
+import { useToast } from '../ToastContext'
 
 // Must-do section headers (Morning / Afternoon / Evening)
 const SECTION_ICON = 'shrink-0 text-fg-subtle'
@@ -90,6 +91,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  const [editingMustDoText, setEditingMustDoText] = useState('')
  const [selectedMustDoIds, setSelectedMustDoIds] = useState<Set<number>>(new Set())
  const queryClient = useQueryClient()
+ const { showToast } = useToast()
 
  // --- Must Do Today ---
  const todayKey = getTodayString(timezone)
@@ -149,13 +151,27 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  updateMustDoItem(id, data),
  onMutate: async ({ id, ...patch }) => {
  const context = await snapshotMustDo()
+ const linkedId = context.previous?.find((i) => i.id === id)?.todo_id
  queryClient.setQueryData<MustDoItem[]>(mustDoKey, (old = []) =>
- old.map((i) => (i.id === id ? { ...i, ...patch } : i))
+ old.map((i) =>
+ i.id === id ? { ...i, ...patch }
+ : patch.text && linkedId && i.todo_id === linkedId ? { ...i, text: patch.text }
+ : i
  )
+ )
+ // Renaming a linked item renames its todo on the server; mirror that in the todo lists
+ if (patch.text && linkedId) {
+ queryClient.setQueriesData<Todo[]>({ queryKey: ['todos'] }, (old) =>
+ old?.map((t) => (t.id === linkedId ? { ...t, title: patch.text! } : t))
+ )
+ }
  return context
  },
  onError: rollbackMustDo,
- onSettled: refetchMustDo,
+ onSettled: (_data, _err, vars) => {
+ refetchMustDo()
+ if (vars.text) queryClient.invalidateQueries({ queryKey: ['todos'] })
+ },
  })
 
  const deleteMustDo = useMutation({
@@ -202,14 +218,16 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  }, [deleteMustDo])
 
  const convertToTodo = useCallback(async (item: MustDoItem) => {
- const cached = queryClient.getQueryData<Todo[]>(['todos', { is_focused: true }]) || []
- const maxOrder = cached.reduce((max, t) => Math.max(max, t.focus_order), 0)
- const todo = await createTodo(defaultTodoPayload(item.text))
- await updateTodo(todo.id, { is_focused: true, focus_order: maxOrder + 1 })
- await updateMustDoItem(item.id, { todo_id: todo.id })
+ // One server call creates, focuses and links the todo, so it can't end up half-done
+ const { title: _title, status: _status, ...defaults } = defaultTodoPayload(item.text)
+ try {
+ await convertMustDoItem(item.id, defaults)
+ } catch {
+ showToast({ message: `Couldn't convert "${item.text}" to a todo`, tone: 'danger' })
+ }
  queryClient.invalidateQueries({ queryKey: ['must-do', todayKey] })
  queryClient.invalidateQueries({ queryKey: ['todos'] })
- }, [queryClient, todayKey, defaultTodoPayload])
+ }, [queryClient, todayKey, defaultTodoPayload, showToast])
 
  const { data: todos = [], isLoading } = useQuery<Todo[]>({
  queryKey: ['todos', { is_focused: true }],
@@ -686,6 +704,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  {sectionItems.map((item, itemIdx) => {
  const linkedTodo = item.todo_id ? todos.find((t) => t.id === item.todo_id) : undefined
  const effectiveDone = item.done || (linkedTodo?.status === 'done')
+ const itemText = linkedTodo?.title ?? item.text
  const isNoOp = (insertIdx: number) => {
  if (dragMustDoId.current === null) return false
  // Get all dragged IDs (multi-select aware)
@@ -768,7 +787,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  >
  {effectiveDone && <Check size={12} strokeWidth={3} />}
  </button>
- {editingMustDoId === item.id && !item.todo_id ? (
+ {editingMustDoId === item.id ? (
  <input
  autoFocus
  className="flex-1 text-md text-fg bg-transparent outline-none border-b border-accent py-0"
@@ -777,7 +796,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  onKeyDown={(e) => {
  if (e.key === 'Enter') {
  const trimmed = editingMustDoText.trim()
- if (trimmed && trimmed !== item.text) {
+ if (trimmed && trimmed !== itemText) {
  updateMustDo.mutate({ id: item.id, text: trimmed })
  }
  setEditingMustDoId(null)
@@ -788,7 +807,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  }}
  onBlur={() => {
  const trimmed = editingMustDoText.trim()
- if (trimmed && trimmed !== item.text) {
+ if (trimmed && trimmed !== itemText) {
  updateMustDo.mutate({ id: item.id, text: trimmed })
  }
  setEditingMustDoId(null)
@@ -800,15 +819,13 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  effectiveDone
  ? 'line-through text-fg-subtle'
  : 'text-fg font-medium'
- } ${!item.todo_id ? 'cursor-text' : ''}`}
+ } cursor-text`}
  onDoubleClick={() => {
- if (!item.todo_id) {
  setEditingMustDoId(item.id)
- setEditingMustDoText(item.text)
- }
+ setEditingMustDoText(itemText)
  }}
  >
- {item.text}
+ {itemText}
  {item.todo_id && (() => {
  const lt = todos.find((t) => t.id === item.todo_id)
  if (!lt) return null

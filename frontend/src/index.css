@@ -74,8 +74,7 @@ body {
 @media (max-width: 767.98px) {
   input,
   select,
-  textarea,
-  .w-md-editor-text-input {
+  textarea {
     font-size: max(16px, 1em) !important;
   }
 }
@@ -121,44 +120,6 @@ input[type='radio'] {
   --tw-prose-invert-td-borders: rgb(var(--border-subtle));
 }
 
-/* ─── @uiw/react-md-editor preview list styles ─── */
-.wmde-markdown ul,
-.wmde-markdown ol {
-  padding-left: 2em;
-}
-.wmde-markdown ul {
-  list-style-type: disc;
-}
-.wmde-markdown ul ul {
-  list-style-type: circle;
-}
-.wmde-markdown ul ul ul {
-  list-style-type: square;
-}
-.wmde-markdown ol {
-  list-style-type: decimal;
-}
-.wmde-markdown li {
-  margin-top: 0.25em;
-  margin-bottom: 0.25em;
-}
-.wmde-markdown .task-list-item {
-  list-style: none;
-}
-.wmde-markdown .task-list-item input[type="checkbox"] {
-  appearance: auto;
-  width: 14px;
-  height: 14px;
-  margin-right: 0.4em;
-  vertical-align: middle;
-  position: relative;
-  top: -1px;
-}
-.wmde-markdown ul.contains-task-list {
-  list-style: none;
-  padding-left: 1.2em;
-}
-
 @keyframes fadeInOut {
   0% { opacity: 0; transform: translateY(-4px); }
   10% { opacity: 1; transform: translateY(0); }
@@ -166,20 +127,164 @@ input[type='radio'] {
   100% { opacity: 0; }
 }
 
-/* ─── Inline `#tag` pills rendered by remarkHashtag inside MDEditor preview ─── */
-.wmde-markdown a.md-hashtag {
+/* ─── Notes: Bear-style bullets and the in-place Markdown editor ───
+   One warm red marks list structure in every note surface, all of which
+   use NoteEditor (CodeMirror): meeting and personal notes, project and
+   person notes, weekly goals. Bullets cycle by depth: filled circle → ring →
+   filled diamond → hollow diamond. They are SVG masks, not glyphs, so they
+   look the same in any note font. */
+:root {
+  --note-bullet: 214 69 56;
+}
+html.dark {
+  --note-bullet: 240 110 96;
+}
+
+.md-bullet-shape {
   display: inline-block;
-  padding: 0 6px;
-  margin: 0 1px;
-  font-size: 0.875em;
-  font-weight: 500;
+  width: 0.6em;
+  height: 0.6em;
+  background-color: rgb(var(--note-bullet));
+  -webkit-mask: var(--bullet-mask) center / contain no-repeat;
+  mask: var(--bullet-mask) center / contain no-repeat;
+}
+.md-bullet-0 { --bullet-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Ccircle cx='5' cy='5' r='3.3'/%3E%3C/svg%3E"); }
+.md-bullet-1 { --bullet-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Ccircle cx='5' cy='5' r='2.8' fill='none' stroke='black' stroke-width='1.3'/%3E%3C/svg%3E"); }
+.md-bullet-2 { --bullet-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M5 1.2 8.8 5 5 8.8 1.2 5z'/%3E%3C/svg%3E"); }
+.md-bullet-3 { --bullet-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M5 1.7 8.3 5 5 8.3 1.7 5z' fill='none' stroke='black' stroke-width='1.2' stroke-linejoin='round'/%3E%3C/svg%3E"); }
+
+/* NoteEditor (components/NoteEditor.tsx) */
+.cm-note.cm-editor {
+  background: transparent;
+  color: rgb(var(--fg-default));
+  font-family: var(--font-note, var(--font-sans));
+  font-size: 1.0625rem;
+}
+@media (max-width: 767.98px) {
+  .cm-note.cm-editor { font-size: max(17px, 1.0625rem); }
+}
+.cm-note.cm-editor.cm-focused { outline: none; }
+.cm-note .cm-scroller {
+  font-family: inherit;
+  line-height: 1.7;
+  overflow: visible;
+}
+.cm-note .cm-content {
+  padding: 0 0 4rem;
+  caret-color: rgb(var(--accent));
+}
+.cm-note .cm-line { padding: 0; }
+.cm-note .cm-placeholder { color: rgb(var(--fg-faint)); }
+.cm-note .cm-cursor { border-left-color: rgb(var(--accent)); border-left-width: 2px; }
+.cm-note .cm-selectionBackground,
+.cm-note.cm-focused .cm-selectionBackground,
+.cm-note .cm-content ::selection { background: rgb(var(--accent) / 0.22); }
+
+/* Markdown punctuation stays visible but steps back */
+.cm-note .cm-md-syntax { color: rgb(var(--fg-faint)); font-weight: 400; font-style: normal; }
+.cm-note .cm-md-h1 { font-size: 1.6em; font-weight: 700; line-height: 1.3; padding-top: 0.9em; padding-bottom: 0.15em; }
+.cm-note .cm-md-h2 { font-size: 1.3em; font-weight: 700; line-height: 1.35; padding-top: 0.8em; padding-bottom: 0.1em; }
+.cm-note .cm-md-h3 { font-size: 1.12em; font-weight: 700; padding-top: 0.6em; }
+.cm-note .cm-md-h4,
+.cm-note .cm-md-h5,
+.cm-note .cm-md-h6 { font-weight: 700; padding-top: 0.4em; }
+.cm-note .cm-line.cm-md-h1:first-child,
+.cm-note .cm-line.cm-md-h2:first-child,
+.cm-note .cm-line.cm-md-h3:first-child { padding-top: 0; }
+.cm-note .cm-md-strong { font-weight: 700; }
+.cm-note .cm-md-em { font-style: italic; }
+.cm-note .cm-md-strike { text-decoration: line-through; color: rgb(var(--fg-muted)); }
+.cm-note .cm-md-code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.88em;
+  background: rgb(var(--bg-inset));
+  border-radius: 4px;
+  padding: 0.1em 0.25em;
+}
+.cm-note .cm-md-codeblock {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.88em;
+  line-height: 1.55;
+  background: rgb(var(--bg-inset));
+  padding: 0 0.75em;
+}
+.cm-note .cm-md-quote {
+  border-left: 3px solid rgb(var(--note-bullet) / 0.55);
+  padding-left: 0.9em;
+  color: rgb(var(--fg-muted));
+  font-style: italic;
+}
+.cm-note .cm-md-link { color: rgb(var(--accent)); text-decoration: underline; text-decoration-color: rgb(var(--accent) / 0.35); text-underline-offset: 3px; }
+.cm-note .cm-md-url { color: rgb(var(--fg-faint)); font-size: 0.9em; }
+.cm-note .cm-md-hr { color: rgb(var(--fg-faint)); letter-spacing: 0.3em; }
+.cm-note .cm-md-tag {
   color: rgb(var(--accent));
   background-color: rgb(var(--accent-1));
-  border-radius: 9999px;
-  text-decoration: none;
-  border: 1px solid rgb(var(--accent-2));
+  border-radius: 4px;
+  /* pill look without padding, so text never shifts while typing */
+  box-shadow: 0 0 0 2px rgb(var(--accent-1));
 }
-.wmde-markdown a.md-hashtag:hover {
-  background-color: rgb(var(--accent-2));
-  border-color: rgb(var(--accent));
+.cm-note.cm-readonly .cm-md-tag { cursor: pointer; }
+.cm-note .cm-md-ordinal { color: rgb(var(--note-bullet)); font-variant-numeric: tabular-nums; }
+.cm-note .cm-md-done { color: rgb(var(--fg-subtle)); text-decoration: line-through; text-decoration-color: rgb(var(--fg-faint)); }
+
+/* List markers: a fixed-width box so wrapped lines hang under the text */
+.cm-note .cm-md-marker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  width: 1.5em;
+  height: 1.2em;
+  vertical-align: -0.06em;
+  text-indent: 0;
+}
+.cm-note .cm-md-checkbox {
+  width: 0.95em;
+  height: 0.95em;
+  border: 1.5px solid rgb(var(--note-bullet) / 0.8);
+  border-radius: 0.25em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: white;
+  transition: background-color 120ms, border-color 120ms;
+}
+.cm-note .cm-md-checkbox[data-checked='true'] {
+  background: rgb(var(--note-bullet));
+  border-color: rgb(var(--note-bullet));
+}
+.cm-note.cm-readonly .cm-md-checkbox { cursor: default; }
+
+/* ─── Weekly goals: today's card ───
+   A soft accent glow that slowly breathes and a tinted header, so today stands out even when another day is the
+   anchor. Motion is dropped for people who ask for less of it. */
+.goal-today {
+  position: relative;
+  /* the tinted header follows the card's rounded corners */
+  overflow: clip;
+  border-color: rgb(var(--accent) / 0.7);
+  box-shadow:
+    0 0 0 1px rgb(var(--accent) / 0.35),
+    0 10px 30px -12px rgb(var(--accent) / 0.45);
+  animation: goal-today-breathe 4s ease-in-out infinite;
+}
+.goal-today-header {
+  background: linear-gradient(90deg, rgb(var(--accent) / 0.14), rgb(var(--accent) / 0.04) 55%, transparent);
+}
+@keyframes goal-today-breathe {
+  0%, 100% {
+    box-shadow:
+      0 0 0 1px rgb(var(--accent) / 0.35),
+      0 10px 30px -12px rgb(var(--accent) / 0.45);
+  }
+  50% {
+    box-shadow:
+      0 0 0 4px rgb(var(--accent) / 0.12),
+      0 14px 40px -12px rgb(var(--accent) / 0.6);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .goal-today { animation: none; }
+  .goal-today .animate-ping { animation: none; opacity: 0; }
 }

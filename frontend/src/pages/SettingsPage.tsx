@@ -14,6 +14,7 @@ import {
  useHotkeys,
  useFontSize,
  useFontFamily,
+ useNoteFontFamily,
  useThemeVariant,
  useNavLayout,
  formatHotkey,
@@ -32,7 +33,7 @@ import ChangePasswordSection from '../components/ChangePasswordSection'
 import UsersSection from '../components/UsersSection'
 import type { ApiToken, ApiTokenScope } from '../types'
 import { listThemes, type ThemeName } from '../theme'
-import { FONT_FAMILIES, loadAllFontFamilies, REFERENCE_X_HEIGHT, type FontFamily } from '../theme/fonts'
+import { FONT_FAMILIES, loadAllFontFamilies, NOTE_FONT_LABELS, REFERENCE_X_HEIGHT, type FontFamily } from '../theme/fonts'
 import { Select } from '../components/ui'
 import { LOCKED_NAV_ROUTE, orderNavItems } from '../navItems'
 
@@ -794,6 +795,7 @@ export default function SettingsPage() {
  const { resetToDefaults } = useHotkeys()
  const { size: fontSize, setSize: setFontSize } = useFontSize()
  const { family: fontFamily, setFamily: setFontFamily } = useFontFamily()
+ const { family: noteFontFamily, setFamily: setNoteFontFamily } = useNoteFontFamily()
  // Load the web fallbacks so each choice previews in its own face
  useEffect(loadAllFontFamilies, [])
  const { variant: themeVariant, setVariant: setThemeVariant } = useThemeVariant()
@@ -866,32 +868,18 @@ export default function SettingsPage() {
  </div>
  </div>
  <div className="px-6 py-5 border-t border-border">
- <h2 className="text-sm font-semibold text-fg">Font</h2>
+ <h2 className="text-sm font-semibold text-fg">App font</h2>
  <p className="text-sm text-fg-muted mt-0.5">
  Apple fonts show on Mac, iPhone and iPad; elsewhere a close match is used.
  </p>
- <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
- {(Object.keys(FONT_FAMILIES) as FontFamily[]).map((f) => {
- const opt = FONT_FAMILIES[f]
- const active = fontFamily === f
- return (
- <button
- key={f}
- onClick={() => setFontFamily(f)}
- title={'note' in opt ? opt.note : undefined}
- className={`text-left px-3 py-2.5 rounded-lg border transition-colors ${
- active
- ? 'border-accent bg-accent-1 text-fg'
- : 'border-border text-fg-muted hover:text-fg hover:border-border-strong'
- }`}
- style={opt.stack ? { fontFamily: opt.stack, fontSizeAdjust: REFERENCE_X_HEIGHT } : undefined}
- >
- <span className="block text-xl leading-none">Aa</span>
- <span className="block text-sm font-medium mt-1.5">{opt.label}</span>
- </button>
- )
- })}
+ <FontChoices value={fontFamily} onChange={setFontFamily} />
  </div>
+ <div className="px-6 py-5 border-t border-border">
+ <h2 className="text-sm font-semibold text-fg">Note font</h2>
+ <p className="text-sm text-fg-muted mt-0.5">
+ Used for note titles and text: meeting and personal notes, project and person notes, weekly goals.
+ </p>
+ <FontChoices value={noteFontFamily} onChange={setNoteFontFamily} labels={NOTE_FONT_LABELS} />
  </div>
  <div className="px-6 py-5 border-t border-border flex items-center justify-between gap-4">
  <div className="min-w-0">
@@ -1052,6 +1040,7 @@ export default function SettingsPage() {
  <HotkeyInput label="Insert todo" description="Insert - [ ] at cursor" bindingKey="editorInsertTodo" />
  <HotkeyInput label="Indent" description="Add leading indentation" bindingKey="editorIndent" />
  <HotkeyInput label="Un-indent" description="Remove leading indentation" bindingKey="editorUnindent" />
+ <HotkeyInput label="Enlarge note" description="Show only the note's title and text" bindingKey="toggleNoteEnlarge" />
  </div>
  </div>
 
@@ -1158,6 +1147,43 @@ export default function SettingsPage() {
  </div>
  </div>
  </div>
+ </div>
+ )
+}
+
+/** Grid of font swatches, each previewed in its own face. */
+function FontChoices({
+ value,
+ onChange,
+ labels,
+}: {
+ value: FontFamily
+ onChange: (f: FontFamily) => void
+ /** Per-choice label overrides (e.g. 'theme' → "Same as app font") */
+ labels?: Partial<Record<FontFamily, string>>
+}) {
+ return (
+ <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
+ {(Object.keys(FONT_FAMILIES) as FontFamily[]).map((f) => {
+ const opt = FONT_FAMILIES[f]
+ const active = value === f
+ return (
+ <button
+ key={f}
+ onClick={() => onChange(f)}
+ title={'note' in opt ? opt.note : undefined}
+ className={`text-left px-3 py-2.5 rounded-lg border transition-colors ${
+ active
+ ? 'border-accent bg-accent-1 text-fg'
+ : 'border-border text-fg-muted hover:text-fg hover:border-border-strong'
+ }`}
+ style={opt.stack ? { fontFamily: opt.stack, fontSizeAdjust: REFERENCE_X_HEIGHT } : undefined}
+ >
+ <span className="block text-xl leading-none">Aa</span>
+ <span className="block text-sm font-medium mt-1.5">{labels?.[f] ?? opt.label}</span>
+ </button>
+ )
+ })}
  </div>
  )
 }

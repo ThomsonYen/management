@@ -1,9 +1,8 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
-import { useHotkeys, useTheme } from '../SettingsContext'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useHotkeys } from '../SettingsContext'
 import { useHotkey } from '../hooks/useHotkey'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import MDEditor from '@uiw/react-md-editor'
 import {
  ArrowLeft,
  Trash2,
@@ -17,6 +16,8 @@ import {
  Check,
  Pencil,
  AlertTriangle,
+ Maximize2,
+ Minimize2,
 } from 'lucide-react'
 import type { Person, Project } from '../types'
 import { pickableProjects, projectOptionLabel } from '../utils/projects'
@@ -35,22 +36,31 @@ import {
 import AudioRecorder from '../components/AudioRecorder'
 import AudioFileList from '../components/AudioFileList'
 import TranscriptEditor from '../components/TranscriptEditor'
-import { createMdEditorKeyHandler } from '../utils/mdEditorKeyHandler'
-import { remarkHashtag } from '../utils/remarkHashtag'
+import NoteEditor from '../components/NoteEditor'
 import { extractTags } from '../utils/markdownTags'
 import TagPill from '../components/TagPill'
 import NoteShareControl from '../components/NoteShareControl'
-import { remarkFixEmptyTasks } from '../utils/remarkFixEmptyTasks'
-import { useIsDesktop } from '../hooks/useMediaQuery'
 
 export default function NoteDetailPage() {
  const { id } = useParams<{ id: string }>()
  const navigate = useNavigate()
  const queryClient = useQueryClient()
- const { theme } = useTheme()
  const noteId = parseInt(id!)
  const { bindings } = useHotkeys()
- const editorKeyDown = useMemo(() => createMdEditorKeyHandler(bindings), [bindings])
+
+ // Enlarge mode: only the title and the text. Kept in the URL so a reload
+ // keeps it; AppShell reads the same param to drop its sidebar and tab bar.
+ const [searchParams, setSearchParams] = useSearchParams()
+ const enlarged = searchParams.get('enlarge') === '1'
+ const toggleEnlarged = useCallback(() => {
+ setSearchParams((prev) => {
+ const next = new URLSearchParams(prev)
+ if (next.get('enlarge') === '1') next.delete('enlarge')
+ else next.set('enlarge', '1')
+ return next
+ }, { replace: true })
+ }, [setSearchParams])
+ useHotkey(bindings.toggleNoteEnlarge, toggleEnlarged, { skipInputCheck: true })
 
  const { data: note, isLoading, dataUpdatedAt } = useQuery({
  queryKey: ['note', noteId],
@@ -62,9 +72,11 @@ export default function NoteDetailPage() {
  const isMeeting = note?.kind === 'meeting'
  const listPath = isMeeting ? '/meeting-notes' : '/notes'
 
+ // Escape leaves enlarge mode first, then the note.
  useHotkey(bindings.escape, useCallback(() => {
- navigate(listPath)
- }, [navigate, listPath]), { skipInputCheck: true })
+ if (enlarged) toggleEnlarged()
+ else navigate(listPath)
+ }, [enlarged, toggleEnlarged, navigate, listPath]), { skipInputCheck: true })
 
  // Meeting-side state (only used when isMeeting)
  const { data: persons = [] } = useQuery({
@@ -220,44 +232,40 @@ export default function NoteDetailPage() {
  saveField('todo_ids', next)
  }
 
- // Hashtag links rendered by remarkHashtag have /notes?tag= hrefs.
- const handlePreviewClick = useCallback(
- (e: React.MouseEvent<HTMLDivElement>) => {
- const link = (e.target as HTMLElement).closest('a.md-hashtag') as HTMLAnchorElement | null
- if (!link) return
- const href = link.getAttribute('href')
- if (!href || !href.startsWith('/')) return
- e.preventDefault()
- navigate(href)
- },
+ const openTag = useCallback(
+ (tag: string) => navigate(`/notes?tag=${encodeURIComponent(tag)}`),
  [navigate],
  )
 
  const localTags = useMemo(() => extractTags(content), [content])
- // Phones have no room for the side-by-side preview; the toolbar still toggles it.
- const isDesktop = useIsDesktop()
 
  if (isLoading || !appliedAtRef.current) {
  return <div className="p-6 text-fg-subtle">Loading...</div>
  }
 
  return (
- <div className="block md:flex md:h-full">
+ <div className={enlarged ? 'min-h-full' : 'block md:flex md:h-full'}>
  <div className="flex-1 flex flex-col min-w-0 overflow-auto">
- <div className="p-4 md:p-6 pb-3 md:pb-3 flex items-center gap-2 md:gap-3">
+ {enlarged ? (
+ <div className="sticky top-0 z-10 flex justify-end px-3 pt-[max(0.75rem,env(safe-area-inset-top))] md:px-5 md:pt-4">
+ <button
+ onClick={toggleEnlarged}
+ title="Leave enlarged view (Esc)"
+ className="p-1.5 rounded-lg text-fg-faint hover:text-fg-muted hover:bg-inset transition-colors"
+ >
+ <Minimize2 size={16} />
+ </button>
+ </div>
+ ) : (
+ <div className="px-4 md:px-6 pt-4 md:pt-5 flex items-center gap-2 md:gap-3">
  <button
  onClick={() => navigate(listPath)}
+ title="Back"
  className="p-1.5 rounded-lg text-fg-subtle hover:text-fg-muted dark:hover:text-fg hover:bg-inset dark:hover:bg-elevated transition-colors"
  >
  <ArrowLeft size={18} />
  </button>
- <input
- value={title}
- onChange={(e) => handleTitleChange(e.target.value)}
- onBlur={handleTitleBlur}
- className="flex-1 min-w-0 text-xl font-bold bg-transparent border-none outline-none text-fg placeholder:text-fg-faint"
- placeholder={isMeeting ? 'Meeting title...' : 'Note title...'}
- />
+ <div className="flex-1" />
  {isMeeting && (
  <DatePicker
  value={date}
@@ -267,17 +275,36 @@ export default function NoteDetailPage() {
  />
  )}
  <button
+ onClick={toggleEnlarged}
+ title="Enlarge: only the title and text"
+ className="p-1.5 rounded-lg text-fg-subtle hover:text-fg-muted dark:hover:text-fg hover:bg-inset dark:hover:bg-elevated transition-colors"
+ >
+ <Maximize2 size={16} />
+ </button>
+ <button
  onClick={() => {
  if (confirm(`Delete this ${isMeeting ? 'meeting note' : 'note'}?`)) deleteMutation.mutate()
  }}
+ title="Delete"
  className="p-1.5 rounded-lg text-fg-subtle hover:text-danger hover:bg-danger-bg transition-colors"
  >
  <Trash2 size={16} />
  </button>
  </div>
+ )}
 
- {note && (note.vault_root_path || note.relative_path) && (
- <div className="hidden md:flex px-6 pb-1 items-center gap-1 text-xs font-mono text-fg-subtle truncate">
+ {/* One centered reading column, ~70 characters wide */}
+ <div className={`w-full max-w-[42rem] mx-auto px-4 md:px-6 ${enlarged ? 'pt-6 md:pt-12' : 'pt-3 md:pt-6'} flex-1 flex flex-col`}>
+ <input
+ value={title}
+ onChange={(e) => handleTitleChange(e.target.value)}
+ onBlur={handleTitleBlur}
+ className="w-full font-note text-2xl md:text-3xl font-bold leading-tight bg-transparent border-none outline-none text-fg placeholder:text-fg-faint"
+ placeholder={isMeeting ? 'Meeting title' : 'Title'}
+ />
+
+ {!enlarged && note && (note.vault_root_path || note.relative_path) && (
+ <div className="hidden md:flex mt-1 items-center gap-1 text-xs font-mono text-fg-subtle truncate">
  <span className="text-fg-faint dark:text-fg-muted">file:</span>
  <span className="truncate" title={`${note.vault_root_path ?? ''}/${note.relative_path ?? note.filename ?? ''}`}>
  {note.vault_root_path ? `${note.vault_root_path}/` : ''}
@@ -292,7 +319,7 @@ export default function NoteDetailPage() {
  )}
 
  {note?.content_unavailable && (
- <div className="mx-6 mb-2 flex items-start gap-2 rounded border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+ <div className="mt-3 flex items-start gap-2 rounded border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
  <AlertTriangle size={14} className="mt-0.5 shrink-0" />
  <span>
  This note&rsquo;s vault{note.vault_name ? ` (${note.vault_name})` : ''} is not
@@ -305,39 +332,32 @@ export default function NoteDetailPage() {
  </div>
  )}
 
- {!isMeeting && (
- <div className="px-4 md:px-6 pb-3">
+ {!enlarged && !isMeeting && (
+ <div className="mt-3">
  <NoteShareControl noteId={noteId} attendeeIds={[]} />
  </div>
  )}
 
- {localTags.length > 0 && (
- <div className="px-4 md:px-6 pb-2 flex flex-wrap gap-1.5">
+ {!enlarged && localTags.length > 0 && (
+ <div className="mt-3 flex flex-wrap gap-1.5">
  {localTags.map((t) => (
  <TagPill key={t} name={t} size="sm" />
  ))}
  </div>
  )}
 
- <div
- className="flex-1 px-3 md:px-6 pb-3"
- data-color-mode={theme}
- onKeyDownCapture={editorKeyDown}
- onClick={handlePreviewClick}
- >
- <MDEditor
+ <NoteEditor
+ className="mt-5 flex-1 min-h-[50vh]"
  value={content}
  onChange={handleContentChange}
- height="100%"
- style={{ minHeight: 500 }}
- preview={note?.content_unavailable ? 'preview' : isDesktop ? 'live' : 'edit'}
- visibleDragbar={false}
- previewOptions={{ remarkPlugins: [remarkFixEmptyTasks, remarkHashtag] }}
+ readOnly={contentUnavailable}
+ placeholder="Start writing…"
+ onTagClick={openTag}
  />
  </div>
 
- {isMeeting && (
- <div className="px-4 md:px-6 pb-6">
+ {isMeeting && !enlarged && (
+ <div className="w-full max-w-[42rem] mx-auto px-4 md:px-6 pb-6">
  <TranscriptEditor
  noteId={noteId}
  transcript={note?.transcript ?? null}
@@ -348,7 +368,7 @@ export default function NoteDetailPage() {
  )}
  </div>
 
- {isMeeting && (
+ {isMeeting && !enlarged && (
  <div className="w-full md:w-72 border-t md:border-t-0 md:border-l border-border bg-app overflow-y-auto flex-shrink-0 p-4 space-y-6">
  <div>
  <h3 className="text-xs font-semibold text-fg-muted uppercase tracking-wider mb-2 flex items-center gap-1.5">

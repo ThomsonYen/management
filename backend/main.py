@@ -30,7 +30,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from openai import OpenAI
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import (
     Boolean,
     Column,
@@ -86,6 +86,8 @@ DEFAULT_USER_SETTINGS: dict = {
     "font_size": "md",
     # Interface font id from frontend/src/theme/fonts.ts; "theme" = the theme's own font.
     "font_family": "theme",
+    # Font of note titles and bodies, same ids; "theme" = same as font_family.
+    "note_font_family": "georgia",
     "meeting_note_sort": "updated_at",
     "todo_defaults": {
         "assignee_name": "",
@@ -1295,6 +1297,24 @@ class MustDoItemOut(BaseModel):
     section: str = "morning"
     model_config = {"from_attributes": True}
 
+    @model_validator(mode="before")
+    @classmethod
+    def _linked_title(cls, v):
+        # A linked item shows its todo's title, so a rename on either side reads the same everywhere
+        if isinstance(v, MustDoItem) and v.todo is not None:
+            return {
+                "id": v.id, "date": v.date, "todo_id": v.todo_id, "text": v.todo.title,
+                "done": v.done, "order": v.order, "section": v.section or "morning",
+            }
+        return v
+
+
+class MustDoConvertIn(BaseModel):
+    importance: str = "medium"
+    estimated_hours: float = 1.0
+    assignee_id: Optional[int] = None
+    deadline: Optional[str] = None
+
 
 class DailyGoalUpdate(BaseModel):
     content: str
@@ -2282,6 +2302,7 @@ _BEARER_ROUTE_SCOPES = [
         ("PUT", rf"/daily-goals/{_DATE}", "write:daily"),
         ("POST", rf"/must-do/{_DATE}", "write:daily"),
         ("PUT", rf"/must-do/items/{_ID}", "write:daily"),
+        ("POST", rf"/must-do/items/{_ID}/convert", "write:todos"),
     )
 ]
 
@@ -4457,6 +4478,8 @@ def update_todo(todo_id: int, data: TodoUpdate, db: Session = Depends(get_db), v
     old_status = t.status
     for k, v in update_data.items():
         setattr(t, k, v)
+    if update_data.get("title"):
+        db.query(MustDoItem).filter(MustDoItem.todo_id == t.id).update({"text": t.title})
     if "status" in update_data:
         new_status = update_data["status"]
         if new_status == "done" and old_status != "done":
@@ -4605,11 +4628,53 @@ def update_must_do(item_id: int, data: MustDoItemUpdate, db: Session = Depends(g
     item = db.query(MustDoItem).get(item_id)
     if not item:
         raise HTTPException(404, "Must-do item not found")
-    for k, v in data.model_dump(exclude_unset=True).items():
+    changes = data.model_dump(exclude_unset=True)
+    for k, v in changes.items():
         setattr(item, k, v)
+    db.flush()
+    # Renaming a linked item renames its todo (and so every other item linked to it)
+    if changes.get("text") and item.todo_id:
+        todo = db.query(Todo).get(item.todo_id)
+        if todo:
+            todo.title = changes["text"]
+            db.query(MustDoItem).filter(MustDoItem.todo_id == todo.id).update({"text": todo.title})
     db.commit()
     db.refresh(item)
     return item
+
+
+@app.post(
+    "/must-do/items/{item_id}/convert",
+    summary="Turn a must-do item into a focused todo linked to it",
+)
+def convert_must_do(
+    item_id: int,
+    data: Optional[MustDoConvertIn] = None,
+    db: Session = Depends(get_db),
+    viewer: Viewer = Depends(get_viewer),
+):
+    """Creates a todo titled after the item, adds it to the end of the focus list and links
+    the item to it, in one transaction. Idempotent: an item already linked returns its todo."""
+    item = db.query(MustDoItem).get(item_id)
+    if not item:
+        raise HTTPException(404, "Must-do item not found")
+    todo = db.query(Todo).get(item.todo_id) if item.todo_id else None
+    if todo is None:
+        max_order = db.query(func.max(Todo.focus_order)).filter(Todo.is_focused == True).scalar() or 0
+        todo = Todo(
+            title=item.text,
+            status="todo",
+            is_focused=True,
+            focus_order=max_order + 1,
+            **(data or MustDoConvertIn()).model_dump(),
+        )
+        db.add(todo)
+        db.flush()
+        item.todo_id = todo.id
+        db.commit()
+        db.refresh(item)
+        db.refresh(todo)
+    return {"item": MustDoItemOut.model_validate(item), "todo": todo_to_out(todo, viewer)}
 
 
 @app.delete("/must-do/items/{item_id}")
@@ -5364,6 +5429,7 @@ class UserSettingsPatch(BaseModel):
     theme_variant: Optional[str] = None
     font_size: Optional[str] = None
     font_family: Optional[str] = None
+    note_font_family: Optional[str] = None
     meeting_note_sort: Optional[str] = None
     todo_defaults: Optional[TodoDefaultsPatch] = None
     hotkeys: Optional[dict] = None
@@ -5373,7 +5439,7 @@ class UserSettingsPatch(BaseModel):
 
 
 # Keep in sync with FONT_FAMILIES in frontend/src/theme/fonts.ts.
-FONT_FAMILIES = ("theme", "avenir", "gill-sans", "futura", "helvetica", "system", "dm-sans")
+FONT_FAMILIES = ("theme", "avenir", "gill-sans", "futura", "helvetica", "system", "dm-sans", "georgia")
 
 
 def _validate_patch(patch: UserSettingsPatch) -> None:
@@ -5389,6 +5455,8 @@ def _validate_patch(patch: UserSettingsPatch) -> None:
         raise HTTPException(400, f"Unknown font_size: {patch.font_size}")
     if patch.font_family is not None and patch.font_family not in FONT_FAMILIES:
         raise HTTPException(400, f"Unknown font_family: {patch.font_family}")
+    if patch.note_font_family is not None and patch.note_font_family not in FONT_FAMILIES:
+        raise HTTPException(400, f"Unknown note_font_family: {patch.note_font_family}")
     if patch.meeting_note_sort is not None and patch.meeting_note_sort not in ("created_at", "updated_at"):
         raise HTTPException(400, f"Unknown meeting_note_sort: {patch.meeting_note_sort}")
     if patch.todo_defaults and patch.todo_defaults.importance is not None:

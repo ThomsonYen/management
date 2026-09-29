@@ -1,16 +1,29 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
-import MDEditor from '@uiw/react-md-editor'
-import { Calendar, ChevronDown, ChevronRight, Maximize2, Minimize2 } from 'lucide-react'
+import {
+ Calendar,
+ ChevronDown,
+ ChevronLeft,
+ ChevronRight,
+ ChevronsDownUp,
+ ChevronsLeft,
+ ChevronsRight,
+ ChevronsUpDown,
+ Maximize2,
+ Minus,
+ Plus,
+} from 'lucide-react'
 import { fetchDailyGoals, upsertDailyGoal } from '../api'
 import type { DailyGoal } from '../api'
-import { useTimezone, useTheme, useHotkeys } from '../SettingsContext'
+import { useHotkeys, useTimezone } from '../SettingsContext'
+import { useHotkey } from '../hooks/useHotkey'
+import { useDebouncedFn } from '../hooks/useDebouncedFn'
 import { getTodayString } from '../dateUtils'
-import MarkdownEditor from '../components/MarkdownEditor'
+import NoteEditor from '../components/NoteEditor'
+import EnlargedNote from '../components/EnlargedNote'
 import SaveIndicator, { type SaveState } from '../components/SaveIndicator'
 import { useIsDesktop } from '../hooks/useMediaQuery'
 import { config } from '../config'
-import { createMdEditorKeyHandler } from '../utils/mdEditorKeyHandler'
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -46,84 +59,6 @@ function dateRange(from: string, to: string): string[] {
  return dates
 }
 
-// ─── Per-day content assembly / disassembly ─────────────────────────────────
-
-function assembleMarkdown(dates: string[], goalMap: Map<string, string>): string {
- return dates
- .map((date) => {
- const header = `## ${getDayName(date)} (${formatDate(date)})`
- const content = goalMap.get(date) || ''
- return content ? `${header}\n${content}` : header
- })
- .join('\n\n')
-}
-
-function buildDateLookup(dates: string[]): Map<string, string> {
- const lookup = new Map<string, string>()
- for (const date of dates) {
- const d = new Date(date + 'T00:00:00')
- lookup.set(date, date)
- lookup.set(formatDate(date).toLowerCase(), date)
- lookup.set(d.toLocaleDateString('en-US', { month: 'long', day: 'numeric' }).toLowerCase(), date)
- if (!lookup.has(d.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase())) {
- lookup.set(d.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase(), date)
- }
- if (!lookup.has(d.toLocaleDateString('en-US', { weekday: 'short' }).toLowerCase())) {
- lookup.set(d.toLocaleDateString('en-US', { weekday: 'short' }).toLowerCase(), date)
- }
- }
- return lookup
-}
-
-function matchHeader(headerText: string, lookup: Map<string, string>): string | undefined {
- const parenMatch = headerText.match(/\((.+?)\)/)
- if (parenMatch) {
- const inner = parenMatch[1].trim().toLowerCase()
- const found = lookup.get(inner)
- if (found) return found
- }
- const beforeParen = headerText.replace(/\(.*?\)/, '').trim().toLowerCase()
- if (beforeParen) {
- const found = lookup.get(beforeParen)
- if (found) return found
- }
- return lookup.get(headerText.trim().toLowerCase())
-}
-
-function disassembleMarkdown(markdown: string, dates: string[]): Map<string, string> {
- const result = new Map<string, string>()
- const lookup = buildDateLookup(dates)
-
- const lines = markdown.split('\n')
- let currentDate: string | null = null
- let currentLines: string[] = []
-
- const flush = () => {
- if (currentDate) {
- while (currentLines.length > 0 && !currentLines[0].trim()) currentLines.shift()
- while (currentLines.length > 0 && !currentLines[currentLines.length - 1].trim()) currentLines.pop()
- result.set(currentDate, currentLines.join('\n'))
- }
- currentLines = []
- }
-
- for (const line of lines) {
- const h2 = line.match(/^##\s+(.+)/)
- if (h2) {
- const matched = matchHeader(h2[1], lookup)
- if (matched) {
- flush()
- currentDate = matched
- continue
- }
- }
- if (currentDate) currentLines.push(line)
- }
- flush()
-
- return result
-}
-
 // ─── Per-day todo counting (for header badges) ───────────────────────────────
 
 function countTodos(content: string): { done: number; total: number } {
@@ -139,41 +74,69 @@ function countTodos(content: string): { done: number; total: number } {
  return { done, total }
 }
 
-// ─── Colors ─────────────────────────────────────────────────────────────────
+// ─── Look ───────────────────────────────────────────────────────────────────
 
-const CARD_COLORS = [
- 'border-blue-300 ',
- 'border-violet-300 dark:border-violet-600',
- 'border-emerald-300 dark:border-emerald-600',
- 'border-warning/40 ',
- 'border-rose-300 dark:border-rose-600',
- 'border-teal-300 dark:border-teal-600',
- 'border-warning/40 ',
+/** One colour per weekday (Sunday first), shown as a dot beside the day name. */
+const WEEKDAY_DOTS = [
+ 'bg-sky-400',
+ 'bg-violet-400',
+ 'bg-emerald-400',
+ 'bg-amber-400',
+ 'bg-rose-400',
+ 'bg-teal-400',
+ 'bg-orange-400',
 ]
-const HEADER_COLORS = [
- 'bg-info-bg text-info ',
- 'bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300',
- 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300',
- 'bg-warning-bg text-warning ',
- 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300',
- 'bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300',
- 'bg-warning-bg text-warning ',
-]
+
+function weekdayDot(dateStr: string): string {
+ return WEEKDAY_DOTS[new Date(dateStr + 'T00:00:00').getDay()]
+}
+
+const toolbarGroup = 'inline-flex items-center gap-0.5 p-1 rounded-xl bg-surface border border-border shadow-xs'
+const toolbarButton =
+ 'inline-flex items-center justify-center gap-1 h-9 md:h-8 min-w-9 md:min-w-8 px-2 rounded-lg text-sm font-medium ' +
+ 'text-fg-muted hover:text-fg hover:bg-inset active:bg-border-subtle transition-colors ' +
+ 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 ' +
+ 'disabled:opacity-40 disabled:pointer-events-none select-none'
+const cardIconButton =
+ 'inline-flex items-center justify-center h-8 w-8 md:h-7 md:w-7 rounded-md text-fg-subtle hover:text-fg hover:bg-inset transition-colors ' +
+ 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50'
+
+/** "Before − 2 +": how many days to show on one side of the anchor. */
+function DayStepper({ label, value, onChange, hint }: { label: string; value: number; onChange: (n: number) => void; hint: string }) {
+ return (
+ <div className="flex items-center" role="group" aria-label={`Days ${hint}`}>
+ <span className="px-1.5 text-xs font-medium text-fg-subtle">{label}</span>
+ <button
+ type="button"
+ onClick={() => onChange(Math.max(0, value - 1))}
+ disabled={value === 0}
+ title={`Show one day fewer ${hint}`}
+ aria-label={`Show one day fewer ${hint}`}
+ className={toolbarButton}
+ >
+ <Minus size={14} />
+ </button>
+ <span className="w-6 text-center text-sm font-semibold tabular-nums text-fg" aria-live="polite">{value}</span>
+ <button
+ type="button"
+ onClick={() => onChange(value + 1)}
+ title={`Show one day more ${hint}`}
+ aria-label={`Show one day more ${hint}`}
+ className={toolbarButton}
+ >
+ <Plus size={14} />
+ </button>
+ </div>
+ )
+}
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
 export default function WeeklyGoalsPage() {
  const { timezone } = useTimezone()
- const { theme } = useTheme()
  const isDesktop = useIsDesktop()
- const { bindings } = useHotkeys()
- const editorKeyDown = useMemo(() => createMdEditorKeyHandler(bindings), [bindings])
  const todayStr = getTodayString(timezone)
 
- const [showEditor, setShowEditor] = useState(() => {
- const saved = localStorage.getItem('goalShowEditor')
- return saved !== null ? saved === 'true' : true
- })
  const [anchor, setAnchor] = useState(() => todayStr)
  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set())
  const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
@@ -187,7 +150,6 @@ export default function WeeklyGoalsPage() {
  return saved ? parseInt(saved) : 6
  })
 
- useEffect(() => { localStorage.setItem('goalShowEditor', String(showEditor)) }, [showEditor])
  useEffect(() => { localStorage.setItem('goalDaysBefore', String(daysBefore)) }, [daysBefore])
  useEffect(() => { localStorage.setItem('goalDaysAfter', String(daysAfter)) }, [daysAfter])
 
@@ -253,7 +215,11 @@ export default function WeeklyGoalsPage() {
 
  const save = useCallback(() => saveMutation.mutate(), [saveMutation])
 
- // Update a single day; called by per-day MarkdownEditor onChange/onSave.
+ // Edits autosave a moment after typing stops (and at least every 3s while
+ // typing); the save reads dayContentRef, which is current by the time it fires.
+ const autosave = useDebouncedFn(() => saveMutation.mutate(), { idleMs: 800, maxMs: 3000 })
+
+ // Update a single day; called by each day's editor and the enlarged view.
  const updateDay = useCallback((date: string, content: string) => {
  setDayContent((prev) => {
  if ((prev.get(date) || '') === content) return prev
@@ -263,37 +229,14 @@ export default function WeeklyGoalsPage() {
  return next
  })
  setDirty(true)
- }, [])
+ autosave.call()
+ }, [autosave])
 
- const saveDay = useCallback((date: string, content: string) => {
- setDayContent((prev) => {
- if ((prev.get(date) || '') === content) {
- saveMutation.mutate()
- return prev
- }
- const next = new Map(prev)
- if (content) next.set(date, content)
- else next.delete(date)
- // Update ref immediately so saveMutation reads the new value
- dayContentRef.current = next
- saveMutation.mutate()
- return next
- })
- }, [saveMutation])
-
- // Assembled markdown for the left-side MDEditor.
- const assembledMd = useMemo(() => assembleMarkdown(dates, dayContent), [dates, dayContent])
-
- const handleEditorChange = useCallback((markdown: string) => {
- const newMap = disassembleMarkdown(markdown, datesRef.current)
- setDayContent(newMap)
- setDirty(true)
- }, [])
-
- const handleInsertTemplate = useCallback(() => {
- const template = assembleMarkdown(dates, new Map())
- handleEditorChange(template)
- }, [dates, handleEditorChange])
+ // Enlarge mode: one day's goals full screen. The hotkey opens the anchor day.
+ const [enlargedDate, setEnlargedDate] = useState<string | null>(null)
+ const closeEnlarged = useCallback(() => setEnlargedDate(null), [])
+ const { bindings } = useHotkeys()
+ useHotkey(bindings.toggleNoteEnlarge, useCallback(() => setEnlargedDate(anchor), [anchor]), { skipInputCheck: true })
 
  // Save on Cmd+S
  useEffect(() => {
@@ -335,142 +278,85 @@ export default function WeeklyGoalsPage() {
 
  return (
  <div className="p-4 md:p-6 max-w-[1400px] mx-auto">
- <div className="flex flex-wrap items-center justify-between gap-y-2 mb-5">
- <div>
+ <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3 mb-6">
+ <div className="min-w-0">
  <h2 className="hidden md:block text-2xl font-semibold tracking-tight text-fg">Goals</h2>
- <p className="text-sm text-fg-muted mt-1">
- {formatDateFull(rangeFrom)} &ndash; {formatDateFull(rangeTo)}
- <span className="ml-2 text-xs text-fg-subtle">
- ({dates.length} days)
- </span>
+ <p className="text-sm text-fg-muted mt-1 flex flex-wrap items-center gap-x-2">
+ <span>{formatDateFull(rangeFrom)} &ndash; {formatDateFull(rangeTo)}</span>
+ <span className="text-fg-subtle">&middot; {dates.length} days</span>
+ <SaveIndicator state={saveState} />
  </p>
  </div>
 
- <div className="flex flex-wrap items-center gap-2 gap-y-2">
- <div className="flex items-center gap-1">
- <button onClick={() => shiftAnchor(-7)} className="px-2 py-1 rounded-md text-xs font-medium hover:bg-border-subtle dark:hover:bg-elevated text-fg-muted transition-colors">
- -1w
+ <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+ <nav aria-label="Move through days" className={`${toolbarGroup} w-full sm:w-auto justify-between`}>
+ <button type="button" onClick={() => shiftAnchor(-7)} title="Back one week" aria-label="Back one week" className={toolbarButton}>
+ <ChevronsLeft size={16} />
+ <span className="hidden sm:inline pr-0.5">Week</span>
  </button>
- <button onClick={() => shiftAnchor(-1)} className="px-2 py-1 rounded-md text-xs font-medium hover:bg-border-subtle dark:hover:bg-elevated text-fg-muted transition-colors">
- -1d
+ <button type="button" onClick={() => shiftAnchor(-1)} title="Back one day" aria-label="Back one day" className={toolbarButton}>
+ <ChevronLeft size={16} />
+ <span className="hidden sm:inline pr-0.5">Day</span>
  </button>
  <button
+ type="button"
  onClick={goToToday}
- className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-colors ${
- isAnchorToday
- ? 'bg-accent-1 text-accent-fg'
- : 'hover:bg-border-subtle dark:hover:bg-elevated text-fg-muted'
- }`}
+ title="Center on today"
+ aria-pressed={isAnchorToday}
+ className={`${toolbarButton} px-3 ${isAnchorToday ? '!bg-accent-1 !text-accent-fg' : ''}`}
  >
- <Calendar size={12} />
+ <Calendar size={14} />
  Today
  </button>
- <button onClick={() => shiftAnchor(1)} className="px-2 py-1 rounded-md text-xs font-medium hover:bg-border-subtle dark:hover:bg-elevated text-fg-muted transition-colors">
- +1d
+ <button type="button" onClick={() => shiftAnchor(1)} title="Forward one day" aria-label="Forward one day" className={toolbarButton}>
+ <span className="hidden sm:inline pl-0.5">Day</span>
+ <ChevronRight size={16} />
  </button>
- <button onClick={() => shiftAnchor(7)} className="px-2 py-1 rounded-md text-xs font-medium hover:bg-border-subtle dark:hover:bg-elevated text-fg-muted transition-colors">
- +1w
+ <button type="button" onClick={() => shiftAnchor(7)} title="Forward one week" aria-label="Forward one week" className={toolbarButton}>
+ <span className="hidden sm:inline pl-0.5">Week</span>
+ <ChevronsRight size={16} />
  </button>
- </div>
+ </nav>
 
- <div className="w-px h-5 bg-border " />
-
- <div className="flex items-center gap-3">
- <div className="flex items-center gap-1">
- <span className="text-2xs uppercase tracking-wide text-fg-subtle mr-0.5">Before</span>
- <button
- onClick={() => setDaysBefore((v) => Math.max(0, v - 1))}
- className="w-5 h-5 rounded flex items-center justify-center text-xs font-bold text-fg-subtle hover:text-fg-muted dark:text-fg-subtle dark:hover:text-fg-faint hover:bg-inset dark:hover:bg-elevated transition-colors"
- >−</button>
- <span className="text-xs font-semibold text-fg-muted tabular-nums w-4 text-center">{daysBefore}</span>
- <button
- onClick={() => setDaysBefore((v) => v + 1)}
- className="w-5 h-5 rounded flex items-center justify-center text-xs font-bold text-fg-subtle hover:text-fg-muted dark:text-fg-subtle dark:hover:text-fg-faint hover:bg-inset dark:hover:bg-elevated transition-colors"
- >+</button>
- </div>
- <div className="flex items-center gap-1">
- <span className="text-2xs uppercase tracking-wide text-fg-subtle mr-0.5">After</span>
- <button
- onClick={() => setDaysAfter((v) => Math.max(0, v - 1))}
- className="w-5 h-5 rounded flex items-center justify-center text-xs font-bold text-fg-subtle hover:text-fg-muted dark:text-fg-subtle dark:hover:text-fg-faint hover:bg-inset dark:hover:bg-elevated transition-colors"
- >−</button>
- <span className="text-xs font-semibold text-fg-muted tabular-nums w-4 text-center">{daysAfter}</span>
- <button
- onClick={() => setDaysAfter((v) => v + 1)}
- className="w-5 h-5 rounded flex items-center justify-center text-xs font-bold text-fg-subtle hover:text-fg-muted dark:text-fg-subtle dark:hover:text-fg-faint hover:bg-inset dark:hover:bg-elevated transition-colors"
- >+</button>
- </div>
- </div>
-
- <div className="w-px h-5 bg-border " />
-
- <button
- onClick={() => setShowEditor((v) => !v)}
- className={`px-2 py-1 rounded-md text-xs font-medium transition-colors ${
- showEditor
- ? 'bg-inset text-fg'
- : 'hover:bg-border-subtle dark:hover:bg-elevated text-fg-muted'
- }`}
- >
- {showEditor ? 'Hide editor' : 'Show editor'}
- </button>
-
- <div className="min-w-[70px] text-right">
- <SaveIndicator state={saveState} />
+ <div className={`${toolbarGroup} w-full sm:w-auto justify-between`}>
+ <DayStepper label="Before" value={daysBefore} onChange={setDaysBefore} hint="before" />
+ <span className="w-px h-5 bg-border mx-1" aria-hidden />
+ <DayStepper label="After" value={daysAfter} onChange={setDaysAfter} hint="after" />
  </div>
  </div>
  </div>
 
- <div className="flex flex-col md:flex-row gap-5 md:items-start">
- {showEditor && (
- <div className="w-full md:w-1/2 md:flex-shrink-0 md:sticky md:top-6">
- <div className="bg-surface rounded-xl border border-border shadow-sm flex flex-col max-h-[calc(100vh-140px)]" data-color-mode={theme} onKeyDownCapture={editorKeyDown}>
- <div className="flex items-center justify-between px-4 py-2 border-b border-border flex-shrink-0">
- <span className="text-xs font-medium text-fg-muted uppercase tracking-wide">Editor</span>
- {!assembledMd.trim() && (
- <button onClick={handleInsertTemplate} className="text-xs text-accent hover:text-accent-fg dark:hover:text-accent font-medium">
- Insert template
- </button>
- )}
- </div>
- <MDEditor
- value={assembledMd}
- onChange={(val) => handleEditorChange(val ?? '')}
- preview="edit"
- visibleDragbar={false}
- height={isDesktop ? 500 : 320}
- />
- </div>
- </div>
- )}
-
- <div className={`w-full ${showEditor ? 'md:w-1/2' : ''} min-w-0 space-y-3`}>
- {dates.map((date, idx) => {
+ <div className="w-full min-w-0 space-y-3">
+ {dates.map((date) => {
  const isAnchor = date === anchor
+ const isToday = date === todayStr
  const isCollapsed = collapsed.has(date)
  const isExpanded = expanded.has(date)
  const content = dayContent.get(date) || ''
  const { done: doneCount, total: totalCount } = countTodos(content)
+ const allDone = totalCount > 0 && doneCount === totalCount
 
  return (
  <div
  key={date}
- className={`rounded-xl border-2 shadow-sm transition-all ${
- isAnchor
- ? 'border-accent dark:border-accent ring-2 ring-accent/40 dark:ring-accent'
- : CARD_COLORS[idx % CARD_COLORS.length]
- } ${!isAnchor ? 'opacity-50' : ''}`}
+ className={`rounded-xl border bg-surface transition-[opacity,box-shadow,border-color] duration-200 ${
+ isToday
+ ? 'goal-today'
+ : isAnchor
+ ? 'border-accent/60 ring-4 ring-accent/10 shadow-sm'
+ : 'border-border shadow-xs opacity-75 hover:opacity-100 focus-within:opacity-100'
+ }`}
  >
  <div
  onClick={() => setAnchor(date)}
- className={`px-4 py-2.5 ${isCollapsed ? 'rounded-[10px]' : 'rounded-t-[10px]'} flex items-center justify-between cursor-pointer select-none ${
- isAnchor
- ? 'bg-accent-1 dark:bg-accent-1 text-accent-fg'
- : HEADER_COLORS[idx % HEADER_COLORS.length]
- }`}
+ title={isAnchor ? undefined : 'Center the view on this day'}
+ className={`flex items-center justify-between gap-2 pl-2 pr-2 py-1.5 cursor-pointer select-none ${
+ isCollapsed ? '' : 'border-b border-border-subtle'
+ } ${isToday ? 'goal-today-header' : ''}`}
  >
- <div className="flex items-center gap-2">
+ <div className="flex items-center gap-2 min-w-0">
  <button
+ type="button"
  onClick={(e) => {
  e.stopPropagation()
  setCollapsed(prev => {
@@ -479,23 +365,40 @@ export default function WeeklyGoalsPage() {
  return next
  })
  }}
- className="p-0.5 -ml-1 rounded hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
+ title={isCollapsed ? 'Show this day' : 'Fold this day'}
+ aria-label={isCollapsed ? 'Show this day' : 'Fold this day'}
+ aria-expanded={!isCollapsed}
+ className={cardIconButton}
  >
- {isCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+ {isCollapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
  </button>
- <span className="text-sm font-bold">{getDayName(date)}</span>
- <span className="text-xs opacity-70">{formatDate(date)}</span>
- {isAnchor && (
- <span className="text-2xs font-bold uppercase tracking-wider bg-accent text-white px-1.5 py-0.5 rounded">Anchor</span>
+ <span className={`w-2 h-2 rounded-full flex-shrink-0 ${isToday ? 'bg-accent' : weekdayDot(date)}`} aria-hidden />
+ <span className={isToday ? 'text-base font-bold text-accent-fg' : 'text-sm font-semibold text-fg'}>{getDayName(date)}</span>
+ <span className={`text-sm ${isToday ? 'text-fg-muted font-medium' : 'text-fg-subtle'}`}>{formatDate(date)}</span>
+ {isToday && (
+ <span className="inline-flex items-center gap-1.5 text-2xs font-bold uppercase tracking-wider text-fg-on-accent bg-accent px-2 py-0.5 rounded-full shadow-sm">
+ <span className="relative flex h-1.5 w-1.5" aria-hidden>
+ <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75" />
+ <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-white" />
+ </span>
+ Today
+ </span>
  )}
  </div>
- <div className="flex items-center gap-2">
+ <div className="flex items-center gap-1">
  {totalCount > 0 && (
- <span className={`text-xs font-medium ${doneCount === totalCount ? 'text-success' : 'opacity-60'}`}>
+ <span
+ className={`mr-1.5 flex items-center gap-1.5 text-xs font-medium tabular-nums ${allDone ? 'text-success' : 'text-fg-subtle'}`}
+ title={`${doneCount} of ${totalCount} done`}
+ >
+ <span className="hidden sm:block w-12 h-1.5 rounded-full bg-inset overflow-hidden">
+ <span className="block h-full rounded-full bg-success transition-[width]" style={{ width: `${(doneCount / totalCount) * 100}%` }} />
+ </span>
  {doneCount}/{totalCount}
  </span>
  )}
  <button
+ type="button"
  onClick={(e) => {
  e.stopPropagation()
  setExpanded(prev => {
@@ -504,29 +407,39 @@ export default function WeeklyGoalsPage() {
  return next
  })
  }}
- className="p-0.5 rounded hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
- title={isExpanded ? 'Collapse to default size' : 'Expand fully'}
+ className={cardIconButton}
+ title={isExpanded ? 'Back to the usual height' : 'Show all of this day'}
+ aria-label={isExpanded ? 'Back to the usual height' : 'Show all of this day'}
  >
- {isExpanded ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
+ {isExpanded ? <ChevronsDownUp size={15} /> : <ChevronsUpDown size={15} />}
+ </button>
+ <button
+ type="button"
+ onClick={(e) => {
+ e.stopPropagation()
+ setEnlargedDate(date)
+ }}
+ className={cardIconButton}
+ title="Enlarge: only this day's goals"
+ aria-label="Enlarge this day"
+ >
+ <Maximize2 size={14} />
  </button>
  </div>
  </div>
 
  {!isCollapsed && (
- <div className="relative bg-surface rounded-b-[10px]">
+ <div className="relative">
  <div
- className="px-4 py-3 min-h-[40px] overflow-y-auto"
+ className="px-5 py-3 min-h-[48px] overflow-y-auto"
  style={isExpanded ? undefined : { maxHeight: isDesktop ? (dayHeights.get(date) ?? config.goal_day_box_height_px) : Math.min(dayHeights.get(date) ?? config.goal_day_box_height_px, 320) }}
  >
- <MarkdownEditor
- value={content}
- onChange={(md) => updateDay(date, md)}
- onSave={(md) => saveDay(date, md)}
- />
+ <NoteEditor value={content} onChange={(md) => updateDay(date, md)} placeholder="Goals for the day…" />
  </div>
  {!isExpanded && (
  <div
- className="hidden md:flex h-1.5 cursor-row-resize items-center justify-center hover:bg-inset dark:hover:bg-elevated transition-colors rounded-b-[10px]"
+ title="Drag to resize"
+ className="hidden md:flex h-2.5 cursor-row-resize items-center justify-center hover:bg-inset transition-colors rounded-b-xl"
  onMouseDown={(e) => {
  e.preventDefault()
  const startY = e.clientY
@@ -543,7 +456,7 @@ export default function WeeklyGoalsPage() {
  window.addEventListener('mouseup', onUp)
  }}
  >
- <div className="w-8 h-0.5 rounded bg-border dark:bg-inset" />
+ <div className="w-10 h-1 rounded-full bg-border" />
  </div>
  )}
  </div>
@@ -552,7 +465,15 @@ export default function WeeklyGoalsPage() {
  )
  })}
  </div>
- </div>
+ {enlargedDate && (
+ <EnlargedNote
+ title={`${getDayName(enlargedDate)}, ${formatDate(enlargedDate)}`}
+ value={dayContent.get(enlargedDate) || ''}
+ onChange={(md) => updateDay(enlargedDate, md)}
+ saveState={saveState}
+ onClose={closeEnlarged}
+ />
+ )}
  </div>
  )
 }

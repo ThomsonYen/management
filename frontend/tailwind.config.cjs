@@ -102,6 +102,8 @@ module.exports = {
       fontFamily: {
         sans: ['var(--font-sans)', 'ui-sans-serif', 'system-ui', 'sans-serif'],
         mono: ['var(--font-mono)', 'ui-monospace', 'monospace'],
+        // Note titles and bodies (Settings → Note font); falls back to the app font.
+        note: ['var(--font-note, var(--font-sans))', 'ui-serif', 'Georgia', 'serif'],
       },
       ringColor: {
         DEFAULT: withVar('--focus-ring'),

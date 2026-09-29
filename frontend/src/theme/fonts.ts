@@ -54,6 +54,11 @@ export const FONT_FAMILIES = {
     stack: "'DM Sans', ui-sans-serif, system-ui, sans-serif",
     importUrl: gf('DM+Sans'),
   },
+  georgia: {
+    label: 'Georgia',
+    stack: "Georgia, 'Times New Roman', serif",
+    note: 'Serif; your system serif on Android',
+  },
 } as const satisfies Record<string, FontFamilyOption>
 
 export type FontFamily = keyof typeof FONT_FAMILIES
@@ -86,6 +91,23 @@ export function loadAllFontFamilies(): void {
 // (Gill Sans is ~13% shorter than Inter), so every other choice is scaled with
 // font-size-adjust to this x-height and text looks the same size in any font.
 export const REFERENCE_X_HEIGHT = 0.516
+
+// ─── Note font (Settings → Note font) ──────────────────────────────────────
+// The font of note bodies and titles, chosen separately from the app font.
+// Same choices; 'theme' here means "same as the app font". Applied as
+// --font-note on <html>, which the `font-note` utility and editors read.
+
+export const NOTE_FONT_LABELS: Partial<Record<FontFamily, string>> = { theme: 'Same as app font' }
+
+export const DEFAULT_NOTE_FONT_FAMILY: FontFamily = 'georgia'
+
+export function applyNoteFontFamily(family: FontFamily): void {
+  const opt: FontFamilyOption = FONT_FAMILIES[family] ?? FONT_FAMILIES.theme
+  loadWebFallback(opt)
+  const root = document.documentElement.style
+  if (opt.stack) root.setProperty('--font-note', opt.stack)
+  else root.removeProperty('--font-note')
+}
 
 /** Load `family`'s web fallback (if any) and point --font-sans at it. */
 export function applyFontFamily(family: FontFamily): void {

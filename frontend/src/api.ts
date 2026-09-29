@@ -348,6 +348,12 @@ export const updateMustDoItem = (
   data: { text?: string; done?: boolean; order?: number; section?: string; todo_id?: number },
 ): Promise<MustDoItem> => api.put(`/must-do/items/${id}`, data).then((r) => r.data)
 
+export const convertMustDoItem = (
+  id: number,
+  data: { importance?: string; estimated_hours?: number; assignee_id?: number | null; deadline?: string },
+): Promise<{ item: MustDoItem; todo: Todo }> =>
+  api.post(`/must-do/items/${id}/convert`, data).then((r) => r.data)
+
 export const deleteMustDoItem = (id: number): Promise<void> =>
   api.delete(`/must-do/items/${id}`).then((r) => r.data)
 
@@ -494,6 +500,8 @@ export interface UserSettings {
   theme_variant: string
   font_size: 'sm' | 'md' | 'lg' | 'xl'
   font_family: string
+  /** Font of note titles and bodies; 'theme' = same as font_family */
+  note_font_family: string
   meeting_note_sort: 'created_at' | 'updated_at'
   todo_defaults: {
     assignee_name: string

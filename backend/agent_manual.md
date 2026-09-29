@@ -40,7 +40,7 @@ Tokens carry a subset of these scopes. A `403` with `required_scope` tells you w
 | Scope | Unlocks |
 |---|---|
 | `read` | all `GET` endpoints listed below |
-| `write:todos` | create/edit/complete/focus todos and subtodos, restore a soft-deleted todo |
+| `write:todos` | create/edit/complete/focus todos and subtodos, restore a soft-deleted todo, convert a must-do item into a todo |
 | `write:persons` | `PUT /persons/{id}` with **only** `last_check_in_date` and/or `notes` |
 | `write:notes` | create/edit/restore notes with `kind='personal'` only; never transcripts |
 | `write:daily` | daily goals and must-do items |
@@ -111,7 +111,9 @@ POST /notes
 ```
 Append to an existing personal note: `GET /notes/{id}`, then `PUT /notes/{id} {"content": old_content + "\n\n…"}`. Never overwrite a note you have not just read.
 
-Daily planning: `PUT /daily-goals/{date} {"content":"…"}`; `POST /must-do/{date} {"text":"…","section":"morning"}`.
+Daily planning: `PUT /daily-goals/{date} {"content":"…"}`; `POST /must-do/{date} {"text":"…","section":"morning"}` (or `{"todo_id":…}` to put an existing todo on the list).
+A must-do item linked to a todo (`todo_id` set) always shows the todo's title; renaming either one (`PUT /must-do/items/{id} {"text":…}` or `PUT /todos/{id} {"title":…}`) renames both.
+Turn a plain item into a todo with `POST /must-do/items/{id}/convert` (scope `write:todos`; optional body `{"importance","estimated_hours","assignee_id","deadline"}`). It creates the todo, focuses it and links the item in one step, and returns `{"item","todo"}`. Idempotent: an already-linked item returns its todo.
 
 Social — who to reach out to: `GET /friends/due` returns friends who are overdue, due soon, or never logged, most overdue first. `GET /friends` takes `?status=overdue|due_soon|never|ok`. A friend's history is `GET /friends/{id}/hangouts` (newest first).
 

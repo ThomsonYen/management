@@ -26,7 +26,8 @@ import TodoCard from '../components/TodoCard'
 import TodoModal from '../components/TodoModal'
 import BulkActionBar from '../components/BulkActionBar'
 import CheckInButton from '../components/CheckInButton'
-import MarkdownEditor from '../components/MarkdownEditor'
+import NoteEditor from '../components/NoteEditor'
+import EnlargedNote from '../components/EnlargedNote'
 import PersonProjectBoard from '../components/PersonProjectBoard'
 import PersonAccessSection from '../components/PersonAccessSection'
 import SaveIndicator, { type SaveState } from '../components/SaveIndicator'
@@ -105,12 +106,20 @@ function PersonNotes({ person }: { person: Person }) {
  const [draft, setDraft] = useState(initialNotes)
  const [lastSaved, setLastSaved] = useState(initialNotes)
  const [showRaw, setShowRaw] = useState(false)
+ const [enlarged, setEnlarged] = useState(false)
+ const closeEnlarged = useCallback(() => setEnlarged(false), [])
+ const { bindings } = useHotkeys()
+ useHotkey(bindings.toggleNoteEnlarge, useCallback(() => setEnlarged(true), []), { skipInputCheck: true })
  const draftRef = useRef(draft)
  draftRef.current = draft
+ const sentRef = useRef<string | null>(null)
+ useEffect(() => { sentRef.current = null }, [person.id])
 
  useEffect(() => {
  const serverNotes = person.notes || ''
  setLastSaved(serverNotes)
+ // Our own save coming back must not rewind text typed since it was sent.
+ if (serverNotes === sentRef.current) return
  if (serverNotes !== draftRef.current) {
  setDraft(serverNotes)
  }
@@ -118,6 +127,7 @@ function PersonNotes({ person }: { person: Person }) {
 
  const saveMutation = useMutation({
  mutationFn: async (notes: string) => {
+ sentRef.current = notes
  const updated = await updatePerson(person.id, { notes })
  queryClient.setQueryData<Person[]>(['persons'], (old) =>
  old?.map((p) => (p.id === person.id ? { ...p, notes: updated.notes } : p)),
@@ -132,15 +142,8 @@ function PersonNotes({ person }: { person: Person }) {
  { idleMs: 500, maxMs: 3000 },
  )
 
- const handleChange = useCallback((md: string) => {
- setDraft(md)
- }, [])
-
- const handleSave = useCallback((md: string) => {
- saveMutation.mutate(md)
- }, [saveMutation])
-
- const handleRawChange = useCallback((md: string) => {
+ // The editor and the raw box both edit the draft and save it debounced.
+ const handleEdit = useCallback((md: string) => {
  setDraft(md)
  debouncedSave.call(md)
  }, [debouncedSave])
@@ -159,6 +162,13 @@ function PersonNotes({ person }: { person: Person }) {
  <div className="flex items-center gap-3">
  <SaveIndicator state={saveState} />
  <button
+ onClick={() => setEnlarged(true)}
+ title="Enlarge: only the title and text"
+ className="p-0.5 rounded text-fg-subtle hover:text-fg-muted dark:hover:text-fg transition-colors"
+ >
+ <Maximize2 size={13} />
+ </button>
+ <button
  onClick={() => setShowRaw(v => !v)}
  className="text-2xs font-mono text-fg-subtle hover:text-fg-muted dark:hover:text-fg transition-colors"
  >
@@ -166,20 +176,20 @@ function PersonNotes({ person }: { person: Person }) {
  </button>
  </div>
  </div>
- {draft ? (
- <MarkdownEditor value={draft} onChange={handleChange} onSave={handleSave} />
- ) : (
- <p
- onClick={() => setDraft(' ')}
- className="text-sm text-fg-subtle italic cursor-text"
- >
- Click to add notes...
- </p>
+ <NoteEditor value={draft} onChange={handleEdit} placeholder="Add notes…" />
+ {enlarged && (
+ <EnlargedNote
+ title={person.name}
+ value={draft}
+ onChange={handleEdit}
+ saveState={saveState}
+ onClose={closeEnlarged}
+ />
  )}
  {showRaw && (
  <textarea
  value={draft}
- onChange={(e) => handleRawChange(e.target.value)}
+ onChange={(e) => handleEdit(e.target.value)}
  rows={8}
  className="mt-2 w-full border border-border rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-accent resize-y"
  />

@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo } from 'react'
-import { Navigate, NavLink, Route, Routes, useNavigate } from 'react-router-dom'
+import { Navigate, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { Settings, ChevronsLeft, ChevronsRight, Square, Sun, Moon } from 'lucide-react'
 import SidebarBrand from './components/SidebarBrand'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
@@ -54,6 +54,11 @@ function AppShell() {
   const { theme, setTheme } = useTheme()
   const { timezone } = useTimezone()
   const { isRecording, noteId: recordingNoteId, duration, isUploading, stop: stopRecording } = useRecording()
+  // A note in enlarge mode (NoteDetailPage, ?enlarge=1) gets the whole window.
+  const location = useLocation()
+  const noteEnlarged =
+    /^\/(notes|meeting-notes)\/\d+/.test(location.pathname) &&
+    new URLSearchParams(location.search).get('enlarge') === '1'
 
   // Sidebar toggle
   const stableToggleSidebar = useCallback(() => toggleSidebar(), [toggleSidebar])
@@ -142,7 +147,7 @@ function AppShell() {
       {/* Sidebar */}
       <aside
         style={{ width: sidebarCollapsed ? 56 : sidebarWidth }}
-        className="bg-surface border-r border-border text-fg hidden md:flex flex-col flex-shrink-0 relative transition-[width] duration-200"
+        className={`bg-surface border-r border-border text-fg hidden ${noteEnlarged ? '' : 'md:flex'} flex-col flex-shrink-0 relative transition-[width] duration-200`}
       >
         <SidebarBrand collapsed={sidebarCollapsed} />
         <SidebarNav
@@ -239,11 +244,13 @@ function AppShell() {
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 overflow-auto bg-app pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-0">
-        <MobileHeader
-          onNewTodo={() => setShowNewTodoModal(true)}
-          onOpenSearch={() => setShowCommandPalette(true)}
-        />
+      <main className={`flex-1 overflow-auto bg-app ${noteEnlarged ? 'pb-[env(safe-area-inset-bottom)]' : 'pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-0'}`}>
+        {!noteEnlarged && (
+          <MobileHeader
+            onNewTodo={() => setShowNewTodoModal(true)}
+            onOpenSearch={() => setShowCommandPalette(true)}
+          />
+        )}
         <Routes>
           <Route path="/" element={<Dashboard onOpenTodo={setPeekTodoId} />} />
           <Route path="/focus" element={<FocusPage onOpenTodo={setPeekTodoId} />} />
@@ -265,7 +272,7 @@ function AppShell() {
         </Routes>
       </main>
 
-      <MobileTabBar items={nav.primary} moreItems={[...nav.secondary, settingsNavItem]} />
+      {!noteEnlarged && <MobileTabBar items={nav.primary} moreItems={[...nav.secondary, settingsNavItem]} />}
 
       {/* "Open" on a todo anywhere peeks at it over the current page */}
       {peekTodoId !== null && (

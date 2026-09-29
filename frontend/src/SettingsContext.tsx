@@ -1,7 +1,14 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { fetchSettings, updateSettings, type UserSettings, type UserSettingsPatch } from './api'
 import { applyTheme, DEFAULT_THEME, THEMES, type ThemeName } from './theme'
-import { applyFontFamily, DEFAULT_FONT_FAMILY, isFontFamily, type FontFamily } from './theme/fonts'
+import {
+  applyFontFamily,
+  applyNoteFontFamily,
+  DEFAULT_FONT_FAMILY,
+  DEFAULT_NOTE_FONT_FAMILY,
+  isFontFamily,
+  type FontFamily,
+} from './theme/fonts'
 import { useOptionalSession } from './hooks/useSession'
 
 // ─── Defaults (authoritative on the frontend too, so first paint has real values) ───
@@ -31,6 +38,7 @@ const DEFAULT_HOTKEYS: Record<string, string> = {
   editorInsertTodo: 'meta+t',
   editorIndent: 'tab',
   editorUnindent: 'shift+tab',
+  toggleNoteEnlarge: 'meta+shift+e',
 }
 
 export type HotkeyBindings = typeof DEFAULT_HOTKEYS
@@ -104,6 +112,7 @@ function buildInitial(): UserSettings {
     theme_variant: cache.theme_variant ?? DEFAULT_THEME,
     font_size: cache.font_size ?? getInitialFontSize(),
     font_family: isFontFamily(cache.font_family) ? cache.font_family : DEFAULT_FONT_FAMILY,
+    note_font_family: isFontFamily(cache.note_font_family) ? cache.note_font_family : DEFAULT_NOTE_FONT_FAMILY,
     meeting_note_sort: cache.meeting_note_sort ?? 'updated_at',
     todo_defaults: {
       assignee_name: '',
@@ -124,6 +133,7 @@ const initial = buildInitial()
 document.documentElement.classList.toggle('dark', initial.theme === 'dark')
 applyFontSize(initial.font_size)
 applyFontFamily(initial.font_family as FontFamily)
+applyNoteFontFamily(initial.note_font_family as FontFamily)
 applyTheme((initial.theme_variant in THEMES ? initial.theme_variant : DEFAULT_THEME) as ThemeName)
 
 // ─── Hotkey helpers ─────────────────────────────────────────────────────────
@@ -206,6 +216,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
             ? server.font_size
             : 'md',
           font_family: isFontFamily(server.font_family) ? server.font_family : DEFAULT_FONT_FAMILY,
+          note_font_family: isFontFamily(server.note_font_family) ? server.note_font_family : DEFAULT_NOTE_FONT_FAMILY,
           hotkeys: { ...DEFAULT_HOTKEYS, ...(server.hotkeys ?? {}) },
           nav_order: server.nav_order ?? [],
           nav_hidden: server.nav_hidden ?? [],
@@ -230,6 +241,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     document.documentElement.classList.toggle('dark', settings.theme === 'dark')
     applyFontSize(settings.font_size)
     applyFontFamily(settings.font_family as FontFamily)
+    applyNoteFontFamily(settings.note_font_family as FontFamily)
     applyTheme((settings.theme_variant in THEMES ? settings.theme_variant : DEFAULT_THEME) as ThemeName)
   }, [settings])
 
@@ -343,6 +355,13 @@ export function useFontFamily() {
   const { settings, patch } = useSettings()
   const family = isFontFamily(settings.font_family) ? settings.font_family : DEFAULT_FONT_FAMILY
   const setFamily = useCallback((next: FontFamily) => patch({ font_family: next }), [patch])
+  return { family, setFamily }
+}
+
+export function useNoteFontFamily() {
+  const { settings, patch } = useSettings()
+  const family = isFontFamily(settings.note_font_family) ? settings.note_font_family : DEFAULT_NOTE_FONT_FAMILY
+  const setFamily = useCallback((next: FontFamily) => patch({ note_font_family: next }), [patch])
   return { family, setFamily }
 }
 
