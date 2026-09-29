@@ -611,7 +611,9 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
  {sorted.map((s, idx) => (
  <li key={s.id}>
  <div
- className={`flex items-center gap-2 rounded px-1 -mx-1 py-1 ${subDragId === s.id ? 'opacity-40' : ''}`}
+ className={`flex items-center gap-2 rounded-md px-1.5 -mx-1.5 py-1 transition-colors ${
+ editingSubId === s.id ? 'bg-accent/[0.07] ring-1 ring-inset ring-accent/25' : ''
+ } ${subDragId === s.id ? 'opacity-40' : ''}`}
  >
  <span
  draggable
@@ -652,7 +654,7 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
  }
  if (e.key === 'Escape') setEditingSubId(null)
  }}
- className="flex-1 min-w-0 block p-0 text-sm leading-5 max-md:text-base max-md:leading-6 text-fg bg-transparent resize-none overflow-hidden focus:outline-none shadow-[inset_0_-1.5px_0_rgb(var(--accent))]"
+ className="flex-1 min-w-0 block p-0 text-sm leading-5 max-md:text-base max-md:leading-6 text-fg bg-transparent resize-none overflow-hidden focus:outline-none caret-accent"
  />
  ) : (
  <span
