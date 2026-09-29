@@ -109,6 +109,13 @@ const autoOpenSelect = (el: HTMLSelectElement | null) => {
  }
 }
 
+/** Size a textarea to its content (used for the in-place sub-task editor). */
+function fitToContent(el: HTMLTextAreaElement | null) {
+ if (!el) return
+ el.style.height = 'auto'
+ el.style.height = `${el.scrollHeight}px`
+}
+
 export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraActions, isSelected, onToggleSelect, forceCollapseSignal = 0 }: TodoCardProps & { forceCollapseSignal?: number }) {
  const { timezone } = useTimezone()
  const [expanded, setExpanded] = useState(false)
@@ -626,6 +633,11 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
  {editingSubId === s.id ? (
  <textarea
  autoFocus
+ // One line tall, growing only as the title wraps, so editing doesn't add a blank line.
+ // Phones show 16px in both states: the iOS zoom guard (index.css) forces it on text fields.
+ rows={1}
+ ref={fitToContent}
+ onInput={(e) => fitToContent(e.currentTarget)}
  value={editingSubTitle}
  onChange={(e) => setEditingSubTitle(e.target.value)}
  onBlur={() => {
@@ -640,13 +652,12 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
  }
  if (e.key === 'Escape') setEditingSubId(null)
  }}
- rows={2}
- className="flex-1 min-w-0 text-sm border-b-2 border-accent focus:outline-none bg-transparent resize-y"
+ className="flex-1 min-w-0 block p-0 text-sm leading-5 max-md:text-base max-md:leading-6 text-fg bg-transparent resize-none overflow-hidden focus:outline-none shadow-[inset_0_-1.5px_0_rgb(var(--accent))]"
  />
  ) : (
  <span
  onClick={() => { setEditingSubId(s.id); setEditingSubTitle(s.title) }}
- className={`flex-1 min-w-0 text-sm cursor-pointer hover:text-accent transition-colors break-words ${s.done ? 'line-through text-fg-subtle' : 'text-fg'}`}
+ className={`flex-1 min-w-0 text-sm leading-5 max-md:text-base max-md:leading-6 cursor-pointer hover:text-accent transition-colors break-words ${s.done ? 'line-through text-fg-subtle' : 'text-fg'}`}
  >
  {s.title}
  </span>
