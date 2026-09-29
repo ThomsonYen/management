@@ -36,6 +36,8 @@ export interface NoteEditorProps {
   /** A hashtag was opened (⌘/Ctrl-click, or a plain click when read-only). */
   onTagClick?: (tag: string) => void
   autoFocus?: boolean
+  /** Smaller type for notes inside cards (todo descriptions). */
+  compact?: boolean
   className?: string
 }
 
@@ -316,6 +318,7 @@ export default function NoteEditor({
   placeholder = '',
   onTagClick,
   autoFocus = false,
+  compact = false,
   className = '',
 }: NoteEditorProps) {
   const hostRef = useRef<HTMLDivElement>(null)
@@ -331,7 +334,7 @@ export default function NoteEditor({
   const editableExt = (ro: boolean): Extension => [
     EditorState.readOnly.of(ro),
     EditorView.editable.of(!ro),
-    EditorView.editorAttributes.of({ class: ro ? 'cm-note cm-readonly' : 'cm-note' }),
+    EditorView.editorAttributes.of({ class: `cm-note${ro ? ' cm-readonly' : ''}${compact ? ' cm-note-compact' : ''}` }),
   ]
 
   useEffect(() => {

@@ -2,7 +2,7 @@ import { AlarmClock, ArrowUpRight, Calendar, ChevronDown, ChevronUp, Folder, Gri
 import { useState, useEffect, useRef } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import ReactMarkdown from 'react-markdown'
+import DescriptionEditor from './DescriptionEditor'
 import { createTodo, createSubTodo, deleteTodo, restoreTodo, updateSubTodo, updateTodo, fetchPersons, fetchProjects, fetchTodos } from '../api'
 import { useToast } from '../ToastContext'
 import { useUnfocusWithUndo } from '../hooks/useUnfocusWithUndo'
@@ -262,6 +262,8 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
 
  const handleCardMouseDown = (e: React.MouseEvent) => {
  dragStartPos.current = { x: e.clientX, y: e.clientY }
+ // A press inside the description editor selects text, not drags the card.
+ e.currentTarget.setAttribute('draggable', (e.target as HTMLElement).closest('.cm-editor') ? 'false' : 'true')
  }
 
  const handleCardClick = (e: React.MouseEvent) => {
@@ -287,7 +289,7 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
  }}
  onMouseDown={handleCardMouseDown}
  onClick={handleCardClick}
- className={`bg-surface rounded-xl shadow-sm border overflow-hidden cursor-grab active:cursor-grabbing transition-shadow duration-200 hover:shadow-md ${isSelected ? 'border-accent ring-2 ring-accent/40 dark:ring-accent' : 'border-border'}`}
+ className={`bg-surface rounded-xl shadow-sm border overflow-hidden transition-shadow duration-200 hover:shadow-md ${isSelected ? 'border-accent ring-2 ring-accent/40 dark:ring-accent' : 'border-border'}`}
  >
  {/* Header */}
  <div className="px-4 py-3 md:px-5 md:py-4">
@@ -537,43 +539,10 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
  <p className="text-xs font-semibold text-fg-muted uppercase tracking-wide mb-1">
  Description
  </p>
- {editingField === 'description' ? (
- <div className="flex gap-3">
- <textarea
- autoFocus
- value={editValue}
- onChange={(e) => setEditValue(e.target.value)}
- onBlur={() => saveField('description', editValue || null)}
- onKeyDown={(e) => {
- if (e.key === 'Escape') setEditingField(null)
- }}
- onClick={(e) => e.stopPropagation()}
- rows={3}
- className="flex-1 min-w-0 text-sm text-fg bg-transparent border border-accent-2 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-accent resize-y font-mono"
+ <DescriptionEditor
+ value={todo.description}
+ onSave={(d) => updateMutation.mutate({ description: d } as Parameters<typeof updateTodo>[1])}
  />
- {editValue && (
- <div className="flex-1 min-w-0 overflow-y-auto max-h-[200px] px-2 py-1.5 border border-border rounded-lg">
- <div className="prose prose-sm dark:prose-invert max-w-none text-fg">
- <ReactMarkdown>{editValue}</ReactMarkdown>
- </div>
- </div>
- )}
- </div>
- ) : (
- <div
- onClick={(e) => startEdit(e, 'description', todo.description || '')}
- title="Click to edit description"
- className="cursor-pointer hover:text-accent transition-colors min-h-[1.25rem]"
- >
- {todo.description ? (
- <div className="prose prose-sm dark:prose-invert max-w-none text-fg">
- <ReactMarkdown>{todo.description}</ReactMarkdown>
- </div>
- ) : (
- <em className="text-sm text-fg-faint dark:text-fg-muted not-italic">+ Add a description...</em>
- )}
- </div>
- )}
  </div>
 
  <div>

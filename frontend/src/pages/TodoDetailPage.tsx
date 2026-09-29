@@ -22,6 +22,7 @@ import { pickableProjects, projectOptionLabel } from '../utils/projects'
 import DatePicker from '../components/DatePicker'
 import TodoModal from '../components/TodoModal'
 import { BlockerTreeNode, BlockingTreeNode } from '../components/BlockerTree'
+import DescriptionEditor from '../components/DescriptionEditor'
 import { useTimezone, useHotkeys } from '../SettingsContext'
 import { isOverdue as checkOverdue } from '../dateUtils'
 import { useHotkey } from '../hooks/useHotkey'
@@ -587,28 +588,10 @@ export default function TodoDetailPage() {
  <p className="text-xs font-semibold text-fg-muted uppercase tracking-wide mb-2">
  Description
  </p>
- {editingField === 'description' ? (
- <textarea
- autoFocus
- value={editValue}
- onChange={(e) => setEditValue(e.target.value)}
- onBlur={() => saveField('description', editValue || null)}
- onKeyDown={(e) => {
- if (e.key === 'Escape') setEditingField(null)
- }}
- onClick={(e) => e.stopPropagation()}
- rows={4}
- className="text-sm text-fg w-full bg-transparent border border-accent-2 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-accent resize-none leading-relaxed"
+ <DescriptionEditor
+ value={todo.description}
+ onSave={(d) => updateMutation.mutate({ description: d } as Parameters<typeof updateTodo>[1])}
  />
- ) : (
- <p
- onClick={(e) => startEdit(e, 'description', todo.description || '')}
- title="Click to edit description"
- className="text-sm text-fg whitespace-pre-wrap leading-relaxed cursor-pointer hover:text-accent transition-colors min-h-[1.5rem]"
- >
- {todo.description || <em className="text-fg-faint dark:text-fg-muted not-italic">+ Add a description...</em>}
- </p>
- )}
  </div>
 
  <div className="mt-4 flex items-center justify-between text-xs text-fg-subtle">

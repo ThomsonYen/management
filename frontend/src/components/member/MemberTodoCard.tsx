@@ -1,7 +1,7 @@
 import { CalendarDays, Folder, Timer, User } from 'lucide-react'
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import ReactMarkdown from 'react-markdown'
+import DescriptionEditor from '../DescriptionEditor'
 import { updateTodo } from '../../api'
 import type { Project, Todo } from '../../types'
 import { useTimezone } from '../../SettingsContext'
@@ -217,44 +217,12 @@ export default function MemberTodoCard({ todo, editable, showAssignee, expanded,
         <div className="border-t border-border-subtle px-4 py-4 space-y-4" onClick={(e) => e.stopPropagation()}>
           <div>
             <p className="text-xs font-semibold text-fg-muted uppercase tracking-wide mb-1">Description</p>
-            {editingField === 'description' ? (
-              <div className="flex flex-col md:flex-row gap-3">
-                <textarea
-                  autoFocus
-                  value={editValue}
-                  onChange={(e) => setEditValue(e.target.value)}
-                  onBlur={() => saveField('description', editValue || null)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Escape') setEditingField(null)
-                  }}
-                  rows={4}
-                  className="flex-1 min-w-0 text-sm text-fg bg-transparent border border-accent-2 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-accent resize-y font-mono"
-                />
-                {editValue && (
-                  <div className="flex-1 min-w-0 overflow-y-auto max-h-[200px] px-2 py-1.5 border border-border rounded-lg">
-                    <div className="prose prose-sm dark:prose-invert max-w-none text-fg">
-                      <ReactMarkdown>{editValue}</ReactMarkdown>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div
-                onClick={(e) => startEdit(e, 'description', todo.description || '')}
-                title={editable ? 'Click to edit description' : undefined}
-                className={`min-h-[1.25rem] ${editable ? 'cursor-pointer hover:text-accent transition-colors' : ''}`}
-              >
-                {todo.description ? (
-                  <div className="prose prose-sm dark:prose-invert max-w-none text-fg">
-                    <ReactMarkdown>{todo.description}</ReactMarkdown>
-                  </div>
-                ) : (
-                  <em className="text-sm text-fg-faint dark:text-fg-muted not-italic">
-                    {editable ? '+ Add a description…' : 'No description'}
-                  </em>
-                )}
-              </div>
-            )}
+            <DescriptionEditor
+              value={todo.description}
+              onSave={(d) => updateMutation.mutate({ description: d } as Parameters<typeof updateTodo>[1])}
+              readOnly={!editable}
+              placeholder={editable ? 'Add a description…' : ''}
+            />
           </div>
 
           {editable && projects.length > 0 && (

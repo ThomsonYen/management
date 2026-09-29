@@ -85,41 +85,6 @@ input[type='radio'] {
   accent-color: rgb(var(--accent));
 }
 
-/* ─── Tailwind Typography (prose) override — map to design tokens ─── */
-.prose {
-  --tw-prose-body:         rgb(var(--fg-default));
-  --tw-prose-headings:     rgb(var(--fg-default));
-  --tw-prose-lead:         rgb(var(--fg-muted));
-  --tw-prose-links:        rgb(var(--accent));
-  --tw-prose-bold:         rgb(var(--fg-default));
-  --tw-prose-counters:     rgb(var(--fg-subtle));
-  --tw-prose-bullets:      rgb(var(--fg-faint));
-  --tw-prose-hr:           rgb(var(--border-default));
-  --tw-prose-quotes:       rgb(var(--fg-muted));
-  --tw-prose-quote-borders: rgb(var(--border-default));
-  --tw-prose-captions:     rgb(var(--fg-subtle));
-  --tw-prose-code:         rgb(var(--fg-default));
-  --tw-prose-pre-code:     rgb(var(--fg-default));
-  --tw-prose-pre-bg:       rgb(var(--bg-inset));
-  --tw-prose-th-borders:   rgb(var(--border-default));
-  --tw-prose-td-borders:   rgb(var(--border-subtle));
-  --tw-prose-invert-body:  rgb(var(--fg-default));
-  --tw-prose-invert-headings: rgb(var(--fg-default));
-  --tw-prose-invert-links: rgb(var(--accent));
-  --tw-prose-invert-bold:  rgb(var(--fg-default));
-  --tw-prose-invert-counters: rgb(var(--fg-subtle));
-  --tw-prose-invert-bullets:  rgb(var(--fg-faint));
-  --tw-prose-invert-hr:    rgb(var(--border-default));
-  --tw-prose-invert-quotes: rgb(var(--fg-muted));
-  --tw-prose-invert-quote-borders: rgb(var(--border-default));
-  --tw-prose-invert-captions: rgb(var(--fg-subtle));
-  --tw-prose-invert-code:  rgb(var(--fg-default));
-  --tw-prose-invert-pre-code: rgb(var(--fg-default));
-  --tw-prose-invert-pre-bg:   rgb(var(--bg-inset));
-  --tw-prose-invert-th-borders: rgb(var(--border-default));
-  --tw-prose-invert-td-borders: rgb(var(--border-subtle));
-}
-
 @keyframes fadeInOut {
   0% { opacity: 0; transform: translateY(-4px); }
   10% { opacity: 1; transform: translateY(0); }
@@ -162,6 +127,13 @@ html.dark {
 }
 @media (max-width: 767.98px) {
   .cm-note.cm-editor { font-size: max(17px, 1.0625rem); }
+}
+/* Notes inside cards (todo descriptions): a size closer to the card's text */
+.cm-note.cm-note-compact { font-size: 0.9375rem; }
+.cm-note.cm-note-compact .cm-scroller { line-height: 1.6; }
+.cm-note.cm-note-compact .cm-content { padding-bottom: 0; }
+@media (max-width: 767.98px) {
+  .cm-note.cm-note-compact { font-size: 16px; }
 }
 .cm-note.cm-editor.cm-focused { outline: none; }
 .cm-note .cm-scroller {

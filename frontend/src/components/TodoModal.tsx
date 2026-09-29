@@ -13,6 +13,7 @@ import {
 import type { Todo, SubTodo } from '../types'
 import { pickableProjects, projectOptionLabel } from '../utils/projects'
 import DatePicker from './DatePicker'
+import NoteEditor from './NoteEditor'
 import { useTodoDefaults, useTimezone, resolveAssigneeId } from '../SettingsContext'
 import { getTodayString } from '../dateUtils'
 
@@ -200,13 +201,15 @@ export default function TodoModal({ todo, onClose, invalidateKeys, defaultAssign
  <label className="block text-xs font-semibold text-fg-muted uppercase tracking-wide mb-1">
  Description
  </label>
- <textarea
- value={description}
- onChange={(e) => setDescription(e.target.value)}
- placeholder="Optional description..."
- rows={3}
- className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent resize-none"
- />
+ <div
+ onClick={(e) => {
+ // The whole box is the field: a click below the text focuses the editor.
+ if (e.target === e.currentTarget) (e.currentTarget.querySelector('.cm-content') as HTMLElement | null)?.focus()
+ }}
+ className="w-full border border-border rounded-lg px-3 py-2 min-h-[5rem] max-h-64 overflow-y-auto cursor-text focus-within:ring-2 focus-within:ring-accent focus-within:border-transparent"
+ >
+ <NoteEditor compact value={description} onChange={setDescription} placeholder="Optional description…" />
+ </div>
  </div>
 
  {/* Row: project + assignee */}
