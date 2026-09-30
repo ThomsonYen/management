@@ -40,10 +40,10 @@ export const notionWarm: ThemePreset = {
       info:          '30 64 175',
       infoBg:        '224 231 255',
 
-      prioCritical:  '190 18 60',
-      prioCriticalBg:'255 241 242',
-      prioHigh:      '202 138 4',
-      prioHighBg:    '254 249 195',
+      prioCritical:  '168 30 100',
+      prioCriticalBg:'253 240 247',
+      prioHigh:      '190 75 20',
+      prioHighBg:    '255 237 213',
 
       focusRing:     '217 119 6',
     },
@@ -81,10 +81,10 @@ export const notionWarm: ThemePreset = {
       info:          '129 140 248',
       infoBg:        '30 30 60',
 
-      prioCritical:  '251 113 133',
-      prioCriticalBg:'60 20 30',
-      prioHigh:      '250 204 21',
-      prioHighBg:    '58 44 8',
+      prioCritical:  '240 120 180',
+      prioCriticalBg:'58 20 42',
+      prioHigh:      '251 146 60',
+      prioHighBg:    '60 32 12',
 
       focusRing:     '251 191 36',
     },
