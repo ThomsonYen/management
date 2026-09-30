@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { Annotation, Compartment, EditorState, type Extension, type Range } from '@codemirror/state'
+import { Annotation, Compartment, EditorState, Prec, type Extension, type Range } from '@codemirror/state'
 import {
   Decoration,
   type DecorationSet,
@@ -17,6 +17,7 @@ import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import type { SyntaxNode } from '@lezer/common'
 import { useHotkeys, type HotkeyBindings } from '../SettingsContext'
 import { TAG_REGEX } from '../utils/markdownTags'
+import { continueLetterList, noteListExtension } from '../utils/markdownLists'
 
 /**
  * Bear-style Markdown editor for notes: the text is edited where it is shown.
@@ -122,7 +123,7 @@ const MARKER_EM = 1.5
 function listDepth(node: SyntaxNode): number {
   let depth = 0
   for (let p: SyntaxNode | null = node.parent; p; p = p.parent) {
-    if (p.name === 'BulletList' || p.name === 'OrderedList') depth++
+    if (p.name === 'BulletList' || p.name === 'OrderedList' || p.name === 'LetterList') depth++
   }
   return depth
 }
@@ -349,7 +350,8 @@ export default function NoteEditor({
           keymap.of([...defaultKeymap, ...historyKeymap]),
           indentUnit.of('  '),
           EditorState.tabSize.of(2),
-          markdown({ base: markdownLanguage }),
+          markdown({ base: markdownLanguage, extensions: noteListExtension }),
+          Prec.highest(keymap.of([{ key: 'Enter', run: continueLetterList }])),
           EditorView.lineWrapping,
           EditorView.contentAttributes.of({ spellcheck: 'true', autocapitalize: 'sentences' }),
           c.editable.of(editableExt(readOnly)),
