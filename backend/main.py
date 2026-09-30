@@ -4175,6 +4175,18 @@ def update_project(project_id: int, data: ProjectUpdate, db: Session = Depends(g
     payload = data.model_dump(exclude_none=True)
     if "importance" in payload and payload["importance"] not in PROJECT_IMPORTANCE_VALUES:
         raise HTTPException(400, f"importance must be one of {sorted(PROJECT_IMPORTANCE_VALUES)}")
+    # An explicit null parent_id moves the project to the top level.
+    if "parent_id" in data.model_fields_set and data.parent_id is None:
+        payload["parent_id"] = None
+    if payload.get("parent_id") is not None:
+        # Walk up from the new parent: reaching this project means it would sit under itself.
+        ancestor = db.query(Project).get(payload["parent_id"])
+        if ancestor is None:
+            raise HTTPException(422, "parent_id: project not found")
+        while ancestor is not None:
+            if ancestor.id == p.id:
+                raise HTTPException(422, "parent_id: a project cannot be moved under itself or its own subprojects")
+            ancestor = ancestor.parent
     for k, v in payload.items():
         setattr(p, k, v)
     if "parent_id" in payload:

@@ -61,6 +61,17 @@ html.dark {
   .peek-backdrop, .peek-panel { animation: none; }
 }
 
+/* Project tree drag: a row fills left to right while resting on it arms "move inside". */
+.project-arming {
+  background-image: linear-gradient(rgb(var(--accent-1)), rgb(var(--accent-1)));
+  background-repeat: no-repeat;
+  animation: project-arm var(--arm-ms) linear forwards;
+}
+@keyframes project-arm {
+  from { background-size: 0% 100%; }
+  to { background-size: 100% 100%; }
+}
+
 body {
   margin: 0;
   font-family: var(--font-sans, 'Inter', system-ui, sans-serif);

@@ -214,7 +214,7 @@ export const updateProject = (
     name?: string
     description?: string
     notes?: string
-    parent_id?: number
+    parent_id?: number | null
     deadline?: string
     importance?: string
     display_order?: number

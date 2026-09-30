@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useResizableSidebar } from '../hooks/useResizableSidebar'
 import { useHotkey } from '../hooks/useHotkey'
@@ -38,13 +38,54 @@ function pruneDeprecated(nodes: ProjectTree[]): ProjectTree[] {
  )
 }
 
+type DropPlace = 'before' | 'after' | 'into'
+interface ProjectDropAt { id: number; place: DropPlace }
+interface MoveVars { id: number; parentId: number | null; reparent: boolean; order: number[] }
+
+/** How long the cursor must rest on a row's middle before the "move inside" fill starts. */
+const ARM_DELAY_MS = 350
+/** How long the fill then takes before the dragged project drops inside. */
+const HOVER_INTO_MS = 600
+// Drop zones by the cursor's height within a row (0 = top, 1 = bottom). The
+// borders are sticky so a state never flickers while the cursor sits on one.
+/** Resting between these arms "move inside"; above or below always means between. */
+const ARM_ZONE = [0.35, 0.65]
+/** Once "move inside" shows, it holds until the cursor gets this close to an edge. */
+const INTO_KEEP_ZONE = [0.25, 0.75]
+/** The between line flips sides only after crossing the row's middle by this much. */
+const SIDE_FLIP_MARGIN = 0.1
+
+function nextDropAt(cur: ProjectDropAt | null, id: number, y: number): ProjectDropAt {
+ const same = cur?.id === id
+ if (same && cur.place === 'into' && y > INTO_KEEP_ZONE[0] && y < INTO_KEEP_ZONE[1]) return cur
+ const side: DropPlace =
+ same && cur.place === 'before' ? (y > 0.5 + SIDE_FLIP_MARGIN ? 'after' : 'before')
+ : same && cur.place === 'after' ? (y < 0.5 - SIDE_FLIP_MARGIN ? 'before' : 'after')
+ : y < 0.5 ? 'before' : 'after'
+ return same && cur.place === side ? cur : { id, place: side }
+}
+
+/** A project with its parent id and sibling list (including itself). */
+function locateProject(
+ nodes: ProjectTree[],
+ id: number,
+ parentId: number | null = null,
+): { node: ProjectTree; parentId: number | null; siblings: ProjectTree[] } | undefined {
+ for (const n of nodes) {
+ if (n.id === id) return { node: n, parentId, siblings: nodes }
+ const hit = locateProject(n.subprojects, id, n.id)
+ if (hit) return hit
+ }
+}
+
 function ProjectNode({
  node,
- siblings,
  depth,
+ insideDragged = false,
  selectedId,
  dragProjectId,
- dragOverProjectId,
+ dropAt,
+ armingId,
  onSelect,
  onAddSub,
  onCycleImportance,
@@ -55,18 +96,21 @@ function ProjectNode({
  onDragEnd,
 }: {
  node: ProjectTree
- siblings: ProjectTree[]
  depth: number
+ /** This row is the dragged project's own subproject, so it can't take the drop. */
+ insideDragged?: boolean
  selectedId: number | null
  dragProjectId: number | null
- dragOverProjectId: number | null
+ dropAt: ProjectDropAt | null
+ /** The row the cursor is resting on, counting down to "move inside". */
+ armingId: number | null
  onSelect: (id: number) => void
  onAddSub: (parentId: number) => void
  onCycleImportance: (node: ProjectTree) => void
  onDragStart: (id: number) => void
- onDragOver: (id: number) => void
+ onDragOver: (id: number, y: number) => void
  onDragLeave: (id: number) => void
- onDrop: (fromId: number, beforeId: number, siblings: ProjectTree[]) => void
+ onDrop: (fromId: number, targetId: number, place: DropPlace) => void
  onDragEnd: () => void
 }) {
  const [open, setOpen] = useState(true)
@@ -94,15 +138,27 @@ function ProjectNode({
  }
  }
 
- const isSameLevelDrag =
- dragProjectId !== null &&
- dragProjectId !== node.id &&
- siblings.some((s) => s.id === dragProjectId)
- const isDropTarget = isSameLevelDrag && dragOverProjectId === node.id
  const isDragSource = dragProjectId === node.id
+ // Any row outside the dragged project's own subtree takes the drop: between rows
+ // (at this row's level) by default, or inside it after hovering its middle.
+ const canDrop = dragProjectId !== null && !isDragSource && !insideDragged
+ const place = canDrop && dropAt?.id === node.id ? dropAt.place : null
+ // Where the dragged project would land: a line above this row, or below its
+ // whole subtree (it is inserted after the children, not between them).
+ const indicator = place === 'before' || place === 'after' ? place : null
+ const isIntoTarget = place === 'into'
+ const isArming = canDrop && armingId === node.id && !isIntoTarget
 
  return (
- <div>
+ <div className="relative">
+ {indicator && (
+ <div
+ className={`absolute right-2 h-0.5 rounded-full bg-accent pointer-events-none z-10 ${indicator === 'before' ? '-top-px' : '-bottom-px'}`}
+ style={{ left: `${8 + depth * 16}px` }}
+ >
+ <div className="absolute -left-1 -top-[3px] w-2 h-2 rounded-full border-2 border-accent bg-surface" />
+ </div>
+ )}
  <div
  draggable
  onDragStart={(e) => {
@@ -110,24 +166,33 @@ function ProjectNode({
  e.dataTransfer.effectAllowed = 'move'
  }}
  onDragOver={(e) => {
- if (!isSameLevelDrag) return
+ if (!canDrop) return
  e.preventDefault()
  e.dataTransfer.dropEffect = 'move'
- onDragOver(node.id)
+ const rect = e.currentTarget.getBoundingClientRect()
+ const y = (e.clientY - rect.top) / rect.height
+ onDragOver(node.id, y)
  }}
- onDragLeave={() => onDragLeave(node.id)}
+ onDragLeave={(e) => {
+ // Moving onto the row's own buttons isn't leaving it.
+ if (!e.currentTarget.contains(e.relatedTarget as Node)) onDragLeave(node.id)
+ }}
  onDrop={(e) => {
- if (!isSameLevelDrag) return
+ if (!canDrop) return
  e.preventDefault()
- onDrop(dragProjectId!, node.id, siblings)
+ const at = place ?? 'before'
+ if (at === 'into') setOpen(true)
+ onDrop(dragProjectId!, node.id, at)
  }}
  onDragEnd={onDragEnd}
- className={`flex items-center gap-1.5 group cursor-pointer rounded-lg px-2 py-1.5 text-base transition-colors ${
- selectedId === node.id
+ className={`relative flex items-center gap-1.5 group cursor-pointer rounded-lg px-2 py-1.5 text-base transition-colors ${
+ isIntoTarget
+ ? `bg-accent-1 text-accent-fg ring-2 ring-inset ring-accent ${selectedId === node.id ? 'font-semibold' : ''}`
+ : selectedId === node.id
  ? 'bg-accent-2 text-accent-fg dark:bg-accent-1 dark:text-accent-fg font-semibold'
  : 'text-fg hover:bg-inset dark:hover:bg-elevated'
- } ${isDropTarget ? 'outline outline-2 outline-accent' : ''} ${isDragSource ? 'opacity-40' : ''}`}
- style={{ paddingLeft: `${8 + depth * 16}px` }}
+ } ${isDragSource || insideDragged ? 'opacity-40' : ''} ${isArming ? 'project-arming' : ''}`}
+ style={{ paddingLeft: `${8 + depth * 16}px`, ['--arm-ms' as string]: `${HOVER_INTO_MS}ms` }}
  onClick={() => onSelect(node.id)}
  >
  <button
@@ -173,6 +238,12 @@ function ProjectNode({
  {node.name}
  </span>
  )}
+ {isIntoTarget && (
+ // Laid over the row so it never takes space and makes the name wrap.
+ <span className="absolute right-2 top-1/2 -translate-y-1/2 rounded bg-accent-1 pl-2 text-xs font-medium pointer-events-none">
+ Move inside
+ </span>
+ )}
  <button
  onClick={(e) => {
  e.stopPropagation()
@@ -192,11 +263,12 @@ function ProjectNode({
  <ProjectNode
  key={sp.id}
  node={sp}
- siblings={node.subprojects}
  depth={depth + 1}
+ insideDragged={insideDragged || isDragSource}
  selectedId={selectedId}
  dragProjectId={dragProjectId}
- dragOverProjectId={dragOverProjectId}
+ dropAt={dropAt}
+ armingId={armingId}
  onSelect={onSelect}
  onAddSub={onAddSub}
  onCycleImportance={onCycleImportance}
@@ -356,7 +428,19 @@ export default function ProjectsPage({ onOpenTodo }: { onOpenTodo: (id: number) 
  const [editingTodo, setEditingTodo] = useState<Todo | null>(null)
  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
  const [dragProjectId, setDragProjectId] = useState<number | null>(null)
- const [dragOverProjectId, setDragOverProjectId] = useState<number | null>(null)
+ const [dropAt, setDropAt] = useState<ProjectDropAt | null>(null)
+ const hoverTimer = useRef<{ id: number; timer: number } | null>(null)
+ const [armingId, setArmingId] = useState<number | null>(null)
+ const clearHover = () => {
+ if (hoverTimer.current) window.clearTimeout(hoverTimer.current.timer)
+ hoverTimer.current = null
+ setArmingId(null)
+ }
+ const endDrag = () => {
+ clearHover()
+ setDragProjectId(null)
+ setDropAt(null)
+ }
 
  const toggleSelect = (id: number) => {
  setSelectedIds((prev) => {
@@ -460,57 +544,74 @@ export default function ProjectsPage({ onOpenTodo }: { onOpenTodo: (id: number) 
  },
  })
 
- const reorderMutation = useMutation({
- mutationFn: reorderProjects,
+ // One move covers reorder, move inside and move between levels: set the new
+ // parent if it changed, then save the full order of the new sibling list.
+ const moveMutation = useMutation({
+ mutationFn: async ({ id, parentId, reparent, order }: MoveVars) => {
+ if (reparent) await updateProject(id, { parent_id: parentId })
+ await reorderProjects(order.map((pid, i) => ({ id: pid, display_order: i + 1 })))
+ },
+ onMutate: async ({ id, parentId, order }) => {
+ await queryClient.cancelQueries({ queryKey: ['projects-tree'] })
+ const prevTree = queryClient.getQueryData<ProjectTree[]>(['projects-tree'])
+ let moved: ProjectTree | undefined
+ const detach = (nodes: ProjectTree[]): ProjectTree[] =>
+ nodes.flatMap((n) => {
+ if (n.id === id) { moved = n; return [] }
+ return [{ ...n, subprojects: detach(n.subprojects) }]
+ })
+ const rank = new Map(order.map((pid, i) => [pid, i + 1]))
+ const withMoved = (nodes: ProjectTree[]): ProjectTree[] =>
+ [...nodes, { ...moved!, parent_id: parentId }]
+ .map((n) => ({ ...n, display_order: rank.get(n.id) ?? n.display_order }))
+ .sort((a, b) => (a.display_order - b.display_order) || (a.id - b.id))
+ const attach = (nodes: ProjectTree[]): ProjectTree[] =>
+ nodes.map((n) => ({
+ ...n,
+ subprojects: n.id === parentId ? withMoved(attach(n.subprojects)) : attach(n.subprojects),
+ }))
+ queryClient.setQueryData<ProjectTree[]>(['projects-tree'], (old) => {
+ if (!old) return old
+ const rest = detach(old)
+ if (!moved) return old
+ return parentId == null ? withMoved(attach(rest)) : attach(rest)
+ })
+ return { prevTree }
+ },
+ onSuccess: (_data, { id, parentId, reparent }) => {
+ if (!reparent) return
+ const name = projects.find((p) => p.id === id)?.name ?? 'Project'
+ const parent = projects.find((p) => p.id === parentId)
+ showToast({ message: parent ? `Moved "${name}" into "${parent.name}"` : `Moved "${name}" to the top level` })
+ },
+ onError: (err: any, _vars, ctx) => {
+ if (ctx?.prevTree) queryClient.setQueryData(['projects-tree'], ctx.prevTree)
+ showToast({ message: err?.response?.data?.detail ?? 'Could not move the project', tone: 'danger' })
+ },
  onSettled: () => {
  queryClient.invalidateQueries({ queryKey: ['projects'] })
  queryClient.invalidateQueries({ queryKey: ['projects-tree'] })
  },
  })
 
+ const moveProject = (fromId: number, targetId: number, place: DropPlace) => {
+ if (fromId === targetId) return
+ const target = locateProject(tree, targetId)
+ const from = locateProject(tree, fromId)
+ if (!target || !from) return
+ const parentId = place === 'into' ? targetId : target.parentId
+ const list = (place === 'into' ? target.node.subprojects : target.siblings)
+ .map((s) => s.id)
+ .filter((sid) => sid !== fromId)
+ list.splice(place === 'into' ? list.length : list.indexOf(targetId) + (place === 'after' ? 1 : 0), 0, fromId)
+ const reparent = parentId !== from.parentId
+ if (!reparent && list.every((sid, i) => sid === from.siblings[i]?.id)) return
+ moveMutation.mutate({ id: fromId, parentId, reparent, order: list })
+ }
+
  const cycleImportance = (node: ProjectTree) => {
  const next = IMPORTANCE_CYCLE[node.importance] ?? 'medium'
  importanceMutation.mutate({ id: node.id, importance: next })
- }
-
- const commitTreeReorder = (
- fromId: number,
- beforeId: number,
- siblings: ProjectTree[],
- ) => {
- if (fromId === beforeId) return
- const list = [...siblings]
- const fromIdx = list.findIndex((s) => s.id === fromId)
- const toIdx = list.findIndex((s) => s.id === beforeId)
- if (fromIdx === -1 || toIdx === -1) return
- const [moved] = list.splice(fromIdx, 1)
- const insertAt = fromIdx < toIdx ? toIdx - 1 : toIdx
- list.splice(insertAt, 0, moved)
- const payload = list.map((s, i) => ({ id: s.id, display_order: i + 1 }))
- // Optimistic update on tree (only this siblings level changes)
- const orderMap = new Map(payload.map((p) => [p.id, p.display_order]))
- const patchTree = (nodes: ProjectTree[]): ProjectTree[] => {
- // Within this list of siblings (which share a parent), if any of them is in orderMap,
- // resort the whole group.
- const updated = nodes.map((n) => ({
- ...n,
- display_order: orderMap.get(n.id) ?? n.display_order,
- subprojects: patchTree(n.subprojects),
- }))
- const involved = updated.some((n) => orderMap.has(n.id))
- return involved
- ? [...updated].sort((a, b) => (a.display_order - b.display_order) || (a.id - b.id))
- : updated
- }
- queryClient.setQueryData<ProjectTree[]>(['projects-tree'], (old) =>
- old ? patchTree(old) : old,
- )
- queryClient.setQueryData<Project[]>(['projects'], (old) =>
- old?.map((p) =>
- orderMap.has(p.id) ? { ...p, display_order: orderMap.get(p.id)! } : p,
- ),
- )
- reorderMutation.mutate(payload)
  }
 
  const commitDetailRename = () => {
@@ -536,22 +637,45 @@ export default function ProjectsPage({ onOpenTodo }: { onOpenTodo: (id: number) 
  depth: 0,
  selectedId: selectedProjectId,
  dragProjectId,
- dragOverProjectId,
+ dropAt,
+ armingId,
  onSelect: setSelectedProjectId,
  onAddSub: handleAddSub,
  onCycleImportance: cycleImportance,
  onDragStart: (id: number) => setDragProjectId(id),
- onDragOver: (id: number) => setDragOverProjectId(id),
- onDragLeave: (id: number) => setDragOverProjectId((cur) => (cur === id ? null : cur)),
- onDrop: (fromId: number, beforeId: number, siblings: ProjectTree[]) => {
- commitTreeReorder(fromId, beforeId, siblings)
- setDragProjectId(null)
- setDragOverProjectId(null)
+ onDragOver: (id: number, y: number) => {
+ // Resting in a row's middle arms "move inside"; the edges always mean between.
+ const inArmZone = y > ARM_ZONE[0] && y < ARM_ZONE[1]
+ if (!inArmZone) {
+ if (hoverTimer.current) clearHover()
+ } else if (hoverTimer.current?.id !== id) {
+ // Rest first, then fill, then drop inside; passing through shows nothing.
+ clearHover()
+ hoverTimer.current = {
+ id,
+ timer: window.setTimeout(() => {
+ setArmingId(id)
+ hoverTimer.current = {
+ id,
+ timer: window.setTimeout(() => {
+ setArmingId(null)
+ setDropAt({ id, place: 'into' })
+ }, HOVER_INTO_MS),
+ }
+ }, ARM_DELAY_MS),
+ }
+ }
+ setDropAt((cur) => nextDropAt(cur, id, y))
  },
- onDragEnd: () => {
- setDragProjectId(null)
- setDragOverProjectId(null)
+ onDragLeave: (id: number) => {
+ if (hoverTimer.current?.id === id) clearHover()
+ setDropAt((cur) => (cur?.id === id ? null : cur))
  },
+ onDrop: (fromId: number, targetId: number, place: DropPlace) => {
+ moveProject(fromId, targetId, place)
+ endDrag()
+ },
+ onDragEnd: endDrag,
  }
 
  const todoQueryKeys: unknown[][] = selectedProjectId
@@ -593,7 +717,7 @@ export default function ProjectsPage({ onOpenTodo }: { onOpenTodo: (id: number) 
  <p className="px-4 py-3 text-xs text-fg-subtle">No projects yet</p>
  ) : (
  activeTree.map((node) => (
- <ProjectNode key={node.id} node={node} siblings={activeTree} {...nodeProps} />
+ <ProjectNode key={node.id} node={node} {...nodeProps} />
  ))
  )}
  </div>

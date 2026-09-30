@@ -53,7 +53,7 @@ export default function RecentlyDeletedPage() {
  })
  const deprecated = useMemo(() => {
  const byId = new Map(allProjects.map((p) => [p.id, p]))
- const isDeprecated = (id: number | undefined) => id != null && !!byId.get(id)?.deprecated_at
+ const isDeprecated = (id: number | null | undefined) => id != null && !!byId.get(id)?.deprecated_at
  const subCount = (id: number): number =>
  allProjects.filter((c) => c.parent_id === id).reduce((n, c) => n + 1 + subCount(c.id), 0)
  return allProjects

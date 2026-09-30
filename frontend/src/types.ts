@@ -18,7 +18,7 @@ export interface Project {
   name: string
   description?: string
   notes?: string
-  parent_id?: number
+  parent_id?: number | null
   deadline?: string
   deleted_at?: string
   deprecated_at?: string | null
