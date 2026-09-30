@@ -15,18 +15,7 @@ import TodoModal from '../components/TodoModal'
 import BulkActionBar from '../components/BulkActionBar'
 import { useTodoDefaults, useTimezone, useHotkeys, resolveAssigneeId } from '../SettingsContext'
 import { getTodayString } from '../dateUtils'
-
-const IMPORTANCE_CYCLE: Record<string, string> = {
- low: 'medium',
- medium: 'high',
- high: 'low',
-}
-
-const IMPORTANCE_DOT: Record<string, string> = {
- low: 'bg-border dark:bg-inset',
- medium: 'bg-info',
- high: 'bg-prio-high',
-}
+import { PROJECT_IMPORTANCE_CYCLE, PROJECT_IMPORTANCE_DOT, PROJECT_IMPORTANCE_TEXT } from '../utils/projects'
 
 /**
  * The tree without deprecated projects; those are listed on Recently Deleted.
@@ -209,7 +198,7 @@ function ProjectNode({
  onCycleImportance(node)
  }}
  title={`Importance: ${node.importance} (click to cycle)`}
- className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${IMPORTANCE_DOT[node.importance] ?? IMPORTANCE_DOT.medium}`}
+ className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${PROJECT_IMPORTANCE_DOT[node.importance] ?? PROJECT_IMPORTANCE_DOT.medium}`}
  draggable={false}
  onDragStart={(e) => e.preventDefault()}
  />
@@ -610,7 +599,7 @@ export default function ProjectsPage({ onOpenTodo }: { onOpenTodo: (id: number) 
  }
 
  const cycleImportance = (node: ProjectTree) => {
- const next = IMPORTANCE_CYCLE[node.importance] ?? 'medium'
+ const next = PROJECT_IMPORTANCE_CYCLE[node.importance] ?? 'medium'
  importanceMutation.mutate({ id: node.id, importance: next })
  }
 
@@ -763,19 +752,13 @@ export default function ProjectsPage({ onOpenTodo }: { onOpenTodo: (id: number) 
  <div className="flex items-center gap-2">
  <button
  onClick={() => {
- const next = IMPORTANCE_CYCLE[selectedProject.importance] ?? 'medium'
+ const next = PROJECT_IMPORTANCE_CYCLE[selectedProject.importance] ?? 'medium'
  importanceMutation.mutate({ id: selectedProject.id, importance: next })
  }}
  title={`Importance: ${selectedProject.importance} (click to cycle)`}
- className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-2xs font-semibold uppercase tracking-wide border border-border hover:bg-inset transition-colors ${
- selectedProject.importance === 'high'
- ? 'text-prio-high'
- : selectedProject.importance === 'medium'
- ? 'text-info'
- : 'text-fg-muted'
- }`}
+ className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-2xs font-semibold uppercase tracking-wide border border-border hover:bg-inset transition-colors ${PROJECT_IMPORTANCE_TEXT[selectedProject.importance] ?? PROJECT_IMPORTANCE_TEXT.medium}`}
  >
- <span className={`w-2 h-2 rounded-full ${IMPORTANCE_DOT[selectedProject.importance] ?? IMPORTANCE_DOT.medium}`} />
+ <span className={`w-2 h-2 rounded-full ${PROJECT_IMPORTANCE_DOT[selectedProject.importance] ?? PROJECT_IMPORTANCE_DOT.medium}`} />
  {selectedProject.importance}
  </button>
  {selectedProject.deprecated_at && (

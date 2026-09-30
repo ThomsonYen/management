@@ -14,3 +14,29 @@ export function pickableProjects<P extends Project>(projects: P[], keep: number 
 export function projectOptionLabel(p: Project): string {
   return p.deprecated_at ? `${p.name} (deprecated)` : p.name
 }
+
+/**
+ * Project importance tiers, lowest to highest. Colours follow the todo
+ * importance scale (badgeClasses.ts) so a critical project reads the same as
+ * a critical todo: low grey, medium blue, high amber, critical crimson.
+ */
+export const PROJECT_IMPORTANCE_CYCLE: Record<string, string> = {
+  low: 'medium',
+  medium: 'high',
+  high: 'critical',
+  critical: 'low',
+}
+
+export const PROJECT_IMPORTANCE_DOT: Record<string, string> = {
+  low: 'bg-border dark:bg-inset',
+  medium: 'bg-info',
+  high: 'bg-prio-high',
+  critical: 'bg-prio-critical',
+}
+
+export const PROJECT_IMPORTANCE_TEXT: Record<string, string> = {
+  low: 'text-fg-muted',
+  medium: 'text-info',
+  high: 'text-prio-high',
+  critical: 'text-prio-critical',
+}

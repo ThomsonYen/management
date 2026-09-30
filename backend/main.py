@@ -1128,7 +1128,7 @@ def _recompute_last_hangout(db: Session, friend_ids: List[int]) -> None:
         f.last_hangout_date = newest
 
 
-PROJECT_IMPORTANCE_VALUES = {"low", "medium", "high"}
+PROJECT_IMPORTANCE_VALUES = {"low", "medium", "high", "critical"}
 
 
 class ProjectCreate(BaseModel):

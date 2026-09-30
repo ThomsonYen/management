@@ -50,6 +50,7 @@ Tokens carry a subset of these scopes. A `403` with `required_scope` tells you w
 
 - Dates are `YYYY-MM-DD` strings; timestamps are ISO-8601 UTC. Use the local date of the device you run on as "today" (the user is in one timezone).
 - Todo `status` is `todo` or `done` (nothing else). `importance` is `low` | `medium` | `high` | `critical`.
+- Projects carry the same `importance` scale: `low` | `medium` | `high` | `critical` (critical sits above high).
 - Focus: a todo is "in focus" when `is_focused=true`; `focus_order` (ascending) is its rank. Moving focus = setting these on the affected todos, or one call to `PUT /todos/reorder-focus`.
 - Check-in ("ping"): each person may be a direct report with `check_in_interval_days` and `last_check_in_date`. A person is **overdue** when `today − last_check_in_date > check_in_interval_days` (or there is no date). Recording a check-in = `POST /persons/{id}/check-in`; the server keeps the date forward-only.
 - Tags: inline `#tag` / `#tag/sub` in a note body are indexed automatically. Tag segments must start with a letter and contain only letters, digits, `_` (no hyphens) — `#report/2026-w35` would index as just `report`. Reports: weekly `#report/weekly #report/w<yyyy>_<ww>` (e.g. `#report/w2026_35`); daily `#report/daily #report/d<yyyymmdd>`. The bundled `report daily|weekly` helper renders these from the digest.

@@ -10,23 +10,13 @@ import {
 } from '../api'
 import type { Person, Project } from '../types'
 import ProjectNotes from './ProjectNotes'
-
-const IMPORTANCE_CYCLE: Record<string, string> = {
- low: 'medium',
- medium: 'high',
- high: 'low',
-}
-
-const IMPORTANCE_DOT: Record<string, string> = {
- low: 'bg-border dark:bg-inset',
- medium: 'bg-info',
- high: 'bg-prio-high',
-}
+import { PROJECT_IMPORTANCE_CYCLE, PROJECT_IMPORTANCE_DOT } from '../utils/projects'
 
 const IMPORTANCE_RING: Record<string, string> = {
  low: '',
  medium: '',
  high: 'ring-1 ring-prio-high/25',
+ critical: 'ring-2 ring-prio-critical/40',
 }
 
 export default function PersonProjectBoard({
@@ -212,7 +202,7 @@ export default function PersonProjectBoard({
  }
 
  const cycleImportance = (proj: Project) => {
- const next = IMPORTANCE_CYCLE[proj.importance] ?? 'medium'
+ const next = PROJECT_IMPORTANCE_CYCLE[proj.importance] ?? 'medium'
  projectUpdate.mutate({ id: proj.id, patch: { importance: next } })
  }
 
@@ -463,7 +453,7 @@ function BoardColumn({
  onCycleImportance()
  }}
  title={`Importance: ${project.importance} (click to cycle)`}
- className={`w-2 h-2 rounded-full flex-shrink-0 mt-1.5 ${IMPORTANCE_DOT[project.importance] ?? IMPORTANCE_DOT.medium}`}
+ className={`w-2 h-2 rounded-full flex-shrink-0 mt-1.5 ${PROJECT_IMPORTANCE_DOT[project.importance] ?? PROJECT_IMPORTANCE_DOT.medium}`}
  draggable={false}
  onDragStart={(e) => e.preventDefault()}
  />
