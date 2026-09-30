@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { fetchTodos, fetchProjects, fetchPersons, updateTodo, createTodo, reorderFocus, fetchMustDoItems, createMustDoItem, updateMustDoItem, convertMustDoItem, deleteMustDoItem } from '../api'
 import type { Todo, Project } from '../types'
 import type { MustDoItem } from '../api'
-import TodoCard from '../components/TodoCard'
+import TodoCard, { cardActionClass } from '../components/TodoCard'
 import TodoModal from '../components/TodoModal'
 import BulkActionBar from '../components/BulkActionBar'
 import HoursTodayCard from '../components/HoursTodayCard'
@@ -1174,14 +1174,14 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  forceCollapseSignal={highlightedTodoId === t.id ? collapseSignal : 0}
  extraActions={
  <>
- <span className="md:hidden flex items-center">
+ <span className="md:hidden flex items-center gap-1.5">
  <button
  disabled={globalIndex === 0}
  onClick={(e) => {
  e.stopPropagation()
  moveFocusTodo(globalIndex, -1)
  }}
- className="p-1.5 rounded-lg text-fg-muted bg-inset border border-border disabled:opacity-30"
+ className={`${cardActionClass} w-7 text-fg-muted bg-inset border-border disabled:opacity-30`}
  title="Move up"
  >
  <ChevronUp size={14} />
@@ -1192,7 +1192,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  e.stopPropagation()
  moveFocusTodo(globalIndex, 1)
  }}
- className="ml-1 p-1.5 rounded-lg text-fg-muted bg-inset border border-border disabled:opacity-30"
+ className={`${cardActionClass} w-7 text-fg-muted bg-inset border-border disabled:opacity-30`}
  title="Move down"
  >
  <ChevronDown size={14} />
@@ -1201,7 +1201,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  <button
  onClick={() => unfocusWithUndo([t])}
  title="Remove from Focus"
- className="hidden md:flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium text-fg-muted bg-inset hover:bg-danger-bg hover:text-danger border border-border hover:border-danger/30 transition-colors"
+ className={`${cardActionClass} hidden md:inline-flex px-2.5 text-fg-muted bg-inset hover:bg-danger-bg hover:text-danger border-border hover:border-danger/30`}
  >
  <StarOff size={12} /><span className="hidden md:inline">Unfocus</span>
  </button>

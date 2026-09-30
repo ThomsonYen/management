@@ -1,4 +1,4 @@
-import { AlarmClock, ArrowUpRight, Calendar, ChevronDown, ChevronUp, Folder, GripVertical, Star, Timer, User } from 'lucide-react'
+import { AlarmClock, ArrowUpRight, Calendar, ChevronDown, ChevronUp, Folder, GripVertical, ListChecks, Star, Timer, User } from 'lucide-react'
 import { useState, useEffect, useRef } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
@@ -24,6 +24,12 @@ import {
 } from '../utils/optimisticTodo'
 
 const IMPORTANCE_OPTIONS = ['low', 'medium', 'high', 'critical']
+
+/** Shared shape of the buttons in a card's top-right corner (also used by the
+ *  Focus page's extra actions), so every button is the same height and the
+ *  icon-only ones are square; add `w-7` for icon-only, `px-2.5` for labelled. */
+export const cardActionClass =
+ 'inline-flex items-center justify-center gap-1 h-7 rounded-lg text-xs font-medium border transition-colors select-none shrink-0'
 
 const importanceBadge = importanceBadgeClass
 
@@ -413,7 +419,7 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
  <button
  onClick={onOpenDetail}
  title="Open (quick view)"
- className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium text-accent bg-accent-1 hover:bg-accent-2 border border-accent-2 transition-colors"
+ className={`${cardActionClass} w-7 md:w-auto md:px-2.5 text-accent bg-accent-1 hover:bg-accent-2 border-accent-2`}
  >
  <ArrowUpRight size={13} /><span className="hidden md:inline">Open</span>
  </button>
@@ -421,11 +427,9 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
  <button
  onClick={() => setExpanded((e) => !e)}
  title={expanded ? 'Collapse' : 'Expand'}
- className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium text-fg-muted bg-inset hover:bg-inset border border-border transition-colors select-none"
+ aria-expanded={expanded}
+ className={`${cardActionClass} w-7 text-fg-muted bg-inset hover:bg-border-subtle hover:text-fg border-border`}
  >
- {totalSubs > 0 && (
- <span className="text-fg-subtle">{doneSubs}/{totalSubs}</span>
- )}
  {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
  </button>
  </div>
@@ -527,20 +531,26 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
  <Timer size={12} className="shrink-0" /> {todo.estimated_hours}h
  </span>
  )}
- </div>
 
- {/* Sub-todo progress bar */}
+ {/* Sub-task progress; opens the card to show them */}
  {totalSubs > 0 && (
- <div
- className="mt-2 h-1.5 bg-inset rounded-full overflow-hidden cursor-pointer select-none"
+ <button
+ type="button"
  onClick={() => setExpanded((e) => !e)}
+ title={`${doneSubs} of ${totalSubs} sub-tasks done`}
+ className={`flex items-center gap-1.5 hover:text-accent transition-colors ${doneSubs === totalSubs ? 'text-success' : ''}`}
  >
- <div
- className="h-full bg-accent rounded-full transition-all"
+ <ListChecks size={12} className="shrink-0" />
+ <span className="tabular-nums">{doneSubs}/{totalSubs}</span>
+ <span className="w-10 h-1 rounded-full bg-inset overflow-hidden" aria-hidden>
+ <span
+ className={`block h-full rounded-full transition-[width] duration-300 ${doneSubs === totalSubs ? 'bg-success' : 'bg-accent'}`}
  style={{ width: `${(doneSubs / totalSubs) * 100}%` }}
  />
- </div>
+ </span>
+ </button>
  )}
+ </div>
  </div>
 
  {/* Expanded content */}
