@@ -778,6 +778,19 @@ with engine.connect() as _conn:
         "CREATE UNIQUE INDEX IF NOT EXISTS ux_users_person_id ON users(person_id) WHERE person_id IS NOT NULL"
     ))
     _conn.commit()
+    # Two notes must never share a file: purging one would delete the other's
+    # text. Skipped (not fatal) if an older build already left duplicates.
+    try:
+        _conn.execute(text(
+            "CREATE UNIQUE INDEX IF NOT EXISTS ux_notes_vault_path "
+            "ON notes(vault_id, relative_path) WHERE relative_path IS NOT NULL"
+        ))
+        _conn.commit()
+    except IntegrityError:
+        _conn.rollback()
+        logging.getLogger("management").warning(
+            "notes share a (vault_id, relative_path); ux_notes_vault_path not created"
+        )
 
 
 def get_db():
@@ -1629,34 +1642,106 @@ def _slugify_title_for_filename(title: str, max_len: int = 100) -> str:
     return t[:max_len].rstrip()
 
 
-def _resolve_unique_filename(
-    vault_root: Path,
-    directory: str,
-    stem: str,
-    current_rel_path: Optional[str],
-) -> str:
-    """Return a vault-relative path of the form `<directory>/<stem>.md` or
-    `<directory>/<stem>_N.md` that does not collide with an existing file.
+# Managed-vault note files are named `0042_3f9a1c2e_Weekly sync.md`: the note
+# id (unique per database, keeps files in creation order), the first 8 chars
+# of mgmt_id (unique across databases, so merged vaults or a rebuilt DB can't
+# clash) and the title (so the folder stays readable). Two notes can never want
+# the same name, whatever their titles. External vaults keep plain title names.
+_NOTE_FILE_PREFIX_RE = re.compile(r"^\d{4,}_[0-9A-Za-z]{1,8}_")
+_NOTE_FILE_STEM_MAX_BYTES = 200  # leaves room for `_N.md` under the 255-byte limit
 
-    The current note's own path is considered free, so renaming to the same
-    name is a no-op rather than appending `_1`.
-    """
-    def candidate(suffix: str) -> str:
-        name = f"{stem}{suffix}.md"
-        return str(Path(directory) / name) if directory else name
 
-    def is_free(rel: str) -> bool:
-        if current_rel_path and str(Path(rel)) == str(Path(current_rel_path)):
-            return True
-        return not (vault_root / rel).exists()
+def _note_file_stem(note: "Note") -> str:
+    """Filename stem (no `.md`) the note's file should have."""
+    slug = _slugify_title_for_filename(note.title)
+    if note.vault is not None and not note.vault.is_managed:
+        stem = slug or f"Untitled-{note.id}"
+    else:
+        mgmt = re.sub(r"[^0-9A-Za-z]", "", note.mgmt_id or "")[:8] or "0"
+        stem = f"{note.id:04d}_{mgmt}_{slug or 'Untitled'}"
+    while len(stem.encode("utf-8")) > _NOTE_FILE_STEM_MAX_BYTES:
+        stem = stem[:-1]
+    return stem.rstrip()
 
-    if is_free(candidate("")):
-        return candidate("")
-    for i in range(1, 10000):
-        c = candidate(f"_{i}")
-        if is_free(c):
-            return c
-    raise RuntimeError(f"Could not find a free filename for {stem!r}")
+
+def _title_from_note_filename(stem: str) -> str:
+    """Inverse of `_note_file_stem` for files found on disk: drop the id prefix."""
+    return _NOTE_FILE_PREFIX_RE.sub("", stem) or stem
+
+
+def _note_file_candidates(directory: str, stem: str):
+    """`<dir>/<stem>.md`, then `<stem>_1.md`, `<stem>_2.md`, ... as vault-relative paths.
+    The suffixes only matter when a file someone made by hand holds the name."""
+    for i in range(10000):
+        name = f"{stem}{'' if i == 0 else f'_{i}'}.md"
+        yield str(Path(directory) / name) if directory else name
+
+
+def _paths_taken_in_db(db: Session, note: "Note") -> set:
+    """Lower-cased vault-relative paths other notes in this vault point at,
+    including soft-deleted ones whose file is gone, so a new file never takes
+    a path another row still owns (purging that row would delete it)."""
+    rows = db.query(Note.relative_path).filter(
+        Note.vault_id == note.vault_id, Note.id != note.id, Note.relative_path.isnot(None)
+    )
+    return {r[0].lower() for r in rows}
+
+
+def _create_note_file(db: Session, note: "Note", content: str) -> str:
+    """Create the note's file and return its vault-relative path. Opens with
+    O_EXCL, so it never replaces an existing file even when two requests race."""
+    root = Path(note.vault.root_path)
+    taken = _paths_taken_in_db(db, note)
+    for rel in _note_file_candidates("", _note_file_stem(note)):
+        if rel.lower() in taken:
+            continue
+        full = root / rel
+        full.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            with open(full, "x", encoding="utf-8") as f:
+                f.write(content)
+        except FileExistsError:
+            continue
+        return rel
+    raise RuntimeError(f"Could not find a free filename for note {note.id}")
+
+
+def _rename_note_file(db: Session, note: "Note") -> str:
+    """Move the note's file to the name its title calls for, in the same folder,
+    and return the new vault-relative path. Never replaces another file: the
+    move is a hard link (fails if the target exists) followed by an unlink."""
+    root = Path(note.vault.root_path)
+    old_rel = note.relative_path
+    old_full = root / old_rel
+    directory = str(Path(old_rel).parent)
+    if directory == ".":
+        directory = ""
+    taken = _paths_taken_in_db(db, note)
+    for rel in _note_file_candidates(directory, _note_file_stem(note)):
+        if rel == old_rel:
+            return old_rel
+        if rel.lower() in taken:
+            continue
+        full = root / rel
+        if not old_full.exists():
+            if full.exists():
+                continue
+            return rel  # nothing on disk to move; just claim the name
+        if full.exists():
+            if os.path.samefile(full, old_full):
+                os.rename(old_full, full)  # case-only change on a case-insensitive FS
+                return rel
+            continue
+        try:
+            os.link(old_full, full)
+        except FileExistsError:
+            continue
+        except OSError:
+            os.rename(old_full, full)  # filesystem without hard links
+            return rel
+        old_full.unlink()
+        return rel
+    raise RuntimeError(f"Could not find a free filename for note {note.id}")
 
 
 def _update_note_frontmatter(note: "Note", patch: dict, remove_keys: Optional[set] = None) -> None:
@@ -1827,6 +1912,27 @@ def note_to_summary(n: Note, viewer: "Optional[Viewer]" = None, visible_project_
 # ─── App ─────────────────────────────────────────────────────────────────────
 
 log = logging.getLogger("management")
+
+
+def _rename_managed_note_files(db: Session, vault: "Vault") -> None:
+    """One-time, idempotent: give managed-vault files made before the
+    `0042_3f9a1c2e_Title.md` scheme their id-prefixed name. Notes whose file
+    already carries their own id prefix are left alone."""
+    if not Path(vault.root_path).is_dir():
+        return
+    for n in db.query(Note).filter(Note.vault_id == vault.id, Note.relative_path.isnot(None)).all():
+        if Path(n.relative_path).stem.startswith(f"{n.id:04d}_"):
+            continue
+        try:
+            new_rel = _rename_note_file(db, n)
+        except Exception:
+            log.exception("could not rename note file id=%s path=%s", n.id, n.relative_path)
+            continue
+        if new_rel != n.relative_path:
+            log.info("renamed note file %s -> %s", n.relative_path, new_rel)
+            n.relative_path = new_rel
+            n.filename = Path(new_rel).name
+            db.flush()  # later notes' collision checks read paths from the DB
 
 
 def _migrate_meeting_notes_to_unified_notes(db: Session) -> None:
@@ -2027,7 +2133,7 @@ def _scan_vault(db: Session, vault: Vault) -> dict:
         n = existing.get(mgmt_id)
         if n is None:
             n = Note(
-                title=path.stem,
+                title=_title_from_note_filename(path.stem),
                 filename=path.name,
                 vault_id=vault.id,
                 relative_path=rel_str,
@@ -2139,6 +2245,7 @@ async def lifespan(_app: FastAPI):
                     "this machine.",
                     v.name, v.id, v.root_path, n_affected,
                 )
+        _rename_managed_note_files(db, managed_vault)
         _backfill_meeting_notes_tag(db)
         _resync_all_note_tags(db)
         _backfill_person_check_ins(db)
@@ -5039,24 +5146,17 @@ def create_note(data: NoteCreate, request: Request, db: Session = Depends(get_db
         title=data.title,
         kind=data.kind,
         vault_id=vault.id,
-        filename=f"__placeholder_{uuid.uuid4().hex}__",
+        mgmt_id=str(uuid.uuid4()),
     )
     db.add(n)
     db.flush()
-    # Human-readable filename derived from the title, with collision fallback.
-    stem = _slugify_title_for_filename(data.title) or f"Untitled-{n.id}"
-    new_rel = _resolve_unique_filename(Path(vault.root_path), "", stem, None)
-    n.filename = Path(new_rel).name
-    n.relative_path = new_rel
-    n.mgmt_id = str(uuid.uuid4())
-
-    # Write file with mgmt_id frontmatter stamped.
-    path = _note_path(n)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        _serialize_with_frontmatter({"mgmt_id": n.mgmt_id}, body),
-        encoding="utf-8",
+    n.vault = vault
+    # Write file with mgmt_id frontmatter stamped, under a name no other note can hold.
+    n.relative_path = _create_note_file(
+        db, n, _serialize_with_frontmatter({"mgmt_id": n.mgmt_id}, body)
     )
+    n.filename = Path(n.relative_path).name
+    path = _note_path(n)
     st = path.stat()
     n.mtime = st.st_mtime
     n.size = st.st_size
@@ -5127,25 +5227,15 @@ def update_note(note_id: int, data: NoteUpdate, request: Request, db: Session = 
     # Preserves the current subdirectory; only the basename changes.
     if title_changed and n.vault and n.relative_path:
         _require_accessible_vault(n.vault)
-        stem = _slugify_title_for_filename(n.title)
-        if stem:
-            vault_root = Path(n.vault.root_path)
-            current_dir = str(Path(n.relative_path).parent)
-            if current_dir == ".":
-                current_dir = ""
-            new_rel = _resolve_unique_filename(vault_root, current_dir, stem, n.relative_path)
-            if new_rel != n.relative_path:
-                old_full = vault_root / n.relative_path
-                new_full = vault_root / new_rel
-                new_full.parent.mkdir(parents=True, exist_ok=True)
-                if old_full.exists():
-                    old_full.rename(new_full)
-                n.relative_path = new_rel
-                n.filename = Path(new_rel).name
-                if new_full.exists():
-                    st = new_full.stat()
-                    n.mtime = st.st_mtime
-                    n.size = st.st_size
+        new_rel = _rename_note_file(db, n)
+        if new_rel != n.relative_path:
+            n.relative_path = new_rel
+            n.filename = Path(new_rel).name
+            new_full = Path(n.vault.root_path) / new_rel
+            if new_full.exists():
+                st = new_full.stat()
+                n.mtime = st.st_mtime
+                n.size = st.st_size
 
     n.updated_at = datetime.now(timezone.utc).isoformat()
     db.commit()
