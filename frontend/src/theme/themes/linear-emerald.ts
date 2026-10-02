@@ -45,6 +45,10 @@ export const linearEmerald: ThemePreset = {
       prioHigh:      '194 65 12',
       prioHighBg:    '255 237 213',
 
+      wait:          '79 70 229',
+      waitBg:        '238 242 255',
+      waitBorder:    '199 210 254',
+
       focusRing:     '16 185 129',
     },
     dark: {
@@ -85,6 +89,10 @@ export const linearEmerald: ThemePreset = {
       prioCriticalBg:'60 18 40',
       prioHigh:      '251 146 60',
       prioHighBg:    '60 30 10',
+
+      wait:          '165 180 252',
+      waitBg:        '30 30 62',
+      waitBorder:    '55 55 105',
 
       focusRing:     '52 211 153',
     },

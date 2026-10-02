@@ -3,7 +3,8 @@ import { Navigate, NavLink, Route, Routes, useLocation, useNavigate } from 'reac
 import { Settings, ChevronsLeft, ChevronsRight, Square, Sun, Moon } from 'lucide-react'
 import SidebarBrand from './components/SidebarBrand'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { updateTodo, createNote } from './api'
+import { updateTodo, unfollowupTodo, createNote } from './api'
+import type { Todo } from './types'
 import { useResizableSidebar } from './hooks/useResizableSidebar'
 import { useHotkeys, useNavLayout, useTheme, useTimezone } from './SettingsContext'
 import { useHotkey } from './hooks/useHotkey'
@@ -113,7 +114,13 @@ function AppShell() {
   useHotkey(bindings.newPersonalNote, startNewPersonalNote)
 
   const focusMutation = useMutation({
-    mutationFn: (todoId: number) => updateTodo(todoId, { is_focused: true }),
+    // A follow-up dropped on Focus means the reply came in: make it a todo and focus it
+    mutationFn: (todoId: number) => {
+      const todo = queryClient.getQueriesData<Todo[]>({ queryKey: ['todos'] })
+        .flatMap(([, list]) => list ?? [])
+        .find((t) => t.id === todoId)
+      return todo?.is_followup ? unfollowupTodo(todoId, true) : updateTodo(todoId, { is_focused: true })
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['todos'] })
     },

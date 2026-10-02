@@ -5,6 +5,7 @@ import type { Person, Project, Todo } from '../types'
 import { pickableProjects } from '../utils/projects'
 import DatePicker from './DatePicker'
 import { buildTodoPatch } from '../utils/optimisticTodo'
+import { useFollowupActions } from '../hooks/useFollowupActions'
 
 interface BulkActionBarProps {
  selectedIds: Set<number>
@@ -49,6 +50,13 @@ export default function BulkActionBar({ selectedIds, onClearSelection, queryKeys
  queryClient.invalidateQueries({ queryKey: ['recently-done'] })
  },
  })
+
+ const { toFollowup, toTodo } = useFollowupActions()
+ const selectedTodos = () => {
+ const byId = new Map<number, Todo>()
+ queryClient.getQueriesData<Todo[]>({ queryKey: ['todos'] }).forEach(([, list]) => list?.forEach((t) => byId.set(t.id, t)))
+ return Array.from(selectedIds).map((id) => byId.get(id)).filter((t): t is Todo => !!t)
+ }
 
  const runBulk = (data: Record<string, unknown>) =>
  bulkUpdate.mutate({ ids: Array.from(selectedIds), data })
@@ -141,6 +149,21 @@ export default function BulkActionBar({ selectedIds, onClearSelection, queryKeys
  Set Deadline
  </button>
  )}
+
+ {/* Waiting on someone: follow-ups and back */}
+ <button
+ onClick={() => {
+ const todos = selectedTodos()
+ const anyTodo = todos.some((t) => !t.is_followup)
+ if (anyTodo) toFollowup(todos.filter((t) => !t.is_followup))
+ else toTodo(todos, false)
+ onClearSelection()
+ }}
+ className="text-sm bg-accent hover:bg-accent-hover px-3 py-1.5 rounded-lg font-medium transition-colors"
+ title="Waiting on someone: turn into follow-ups (or follow-ups back into todos)"
+ >
+ Follow up
+ </button>
 
  <div className="flex-1" />
 

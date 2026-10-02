@@ -2,9 +2,9 @@ import { useState } from 'react'
 import { alertCard } from '../theme/surfaces'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { fetchReminders, fetchRecentlyDone, fetchTodos, fetchPersons, fetchDueFriends, fetchPlans, updateTodo } from '../api'
+import { fetchReminders, fetchRecentlyDone, fetchTodos, fetchFollowups, fetchPersons, fetchDueFriends, fetchPlans, updateTodo } from '../api'
 import type { ScheduleStatus, Todo, Person, Friend, Hangout } from '../types'
-import { CheckCircle2, ExternalLink, ListTodo, ShieldAlert, Star, type LucideIcon } from 'lucide-react'
+import { ArrowRight, CheckCircle2, Hand, Send, ExternalLink, Hourglass, ListTodo, ShieldAlert, Star, type LucideIcon } from 'lucide-react'
 import { nudgeCopy } from '../socialCopy'
 import { BlockerTreeNode } from '../components/BlockerTree'
 import CheckInButton from '../components/CheckInButton'
@@ -21,6 +21,7 @@ import {
 } from '../utils/optimisticTodo'
 import { daysSinceDate, getTodayString } from '../dateUtils'
 import { useUnfocusWithUndo } from '../hooks/useUnfocusWithUndo'
+import { dayDiff, useFollowupActions } from '../hooks/useFollowupActions'
 
 const STATUS_OPTIONS = ['todo', 'done', 'blocked']
 
@@ -372,6 +373,83 @@ function StatCard({ label, value, tone, icon: Icon }: { label: string; value: nu
   )
 }
 
+/** Follow-ups due to chase, with the two answers you usually have: they
+ *  replied (back to a todo, onto Focus), or you chased them (check in 2 days). */
+function FollowupsSection({ onOpenTodo }: { onOpenTodo: (id: number) => void }) {
+ const navigate = useNavigate()
+ const { toTodo, checkBack } = useFollowupActions()
+ const { timezone } = useTimezone()
+ const { data: followups = [] } = useQuery<Todo[]>({
+ queryKey: ['todos', 'followups'],
+ queryFn: fetchFollowups,
+ })
+ const open = followups.filter((t) => t.is_followup && t.status !== 'done')
+ if (open.length === 0) return null
+ const due = open.filter((t) => t.check_back_due)
+ const rest = open.length - due.length
+ const today = getTodayString(timezone)
+
+ return (
+ <div className="mb-8">
+ <div className="flex items-center gap-3 mb-3">
+ <h3 className="text-lg font-semibold text-fg">Follow-ups</h3>
+ {due.length > 0 && (
+ <span className="bg-warning-bg text-warning text-xs font-bold px-2 py-0.5 rounded-full">
+ {due.length} to chase
+ </span>
+ )}
+ <span className="text-xs text-fg-subtle font-medium">{open.length} waiting</span>
+ </div>
+ {due.length === 0 ? (
+ <div className="rounded-lg border border-dashed border-wait-border bg-surface p-4 text-sm text-fg-muted flex items-center gap-2">
+ <Hourglass size={14} className="text-wait shrink-0" />
+ {open.length} follow-up{open.length === 1 ? '' : 's'} waiting, none to chase yet.
+ </div>
+ ) : (
+ <div className="space-y-2">
+ {due.map((t) => {
+ const late = t.check_back_on ? dayDiff(t.check_back_on, today) : 0
+ return (
+ <div key={t.id} className={`rounded-lg border p-3 flex flex-wrap items-center gap-x-4 gap-y-2 ${alertCard.warning}`}>
+ <button onClick={() => onOpenTodo(t.id)} className="flex-1 min-w-[14rem] text-left">
+ <div className="font-medium text-fg">{t.title}</div>
+ <div className="text-sm text-fg-muted">
+ {t.assignee_name ? `Waiting on ${t.assignee_name}` : 'Waiting'} for {t.waiting_days ?? 0} day{t.waiting_days === 1 ? '' : 's'}
+ {' · '}{late > 0 ? `chase was due ${late}d ago` : 'chase today'}
+ </div>
+ </button>
+ <div className="flex items-center gap-2 shrink-0">
+ <button
+ onClick={() => toTodo([t], true)}
+ className="inline-flex items-center gap-1 h-7 px-2.5 rounded-md text-xs font-semibold text-accent-hover bg-accent-1 hover:bg-accent-2 transition-colors"
+ >
+ <Hand size={12} />Claim
+ </button>
+ <button
+ onClick={() => checkBack(t, { days: 2 })}
+ title="You nudged them: check back in 2 days"
+ className="inline-flex items-center gap-1 h-7 px-2.5 rounded-md text-xs font-medium text-wait/75 hover:text-wait hover:bg-wait-bg transition-colors"
+ >
+ <Send size={12} />Chase
+ </button>
+ </div>
+ </div>
+ )
+ })}
+ </div>
+ )}
+ {rest > 0 && due.length > 0 && (
+ <button
+ onClick={() => navigate('/focus')}
+ className="mt-2 inline-flex items-center gap-1 text-sm font-medium text-wait hover:underline"
+ >
+ + {rest} more waiting <ArrowRight size={13} /> Focus
+ </button>
+ )}
+ </div>
+ )
+}
+
 export default function Dashboard({ onOpenTodo }: { onOpenTodo: (id: number) => void }) {
  const { data: reminders = [], isLoading: remindersLoading } = useQuery<ScheduleStatus[]>({
  queryKey: ['reminders'],
@@ -450,7 +528,7 @@ export default function Dashboard({ onOpenTodo }: { onOpenTodo: (id: number) => 
 
  {/* Stats */}
  <div className="grid grid-cols-3 gap-2.5 md:gap-4 mb-8">
- <StatCard label="Total Todos" value={todos.length} tone="accent" icon={ListTodo} />
+ <StatCard label="Total Todos" value={todos.filter((t) => !t.is_followup).length} tone="accent" icon={ListTodo} />
  <StatCard label="Completed (past 7 days)" value={recentlyDone.length} tone="info" icon={CheckCircle2} />
  <StatCard label="Blocked" value={todos.filter((t) => t.is_blocked).length} tone="muted" icon={ShieldAlert} />
  </div>
@@ -489,6 +567,9 @@ export default function Dashboard({ onOpenTodo }: { onOpenTodo: (id: number) => 
  )}
  </div>
  )}
+
+ {/* Waiting on other people: the ones due to chase */}
+ <FollowupsSection onOpenTodo={onOpenTodo} />
 
  {/* Friends you are due to reach out to, plus what's already arranged */}
  {(dueFriends.length > 0 || upcomingPlans.length > 0) && (

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, Clock, TrendingDown, TrendingUp } from 'lucide-react'
-import { fetchPersonProgress, fetchPersons, fetchRecentlyDone, fetchTodos } from '../api'
+import { fetchPersonProgress, fetchPersons, fetchRecentlyDone } from '../api'
 import type { PersonProgress, Todo } from '../types'
 import { useTimezone, useTodoDefaults } from '../SettingsContext'
 import { useSession } from '../hooks/useSession'
@@ -32,7 +32,10 @@ const fmt = (h: number) => `${Number.isInteger(Math.round(h * 10) / 10) ? Math.r
 
 const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0)
 
-export default function HoursTodayCard({ onOpenTodo }: { onOpenTodo?: (id: number) => void }) {
+
+/** Today's done hours/todos for the owner's own person, plus the averages
+ *  they are compared against. Shared by the full card and the compact readout. */
+export function useHoursToday() {
   const { timezone } = useTimezone()
   const { defaults } = useTodoDefaults()
   const session = useSession()
@@ -44,19 +47,21 @@ export default function HoursTodayCard({ onOpenTodo }: { onOpenTodo?: (id: numbe
     ?? persons.find((p) => p.name === defaults.assigneeName)?.id
     ?? null
 
-  const { data: progress = [], refetch } = useQuery<PersonProgress[]>({
+  // History for the averages and the chart. Today's own total is not taken from
+  // here (that needed a todo refetch and then this refetch); see doneToday.
+  const { data: progress = [] } = useQuery<PersonProgress[]>({
     queryKey: ['person-progress', 'day', timezone, shiftDay(today, HISTORY_DAYS + 1)],
     queryFn: () => fetchPersonProgress('day', shiftDay(today, HISTORY_DAYS + 1), timezone),
     refetchInterval: 5 * 60_000,
   })
 
-  // Shares the Focus list's cache entry; each time todos resync (a todo marked
-  // done anywhere) re-pull the day totals so today's number stays live.
-  const { dataUpdatedAt } = useQuery<Todo[]>({
-    queryKey: ['todos', { is_focused: true }],
-    queryFn: () => fetchTodos({ is_focused: true }),
-  })
-  useEffect(() => { if (dataUpdatedAt) refetch() }, [dataUpdatedAt, refetch])
+  // Re-derive today whenever any ['todos', …] cache changes, so an optimistic
+  // "done" (TodoCard, Must Do, follow-ups) shows up the moment it is clicked.
+  const queryClient = useQueryClient()
+  const [cacheTick, setCacheTick] = useState(0)
+  useEffect(() => queryClient.getQueryCache().subscribe((e) => {
+    if (e.type === 'updated' && e.query.queryKey[0] === 'todos') setCacheTick((n) => n + 1)
+  }), [queryClient])
 
   // Today's finished todos. `since` is a UTC-midnight bound a day early so the
   // local day is always covered; the exact local-day match happens client-side.
@@ -65,13 +70,29 @@ export default function HoursTodayCard({ onOpenTodo }: { onOpenTodo?: (id: numbe
     queryKey: ['recently-done', { since: shiftDay(today, 1), limit: 200 }],
     queryFn: () => fetchRecentlyDone({ since: shiftDay(today, 1), limit: 200 }),
   })
-  const doneToday = useMemo(
-    () => recentlyDone
-      .filter((t) => t.assignee_id === meId && t.done_at && getDateString(t.done_at, timezone) === today)
-      .sort((a, b) => (b.done_at ?? '').localeCompare(a.done_at ?? '')),
-    [recentlyDone, meId, timezone, today],
-  )
-  const [showAll, setShowAll] = useState(false)
+  // Server list of today's done todos, overlaid with the live todo caches:
+  // a todo just ticked done (optimistic, no done_at yet) counts at once, and one
+  // just reopened drops out. Follow-ups never count — waiting is not your work.
+  const doneToday = useMemo(() => {
+    const live = new Map<number, Todo>()
+    queryClient.getQueriesData<Todo[]>({ queryKey: ['todos'] })
+      .forEach(([, list]) => list?.forEach((t) => live.set(t.id, t)))
+    const mine = (t: Todo) => t.assignee_id === meId && !t.is_followup
+    const out = new Map<number, Todo>()
+    for (const t of recentlyDone) {
+      if (!mine(t) || !t.done_at || getDateString(t.done_at, timezone) !== today) continue
+      const cur = live.get(t.id)
+      if (cur && cur.status !== 'done') continue
+      out.set(t.id, cur ? { ...t, ...cur, done_at: t.done_at } : t)
+    }
+    for (const t of live.values()) {
+      if (out.has(t.id) || t.status !== 'done' || !mine(t)) continue
+      if (t.done_at && getDateString(t.done_at, timezone) !== today) continue
+      out.set(t.id, { ...t, done_at: t.done_at ?? new Date().toISOString() })
+    }
+    return [...out.values()].sort((a, b) => (b.done_at ?? '').localeCompare(a.done_at ?? ''))
+    // cacheTick: re-read the caches after any todo cache update
+  }, [recentlyDone, meId, timezone, today, queryClient, cacheTick])
 
   const stats = useMemo(() => {
     const mine = progress.find((p) => p.person_id === meId)
@@ -83,9 +104,10 @@ export default function HoursTodayCard({ onOpenTodo }: { onOpenTodo?: (id: numbe
     const sameWeekday = past.filter((_, i) => (i + 1) % 7 === 0).map(hoursOn).filter((h) => h > 0)
     const last7 = past.slice(0, 7).map(hoursOn).filter((h) => h > 0)
 
+    const todayHours = doneToday.reduce((sum, t) => sum + (t.estimated_hours || 0), 0)
     return {
-      todayHours: hoursOn(today),
-      todayTasks: byDay.get(today)?.task_count ?? 0,
+      todayHours,
+      todayTasks: doneToday.length,
       avg: mean(activePast),
       activeDays: activePast.length,
       weekdayAvg: sameWeekday.length ? mean(sameWeekday) : null,
@@ -93,10 +115,19 @@ export default function HoursTodayCard({ onOpenTodo }: { onOpenTodo?: (id: numbe
       best: Math.max(0, ...activePast),
       chart: Array.from({ length: CHART_DAYS }, (_, i) => {
         const day = shiftDay(today, CHART_DAYS - 1 - i)
-        return { day, hours: hoursOn(day), tasks: byDay.get(day)?.task_count ?? 0 }
+        return day === today
+          ? { day, hours: todayHours, tasks: doneToday.length }
+          : { day, hours: hoursOn(day), tasks: byDay.get(day)?.task_count ?? 0 }
       }),
     }
-  }, [progress, meId, today])
+  }, [progress, meId, today, doneToday])
+
+  return { meId, today, timezone, doneToday, stats }
+}
+
+export default function HoursTodayCard({ onOpenTodo }: { onOpenTodo?: (id: number) => void }) {
+  const { meId, today, timezone, doneToday, stats } = useHoursToday()
+  const [showAll, setShowAll] = useState(false)
 
   const [hover, setHover] = useState<number | null>(null)
 
@@ -292,5 +323,68 @@ export default function HoursTodayCard({ onOpenTodo }: { onOpenTodo?: (id: numbe
         </div>
       </div>
     </div>
+  )
+}
+
+/** Activity-style ring for a page header: it fills as today's done hours
+ *  approach a typical day (the 4-week average) and closes with a check when
+ *  you reach it; past that a darker second lap starts. Beside it: todos done,
+ *  hours done and the average. Updates the moment a todo is ticked done. */
+export function HoursTodayInline({ className = '' }: { className?: string }) {
+  const { meId, stats } = useHoursToday()
+  if (meId === null) {
+    return (
+      <span
+        title="Set yourself as the default assignee in Settings → Todo defaults to track hours done today"
+        className={`inline-flex items-center gap-1.5 text-xs text-fg-subtle ${className}`}
+      >
+        <Clock size={13} className="shrink-0" />Set a default assignee to track today
+      </span>
+    )
+  }
+  const { todayHours, todayTasks, avg, activeDays } = stats
+  const hasAvg = activeDays > 0 && avg > 0
+  // Without history yet, measure against a 6h day so the ring still moves.
+  const typical = hasAvg ? avg : 6
+  const ratio = todayHours / typical
+  const firstLap = Math.min(ratio, 1)
+  const secondLap = Math.min(Math.max(ratio - 1, 0), 1)
+  const reached = ratio >= 1
+
+  const size = 30
+  const stroke = 4.5
+  const r = (size - stroke) / 2
+  const c = 2 * Math.PI * r
+  const arc = (frac: number) => ({ strokeDasharray: c, strokeDashoffset: c * (1 - frac) })
+  const summary = `Today: ${fmt(todayHours)} done (${todayTasks} ${todayTasks === 1 ? 'todo' : 'todos'}) · ` +
+    (hasAvg ? `${Math.round(ratio * 100)}% of your typical day (${fmt(avg)})` : 'no history yet — measured against a 6h day')
+
+  return (
+    <span title={summary} className={`inline-flex items-center gap-2.5 ${className}`}>
+    <span role="img" aria-label={summary} className="relative inline-grid place-items-center shrink-0" style={{ width: size, height: size }}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90" aria-hidden>
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" strokeWidth={stroke} className="stroke-accent/15" />
+        <circle
+          cx={size / 2} cy={size / 2} r={r} fill="none" strokeWidth={stroke} strokeLinecap="round"
+          className="stroke-accent motion-safe:transition-[stroke-dashoffset] motion-safe:duration-700 ease-out"
+          style={arc(firstLap)}
+        />
+        {secondLap > 0 && (
+          <circle
+            cx={size / 2} cy={size / 2} r={r} fill="none" strokeWidth={stroke} strokeLinecap="round"
+            className="stroke-accent-active motion-safe:transition-[stroke-dashoffset] motion-safe:duration-700 ease-out"
+            style={arc(secondLap)}
+          />
+        )}
+      </svg>
+      {reached && <Check size={13} strokeWidth={3.5} className="absolute text-accent" aria-hidden />}
+    </span>
+    <span aria-hidden className="text-sm text-fg-muted tabular-nums whitespace-nowrap">
+      <span className="font-semibold text-fg">{todayTasks}</span> {todayTasks === 1 ? 'todo' : 'todos'}
+      <span className="text-fg-faint"> · </span>
+      <span className="font-semibold text-fg">{fmt(todayHours)}</span> done
+      {hasAvg && <><span className="text-fg-faint"> · </span>avg {fmt(avg)}</>}
+    </span>
+    </span>
   )
 }

@@ -1,4 +1,5 @@
 import { AlarmClock, Check, Star, Undo2 } from 'lucide-react'
+import { FollowupActions, FollowupChip, KindSwitch } from '../components/Followup'
 import { useState, useCallback, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -399,7 +400,7 @@ export default function TodoDetailPage() {
  <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
  <div className="flex-1 min-w-0">
  <div className="flex flex-wrap gap-2 mb-3 items-center">
- <button
+ {!todo.is_followup && <button
  onClick={handleFocusToggle}
  title={todo.is_focused ? 'Remove from Focus' : 'Add to Focus'}
  className={`p-2 -m-2 text-xl leading-none transition-colors ${
@@ -409,7 +410,7 @@ export default function TodoDetailPage() {
  }`}
  >
  <Star size={20} fill={todo.is_focused ? 'currentColor' : 'none'} />
- </button>
+ </button>}
  {editingField === 'importance' ? (
  <select
  ref={autoOpenSelect}
@@ -450,8 +451,15 @@ export default function TodoDetailPage() {
  )}
  </div>
  <h1 className="text-2xl font-bold text-fg leading-tight">{todo.title}</h1>
+ {todo.is_followup && todo.status !== 'done' && (
+ <div className="mt-3 flex flex-col gap-2">
+ <FollowupChip todo={todo} />
+ <FollowupActions todo={todo} />
  </div>
- <div className="flex-shrink-0 flex items-center gap-2">
+ )}
+ </div>
+ <div className="flex-shrink-0 flex flex-wrap items-center gap-2">
+ <KindSwitch todo={todo} />
  {todo.status === 'done' ? (
  <button
  onClick={() => handleDoneCheck(false)}

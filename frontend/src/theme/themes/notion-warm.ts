@@ -45,6 +45,10 @@ export const notionWarm: ThemePreset = {
       prioHigh:      '190 75 20',
       prioHighBg:    '255 237 213',
 
+      wait:          '91 84 196',
+      waitBg:        '240 239 252',
+      waitBorder:    '207 204 240',
+
       focusRing:     '217 119 6',
     },
     dark: {
@@ -85,6 +89,10 @@ export const notionWarm: ThemePreset = {
       prioCriticalBg:'58 20 42',
       prioHigh:      '251 146 60',
       prioHighBg:    '60 32 12',
+
+      wait:          '170 170 245',
+      waitBg:        '36 34 60',
+      waitBorder:    '62 60 100',
 
       focusRing:     '251 191 36',
     },

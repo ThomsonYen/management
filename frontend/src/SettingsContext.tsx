@@ -30,6 +30,7 @@ const DEFAULT_HOTKEYS: Record<string, string> = {
   newPersonalNote: 'meta+alt+n',
   markDone: 'meta+d',
   toggleFocus: 'meta+f',
+  toggleFollowup: 'w',
   editTodo: 'meta+e',
   toggleTheme: 'meta+\\',
   focusSearch: '/',

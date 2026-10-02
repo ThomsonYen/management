@@ -252,6 +252,7 @@ export interface TodoFilters {
   status?: string
   exclude_done?: boolean
   is_focused?: boolean
+  kind?: 'todo' | 'followup'
 }
 
 export const fetchTodos = (filters?: TodoFilters): Promise<Todo[]> =>
@@ -286,8 +287,19 @@ export const updateTodo = (
     is_focused?: boolean
     focus_order?: number
     blocked_by_ids?: number[]
+    check_back_on?: string | null
   },
 ): Promise<Todo> => api.put(`/todos/${id}`, data).then((r) => r.data)
+
+/** Open follow-ups, due-to-chase first. */
+export const fetchFollowups = (): Promise<Todo[]> =>
+  api.get('/todos/followups').then((r) => r.data)
+
+export const followupTodo = (id: number, checkBackOn?: string): Promise<Todo> =>
+  api.post(`/todos/${id}/followup`, checkBackOn ? { check_back_on: checkBackOn } : {}).then((r) => r.data)
+
+export const unfollowupTodo = (id: number, focus = false): Promise<Todo> =>
+  api.post(`/todos/${id}/unfollowup`, { focus }).then((r) => r.data)
 
 export const reorderFocus = (
   items: { id: number; focus_order: number }[],

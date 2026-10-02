@@ -10,6 +10,7 @@ import { useTodoDefaults, useTimezone, useHotkeys, resolveAssigneeId } from '../
 import { getTodayString } from '../dateUtils'
 import { useHotkey } from '../hooks/useHotkey'
 import { useUnfocusWithUndo } from '../hooks/useUnfocusWithUndo'
+import { useFollowupActions } from '../hooks/useFollowupActions'
 
 const STATUS_OPTIONS = ['', 'todo', 'blocked']
 const IMPORTANCE_OPTIONS = ['', 'low', 'medium', 'high', 'critical']
@@ -79,6 +80,7 @@ export default function TodosPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  const selectedProject = searchParams.get('project') ?? ''
  const selectedStatus = searchParams.get('status') ?? ''
  const selectedImportance = searchParams.get('importance') ?? ''
+ const selectedKind = searchParams.get('kind') ?? ''
  const setParam = (key: string, value: string) =>
  setSearchParams((prev) => { const p = new URLSearchParams(prev); value ? p.set(key, value) : p.delete(key); return p })
  const setSelectedPerson = (v: string) => setParam('person', v)
@@ -119,9 +121,16 @@ export default function TodosPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  }),
  })
 
- const filtered = selectedImportance
+ const byImportance = selectedImportance
  ? todos.filter((t) => t.importance === selectedImportance)
  : todos
+ const followupCount = byImportance.filter((t) => t.is_followup).length
+ const filtered = selectedKind === 'followup'
+ ? byImportance.filter((t) => t.is_followup)
+ : selectedKind === 'todo'
+ ? byImportance.filter((t) => !t.is_followup)
+ : byImportance
+ const { toFollowup, toTodo } = useFollowupActions()
 
  // --- Hotkeys ---
  const markDoneMutation = useMutation({
@@ -145,9 +154,18 @@ export default function TodosPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  useHotkey(bindings.toggleFocus, useCallback(() => {
  if (selectedIds.size === 0) return
  const selected = filtered.filter((t) => selectedIds.has(t.id))
- selected.filter((t) => !t.is_focused).forEach((t) => focusMutation.mutate(t.id))
+ selected.filter((t) => !t.is_focused && !t.is_followup).forEach((t) => focusMutation.mutate(t.id))
  unfocusWithUndo(selected.filter((t) => t.is_focused))
  }, [selectedIds, filtered, focusMutation, unfocusWithUndo]))
+
+ // W — selected todos become follow-ups; selected follow-ups become todos again
+ useHotkey(bindings.toggleFollowup, useCallback(() => {
+ if (selectedIds.size === 0) return
+ const selected = filtered.filter((t) => selectedIds.has(t.id))
+ toFollowup(selected.filter((t) => !t.is_followup))
+ toTodo(selected.filter((t) => t.is_followup), false)
+ setSelectedIds(new Set())
+ }, [selectedIds, filtered, toFollowup, toTodo]))
 
  // ⌘E — edit first selected todo
  useHotkey(bindings.editTodo, useCallback(() => {
@@ -267,7 +285,7 @@ export default function TodosPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  </select>
  </div>
  </div>
- {(selectedPerson || selectedProject || selectedStatus || selectedImportance) && (
+ {(selectedPerson || selectedProject || selectedStatus || selectedImportance || selectedKind) && (
  <button
  onClick={() => setSearchParams({})}
  className="mt-3 text-xs text-accent hover:text-accent-fg font-medium"
@@ -277,10 +295,27 @@ export default function TodosPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  )}
  </div>
 
- {/* Count */}
- <p className="text-sm text-fg-muted mb-3">
- {filtered.length} todo{filtered.length !== 1 ? 's' : ''}
+ {/* Kind + count */}
+ <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+ <p className="text-sm text-fg-muted">
+ {filtered.length} {selectedKind === 'followup' ? `follow-up${filtered.length !== 1 ? 's' : ''}` : `todo${filtered.length !== 1 ? 's' : ''}`}
  </p>
+ <div role="tablist" aria-label="Kind" className="inline-flex p-0.5 gap-0.5 rounded-full bg-inset border border-border-subtle">
+ {([['', 'All', byImportance.length], ['todo', 'Todos', byImportance.length - followupCount], ['followup', 'Follow-ups', followupCount]] as const).map(([k, label, n]) => (
+ <button
+ key={k}
+ role="tab"
+ aria-selected={selectedKind === k}
+ onClick={() => setParam('kind', k)}
+ className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+ selectedKind === k ? 'bg-surface text-fg shadow-sm' : 'text-fg-muted hover:text-fg'
+ }`}
+ >
+ {label} <span className="tabular-nums text-fg-subtle">{n}</span>
+ </button>
+ ))}
+ </div>
+ </div>
 
  {/* Todo list */}
  {isLoading ? (

@@ -58,6 +58,12 @@ export interface Todo {
   deleted_at?: string
   subtodos: SubTodo[]
   blocked_by_ids: number[]
+  // Follow-up: waiting on someone else (the assignee). Derived by the server.
+  is_followup?: boolean
+  followup_since?: string | null
+  check_back_on?: string | null
+  waiting_days?: number | null
+  check_back_due?: boolean
 }
 
 export interface ScheduleStatus {

@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from collections import defaultdict, deque
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 import yaml
 from argon2 import PasswordHasher
@@ -371,6 +371,9 @@ class Todo(Base):
     created_at = Column(String, default=lambda: datetime.now(timezone.utc).isoformat())
     done_at = Column(String, nullable=True)
     deleted_at = Column(String, nullable=True)
+    # Follow-up: NULL = a normal todo; set = waiting on someone else since then.
+    followup_since = Column(String, nullable=True)
+    check_back_on = Column(String, nullable=True)  # YYYY-MM-DD to chase it if nothing came back
     subtodos = relationship(
         "SubTodo",
         back_populates="todo",
@@ -644,6 +647,11 @@ with engine.connect() as _conn:
         _tbl_cols = [c["name"] for c in _insp.get_columns(_tbl)]
         if "deleted_at" not in _tbl_cols:
             _conn.execute(text(f"ALTER TABLE {_tbl} ADD COLUMN deleted_at TEXT"))
+            _conn.commit()
+    _todo_cols = [c["name"] for c in _insp.get_columns("todos")]
+    for _col in ("followup_since", "check_back_on"):
+        if _col not in _todo_cols:
+            _conn.execute(text(f"ALTER TABLE todos ADD COLUMN {_col} TEXT"))
             _conn.commit()
     _project_cols = [c["name"] for c in _insp.get_columns("projects")]
     if "display_order" not in _project_cols:
@@ -1248,6 +1256,7 @@ class TodoUpdate(BaseModel):
     is_focused: Optional[bool] = None
     focus_order: Optional[int] = None
     blocked_by_ids: Optional[List[int]] = None
+    check_back_on: Optional[str] = None  # follow-ups only; null clears it
 
 
 class TodoOut(BaseModel):
@@ -1270,6 +1279,14 @@ class TodoOut(BaseModel):
     deleted_at: Optional[str] = None
     subtodos: List[SubTodoOut] = []
     blocked_by_ids: List[int] = []
+    # Follow-up (waiting on someone else). Derived fields are computed here so
+    # every client agrees: waiting_days since followup_since, and check_back_due
+    # when check_back_on is today or earlier in the user's timezone.
+    is_followup: bool = False
+    followup_since: Optional[str] = None
+    check_back_on: Optional[str] = None
+    waiting_days: Optional[int] = None
+    check_back_due: bool = False
     model_config = {"from_attributes": True}
 
 
@@ -1460,6 +1477,7 @@ def todo_to_out(t: Todo, viewer: "Optional[Viewer]" = None) -> TodoOut:
     owner's planning state (focus) and cross-references to todos they cannot
     see (blocker ids) are blanked; `is_blocked` stays truthful."""
     member = viewer is not None and not viewer.is_owner
+    followup = _followup_fields(t)
     return TodoOut(
         id=t.id,
         title=t.title,
@@ -1480,7 +1498,30 @@ def todo_to_out(t: Todo, viewer: "Optional[Viewer]" = None) -> TodoOut:
         deleted_at=None if member else t.deleted_at,
         subtodos=[SubTodoOut.model_validate(s) for s in t.subtodos],
         blocked_by_ids=[] if member else [b.id for b in t.blocked_by],
+        **followup,
     )
+
+
+def _followup_fields(t: Todo) -> dict:
+    if not t.followup_since:
+        return {}
+    today = today_in_user_tz()
+    try:
+        since = datetime.fromisoformat(t.followup_since)
+        if since.tzinfo is None:
+            since = since.replace(tzinfo=timezone.utc)
+        from zoneinfo import ZoneInfo
+        since_day = since.astimezone(ZoneInfo(get_user_timezone())).date()
+        waiting = max(0, (date.fromisoformat(today) - since_day).days)
+    except Exception:
+        waiting = None
+    return {
+        "is_followup": True,
+        "followup_since": t.followup_since,
+        "check_back_on": t.check_back_on,
+        "waiting_days": waiting,
+        "check_back_due": bool(t.check_back_on and t.check_back_on <= today and t.status != "done"),
+    }
 
 
 def project_to_tree(p: Project, include_deprecated: bool = True) -> ProjectTreeOut:
@@ -2358,6 +2399,7 @@ _BEARER_ROUTE_SCOPES = [
         ("GET", r"/todos", "read"),
         ("GET", r"/todos/deleted", "read"),
         ("GET", r"/todos/recently-done", "read"),
+        ("GET", r"/todos/followups", "read"),
         ("GET", rf"/todos/{_ID}", "read"),
         ("GET", r"/projects", "read"),
         ("GET", r"/projects/tree", "read"),
@@ -2388,6 +2430,8 @@ _BEARER_ROUTE_SCOPES = [
         ("PUT", r"/todos/focus", "write:todos"),
         ("PUT", rf"/todos/{_ID}", "write:todos"),
         ("POST", rf"/todos/{_ID}/restore", "write:todos"),
+        ("POST", rf"/todos/{_ID}/followup", "write:todos"),
+        ("POST", rf"/todos/{_ID}/unfollowup", "write:todos"),
         ("POST", rf"/todos/{_ID}/subtodos", "write:todos"),
         ("PUT", rf"/subtodos/{_ID}", "write:todos"),
         # write:persons — handler additionally restricts fields for token auth
@@ -3575,7 +3619,7 @@ def agent_skill():
 
 @app.get("/agent/digest", summary="Everything an agent needs to plan the day, in one call")
 def agent_digest(db: Session = Depends(get_db)):
-    """Focused/overdue/due-today todos, overdue check-ins, today's must-do and goal, recently done.
+    """Focused/overdue/due-today todos, follow-ups due to chase, overdue check-ins, today's must-do and goal, recently done.
 
     Read-only: unlike GET /must-do/{date} this does not carry items over.
     """
@@ -3633,6 +3677,8 @@ def agent_digest(db: Session = Depends(get_db)):
 
     must_do = db.query(MustDoItem).filter(MustDoItem.date == today).order_by(MustDoItem.order).all()
     goal = db.query(DailyGoal).filter(DailyGoal.date == today).first()
+    followups = open_q.filter(Todo.followup_since != None).all()
+    followups.sort(key=lambda t: _followup_sort_key(t, today))
 
     return {
         "today": today,
@@ -3640,6 +3686,8 @@ def agent_digest(db: Session = Depends(get_db)):
         "overdue_todos": [todo_to_out(t) for t in overdue],
         "due_today_todos": [todo_to_out(t) for t in due_today],
         "overdue_check_ins": overdue_check_ins,
+        "followups_due": [todo_to_out(t) for t in followups if t.check_back_on and t.check_back_on <= today],
+        "followups_waiting_count": len(followups),
         "social_nudges": social_nudges,
         "must_do_today": [MustDoItemOut.model_validate(m) for m in must_do],
         "daily_goal_today": DailyGoalOut.model_validate(goal) if goal else None,
@@ -3820,6 +3868,7 @@ def person_progress(
             Todo.done_at != None,
             Todo.done_at >= since,
             Todo.deleted_at == None,
+            Todo.followup_since == None,  # a resolved follow-up was someone else's work
         )
         .all()
     )
@@ -4421,6 +4470,9 @@ def list_todos(
     status: Optional[str] = Query(None),
     exclude_done: bool = Query(False),
     is_focused: Optional[bool] = Query(None),
+    kind: Optional[Literal["todo", "followup"]] = Query(
+        None, description="'todo' = only normal todos, 'followup' = only follow-ups (waiting on someone); omit for both"
+    ),
     db: Session = Depends(get_db),
     viewer: Viewer = Depends(get_viewer),
 ):
@@ -4428,6 +4480,10 @@ def list_todos(
     or inside a granted project); the `is_focused` filter is ignored for
     them because focus is the owner's planning state."""
     q = _scope_todos(db.query(Todo).filter(Todo.deleted_at == None), viewer)
+    if kind == "todo":
+        q = q.filter(Todo.followup_since == None)
+    elif kind == "followup":
+        q = q.filter(Todo.followup_since != None)
     if assignee_id is not None:
         q = q.filter(Todo.assignee_id == assignee_id)
     if project_id is not None:
@@ -4505,6 +4561,11 @@ def set_focus_list(data: FocusListIn, db: Session = Depends(get_db)):
     missing = [i for i in ids if i not in todos]
     if missing:
         raise HTTPException(404, f"Todo ids not found: {missing}")
+    followups = [i for i in ids if todos[i].followup_since]
+    if followups:
+        raise HTTPException(
+            422, f"Follow-ups cannot be focused: {followups}. POST /todos/{{id}}/unfollowup with focus=true first"
+        )
     for t in db.query(Todo).filter(Todo.is_focused == True, Todo.deleted_at == None).all():
         if t.id not in todos:
             t.is_focused = False
@@ -4520,6 +4581,89 @@ def set_focus_list(data: FocusListIn, db: Session = Depends(get_db)):
         .all()
     )
     return [todo_to_out(t) for t in result]
+
+
+def _followup_sort_key(t: Todo, today: str):
+    due = bool(t.check_back_on and t.check_back_on <= today)
+    return (not due, t.check_back_on is None, t.check_back_on or "", t.followup_since or "")
+
+
+@app.get("/todos/followups", response_model=List[TodoOut], summary="Open follow-ups, most urgent first")
+def list_followups(db: Session = Depends(get_db)):
+    """Open todos you are waiting on someone else for. Ordered for display:
+    due to chase first (`check_back_due`), then by `check_back_on`, then the
+    longest-waiting."""
+    today = today_in_user_tz()
+    todos = (
+        db.query(Todo)
+        .filter(Todo.followup_since != None, Todo.status != "done", Todo.deleted_at == None)
+        .all()
+    )
+    todos.sort(key=lambda t: _followup_sort_key(t, today))
+    return [todo_to_out(t) for t in todos]
+
+
+def _check_date(value: Optional[str], field: str) -> Optional[str]:
+    if value is None:
+        return None
+    try:
+        return date.fromisoformat(value).isoformat()
+    except ValueError:
+        raise HTTPException(422, f"{field} must be a YYYY-MM-DD date, got {value!r}")
+
+
+FOLLOWUP_DEFAULT_DAYS = 3
+
+
+class FollowupIn(BaseModel):
+    check_back_on: Optional[str] = Field(
+        None, description=f"YYYY-MM-DD to chase it if nothing comes back; default today + {FOLLOWUP_DEFAULT_DAYS} days"
+    )
+
+
+class UnfollowupIn(BaseModel):
+    focus: bool = Field(False, description="Also add it to the end of the focus list (the next step is yours again)")
+
+
+@app.post("/todos/{todo_id}/followup", response_model=TodoOut, summary="Turn a todo into a follow-up")
+def make_followup(todo_id: int, data: Optional[FollowupIn] = None, db: Session = Depends(get_db)):
+    """Marks the todo as waiting on someone else: sets `followup_since` (kept
+    if it is already a follow-up), sets `check_back_on`, and takes it off the
+    focus list. Idempotent. Returns the todo."""
+    t = db.query(Todo).filter(Todo.id == todo_id, Todo.deleted_at == None).first()
+    if not t:
+        raise HTTPException(404, "Todo not found")
+    data = data or FollowupIn()
+    if not t.followup_since:
+        t.followup_since = datetime.now(timezone.utc).isoformat()
+    if data.check_back_on is not None:
+        t.check_back_on = _check_date(data.check_back_on, "check_back_on")
+    elif not t.check_back_on:
+        t.check_back_on = (date.fromisoformat(today_in_user_tz()) + timedelta(days=FOLLOWUP_DEFAULT_DAYS)).isoformat()
+    t.is_focused = False
+    t.focus_order = 0
+    db.commit()
+    db.refresh(t)
+    return todo_to_out(t)
+
+
+@app.post("/todos/{todo_id}/unfollowup", response_model=TodoOut, summary="Turn a follow-up back into a todo")
+def clear_followup(todo_id: int, data: Optional[UnfollowupIn] = None, db: Session = Depends(get_db)):
+    """Clears `followup_since` and `check_back_on`. With `focus=true` the todo
+    also goes to the end of the focus list. Idempotent. Returns the todo."""
+    t = db.query(Todo).filter(Todo.id == todo_id, Todo.deleted_at == None).first()
+    if not t:
+        raise HTTPException(404, "Todo not found")
+    data = data or UnfollowupIn()
+    t.followup_since = None
+    t.check_back_on = None
+    if data.focus and not t.is_focused:
+        max_order = db.query(func.max(Todo.focus_order)).filter(Todo.is_focused == True).scalar() or 0
+        t.is_focused = True
+        t.focus_order = max_order + 1
+    db.commit()
+    db.refresh(t)
+    return todo_to_out(t)
 
 
 @app.get("/todos/{todo_id}", response_model=TodoOut)
@@ -4593,6 +4737,14 @@ def update_todo(todo_id: int, data: TodoUpdate, db: Session = Depends(get_db), v
         raise HTTPException(400, "Status 'in-progress' is deprecated; use 'todo'")
     if not viewer.is_owner:
         _member_todo_payload_check(db, viewer, update_data, creating=False)
+    if "check_back_on" in update_data:
+        if not t.followup_since:
+            raise HTTPException(422, "check_back_on applies to follow-ups only; POST /todos/{id}/followup first")
+        update_data["check_back_on"] = _check_date(update_data["check_back_on"], "check_back_on")
+    if update_data.get("is_focused") and t.followup_since:
+        raise HTTPException(
+            422, "Follow-ups cannot be focused; POST /todos/{id}/unfollowup with focus=true instead"
+        )
     blocked_by_ids = update_data.pop("blocked_by_ids", None)
     old_status = t.status
     for k, v in update_data.items():
@@ -4856,7 +5008,12 @@ def schedule_reminders(db: Session = Depends(get_db)):
     today = date.today()
     todos = (
         db.query(Todo)
-        .filter(Todo.deadline != None, Todo.status != "done", Todo.deleted_at == None)
+        .filter(
+            Todo.deadline != None,
+            Todo.status != "done",
+            Todo.deleted_at == None,
+            Todo.followup_since == None,  # waiting costs you no hours
+        )
         .all()
     )
     results = []

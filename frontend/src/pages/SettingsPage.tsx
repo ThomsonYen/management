@@ -1020,6 +1020,7 @@ export default function SettingsPage() {
  <div className="space-y-3">
  <HotkeyInput label="Mark done" description="Mark selected todo(s) as done" bindingKey="markDone" />
  <HotkeyInput label="Toggle focus" description="Add/remove selected todo(s) from focus" bindingKey="toggleFocus" />
+ <HotkeyInput label="Waiting on someone" description="Turn selected todo(s) into follow-ups, or follow-ups back into todos" bindingKey="toggleFollowup" />
  <HotkeyInput label="Edit todo" description="Open edit modal for selected todo" bindingKey="editTodo" />
  </div>
  </div>

@@ -48,6 +48,12 @@ export interface ColorScheme {
   prioHigh: string
   prioHighBg: string
 
+  // Follow-ups (waiting on someone else) — calm indigo, apart from accent
+  // (act now) and warning (time to chase).
+  wait: string
+  waitBg: string
+  waitBorder: string
+
   // Focus ring
   focusRing: string
 }
@@ -83,6 +89,9 @@ export const COLOR_VAR_MAP: Record<keyof ColorScheme, string> = {
   prioCriticalBg: '--prio-critical-bg',
   prioHigh: '--prio-high',
   prioHighBg: '--prio-high-bg',
+  wait: '--wait',
+  waitBg: '--wait-bg',
+  waitBorder: '--wait-border',
   success: '--success',
   successBg: '--success-bg',
   info: '--info',

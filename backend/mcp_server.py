@@ -491,7 +491,7 @@ def get_manual() -> str:
 
 @mcp.tool()
 def get_digest() -> dict:
-    """One call for the day: today, focused/overdue/due-today todos, overdue check-ins, must-do + goal, recently done."""
+    """One call for the day: today, focused/overdue/due-today todos, follow-ups due to chase, overdue check-ins, must-do + goal, recently done."""
     _need("read")
     with M.SessionLocal() as db:
         return _read(lambda: _out(M.agent_digest(db)))
@@ -499,13 +499,15 @@ def get_digest() -> dict:
 
 @mcp.tool()
 def list_todos(project_id: Optional[int] = None, assignee_id: Optional[int] = None, status: Optional[str] = None,
-               is_focused: Optional[bool] = None, exclude_done: bool = True) -> list:
-    """List todos. status: 'todo' | 'done'. Defaults to open todos only."""
+               is_focused: Optional[bool] = None, exclude_done: bool = True, kind: Optional[str] = None) -> list:
+    """List todos. status: 'todo' | 'done'. kind: 'todo' (normal) | 'followup' (waiting on someone); omit for both.
+    Defaults to open todos only."""
     _need("read")
     with M.SessionLocal() as db:
         v = _viewer(db)
         return _read(lambda: _out(M.list_todos(assignee_id=assignee_id, project_id=project_id, status=status,
-                                               exclude_done=exclude_done, is_focused=is_focused, db=db, viewer=v)))
+                                               exclude_done=exclude_done, is_focused=is_focused, kind=kind,
+                                               db=db, viewer=v)))
 
 
 @mcp.tool()
@@ -534,16 +536,43 @@ def create_todo(title: str, description: Optional[str] = None, project_id: Optio
 def update_todo(todo_id: int, title: Optional[str] = None, description: Optional[str] = None,
                 status: Optional[str] = None, deadline: Optional[str] = None, importance: Optional[str] = None,
                 project_id: Optional[int] = None, assignee_id: Optional[int] = None,
-                estimated_hours: Optional[float] = None, is_focused: Optional[bool] = None) -> dict:
-    """Update any subset of fields. status 'done' completes, 'todo' reopens. Returns the updated todo."""
+                estimated_hours: Optional[float] = None, is_focused: Optional[bool] = None,
+                check_back_on: Optional[str] = None) -> dict:
+    """Update any subset of fields. status 'done' completes (also resolves a follow-up), 'todo' reopens.
+    check_back_on (YYYY-MM-DD) re-dates a follow-up's chase date. Returns the updated todo."""
     tid = _need("write:todos")
     fields = {k: v for k, v in dict(title=title, description=description, status=status, deadline=deadline,
                                     importance=importance, project_id=project_id, assignee_id=assignee_id,
-                                    estimated_hours=estimated_hours, is_focused=is_focused).items() if v is not None}
+                                    estimated_hours=estimated_hours, is_focused=is_focused,
+                                    check_back_on=check_back_on).items() if v is not None}
     with M.SessionLocal() as db:
         v = _viewer(db)
         return _audited(tid, "update_todo", {"todo_id": todo_id, **fields},
                         lambda: _out(M.update_todo(todo_id, M.TodoUpdate(**fields), db, viewer=v)))
+
+
+@mcp.tool()
+def set_followup(todo_id: int, check_back_on: Optional[str] = None) -> dict:
+    """Mark a todo as a follow-up: the user is waiting on someone else and has nothing to do until they reply.
+    Takes it off the focus list. check_back_on YYYY-MM-DD (default today + 3 days). Idempotent."""
+    tid = _need("write:todos")
+    args = {"todo_id": todo_id, "check_back_on": check_back_on}
+    with M.SessionLocal() as db:
+        _viewer(db)
+        return _audited(tid, "set_followup", args,
+                        lambda: _out(M.make_followup(todo_id, M.FollowupIn(check_back_on=check_back_on), db)))
+
+
+@mcp.tool()
+def clear_followup(todo_id: int, focus: bool = False) -> dict:
+    """Turn a follow-up back into a normal todo (the reply came in; the next step is the user's).
+    focus=true also adds it to the end of the focus list. Idempotent."""
+    tid = _need("write:todos")
+    args = {"todo_id": todo_id, "focus": focus}
+    with M.SessionLocal() as db:
+        _viewer(db)
+        return _audited(tid, "clear_followup", args,
+                        lambda: _out(M.clear_followup(todo_id, M.UnfollowupIn(focus=focus), db)))
 
 
 @mcp.tool()

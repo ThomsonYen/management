@@ -147,6 +147,45 @@ Make the note page (`NoteDetailPage`, meeting and personal notes) feel like Bear
 
 **Why:** notes are the one place in the app meant for long-form reading and writing, and they currently look like a form field: a sans textarea split beside a preview, surrounded by metadata. A focused serif column with a little red makes them pleasant to read back, which is what notes are for.
 
+## 14. Follow-ups: todos you are waiting on
+
+A follow-up is a todo where the ball is in someone else's court: you asked, now you wait for a reply. You want to keep an eye on it, but there is nothing for you to do. It is a **variant of a todo, not a new entity**, so it keeps its project, assignee, description, blockers and history, and can change back and forth with one click.
+
+**Model (additive, nullable):**
+- `todos.followup_since` (ISO timestamp, nullable). `NULL` = normal todo. Set = follow-up, and the value is when you started waiting. A nullable timestamp, not a boolean or a `kind` enum, so "waiting 6 days" comes for free (design principle §1). Turning a todo into a follow-up twice keeps the first timestamp.
+- `todos.check_back_on` (`YYYY-MM-DD`, nullable): when to chase it if nothing has come back. Defaults to today + 3 days when converting. `NULL` means "no date, just keep it visible".
+- `status` stays `todo | done`, separate from the follow-up flag. A resolved follow-up is `done` and shows on Recently Done with a follow-up badge. Reopening it makes it a follow-up again.
+- The assignee is read as "waiting on" for a follow-up, so no new person column is needed.
+- Server-derived fields on `TodoOut` (§5): `is_followup`, `followup_since`, `check_back_on`, `waiting_days`, `check_back_due` (check-back date ≤ today in the user's timezone). Members get the same fields; `check_back_on` is not in `MEMBER_TODO_FIELDS`.
+
+**API (agent-friendly, composite):**
+- `POST /todos/{id}/followup {check_back_on?}`: makes it a follow-up and takes it off the focus list (a follow-up is never focused). Idempotent, returns the todo.
+- `POST /todos/{id}/unfollowup {focus?: bool}`: makes it a normal todo again (clears both columns). With `focus=true` it goes to the end of the focus list, because a reply usually means the next step is yours. Returns the todo.
+- `PUT /todos/{id}` accepts `check_back_on` for snooze/re-date. Marking it done is the existing `{"status":"done"}`.
+- `GET /todos?kind=todo|followup` filter (default: both, as today). `GET /todos/followups`: open follow-ups sorted for display (due first, then by check-back date, then the longest-waiting).
+- `/agent/digest` gains `followups_due` and `followups_waiting_count`. `/schedule/reminders` and the hours-per-person math skip follow-ups, since they cost you no time.
+- Both new routes go in `_BEARER_ROUTE_SCOPES` as `write:todos`. They are owner-only, so they stay out of `_MEMBER_ROUTES`. Add MCP tools `set_followup` / `clear_followup`, add `check_back_on` to `update_todo`, and update `agent_manual.md` ("status is todo|done" gets a follow-up paragraph) in the same commit.
+
+**Focus page: a "Waiting on" panel.**
+- On xl it goes in the left column under Must Do (above the hours card), so it sits beside the focus list as something to keep an eye on rather than mixed into it. Below xl it sits after the focus list, using the same `hidden xl:block` / `xl:hidden` twin-render as `HoursTodayCard`. The panel is collapsible, and its open/closed state is kept per device in `localStorage`.
+- Its look is deliberately quieter than a TodoCard: a card with a dashed border and a header `⧗ Waiting on · 5`, plus a warning pill `2 to chase` when any are due. Each row is one line: an hourglass icon, the title, the `on Sarah` chip (assignee), and on the right a small muted `6d` age, or the check-back date in warning colour once it is due ("chase today" / "chase · 2d late"). **There is no checkbox and no Done button on the row.**
+- Clicking a row expands it inline: the description preview plus a small action strip, **Got reply → Todo** (unfollowup + focus, the primary action), **Resolved** (status done, toast with Undo), **Chased, check again** (+2d / +1w / pick a date, which sets `check_back_on`), and **Open**. Done is reachable only here, which is the "no clear done button unless expanded" requirement.
+- Order: due rows first, then by check-back date, then the longest-waiting. Due rows get a faint warning left border. Done rows disappear, with Undo in a toast.
+- Drag and drop: drag a focus TodoCard onto the panel to make it a follow-up, and drag a follow-up row onto the focus list to make it a todo again (same `application/x-todo-id` payload TodoCard already sets).
+
+**Dashboard: a "Follow-ups" section** placed after Check-ins (same "people you owe a nudge" category). It shows only the follow-ups due to chase, as alert cards (title, waiting on, waiting N days, with Chased +2d and Got reply on the card), with counter pills `N to chase` and a footer link `+ 4 more waiting → Focus`. If nothing is due, one muted line: "4 follow-ups waiting, none to chase yet". The section is hidden when there are no follow-ups at all.
+
+**Converting both ways (easy everywhere):**
+- TodoCard: a `Hourglass` action button ("Wait") next to Unfocus/Open, and an `Undo2` "Back to todo" in its place on follow-up cards. A follow-up TodoCard (on the Todos page, project pages and the board) swaps the done checkbox for an hourglass icon, hides the focus star, shows a `waiting 6d · chase Fri` badge, and offers Resolved only in its expanded section.
+- Todo detail / peek / modal: a `Todo | Follow-up` SegmentedControl at the top, with a check-back DatePicker when it is set to Follow-up.
+- Bulk action bar: "Follow up" / "Back to todo". Command palette: the same two actions on the open todo. A hotkey (default `W`) registered in hotkey settings toggles the selected or hovered card.
+- Every conversion fires a toast with Undo, the same pattern as `unfocusWithUndo`. Converting does not ask for a date up front; the +3d default is shown and can be edited on the row.
+- Todos page: a `All | Todos | Follow-ups` filter next to status, kept in the URL like the other filters.
+
+**Edge cases:** a todo blocked by a follow-up is still blocked (correct: you are waiting on the reply). Must-do items linked to a todo that becomes a follow-up keep their link. The Dashboard "Total Todos" stat counts only non-follow-ups, and the follow-up count appears in the new section instead. Members see follow-ups assigned to them as follow-ups, read-only for the flag.
+
+**Why:** today a waiting-on item has to sit in the todo list looking like work. It either clutters Focus and inflates schedule and hours math, or it gets marked done too early and forgotten. Splitting "I must act" from "I must watch" keeps Focus honest, and the check-back date turns waiting into a nudge instead of a memory test.
+
 ## Implementation order
 
 Suggested sequence when picking these up:
@@ -159,6 +198,7 @@ Suggested sequence when picking these up:
 6. Structured meeting extraction (feeds the memory docs automatically)
 7. Weekly retrospective, natural-language capture, smart triage (quality-of-life on top)
 8. Semantic search (capstone once there's enough structured content to index)
-9. ~~Bear-style notes (#13)~~ ✅ Implemented: built straight to the CodeMirror in-place editor (`components/NoteEditor.tsx`), used for every note surface (meeting/personal, project, person, weekly goals), each with enlarge mode (`components/EnlargedNote.tsx` for in-page notes); `MarkdownEditor` removed; App font and Note font are separate settings
+9. Follow-ups (#14): self-contained and high daily value, so it can be built any time. Order: backend columns + routes + manual/scopes/MCP → TodoCard variant + conversions → Focus "Waiting on" panel → Dashboard section
+10. ~~Bear-style notes (#13)~~ ✅ Implemented: built straight to the CodeMirror in-place editor (`components/NoteEditor.tsx`), used for every note surface (meeting/personal, project, person, weekly goals), each with enlarge mode (`components/EnlargedNote.tsx` for in-page notes); `MarkdownEditor` removed; App font and Note font are separate settings
 
 Also open: **push notifications for Social (#12)**. The feature ships in-app only — there is no push infrastructure anywhere in the codebase. Adding it means a `push_subscriptions` table, VAPID keys as a Fly secret, `pywebpush`, a daily scheduler job (the backup loop in `backend/backup/scheduler.py` is the template), and switching `vite-plugin-pwa` from `generateSW` to `injectManifest` so a custom `push` handler can exist. On iOS it only works once the PWA is added to the Home Screen (16.4+). A daily email digest is the cheaper alternative — no service-worker changes, but it needs an email provider key.

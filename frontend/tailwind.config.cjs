@@ -60,6 +60,7 @@ module.exports = {
           high:          withVar('--prio-high'),
           'high-bg':     withVar('--prio-high-bg'),
         },
+        wait: { DEFAULT: withVar('--wait'), bg: withVar('--wait-bg'), border: withVar('--wait-border') },
       },
       // Values come from src/theme/tokens/radii.ts via --radius-* (see applyTheme);
       // --radius-k enlarges them where corner-shape: squircle is supported (index.css).

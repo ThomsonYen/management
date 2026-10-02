@@ -1,17 +1,19 @@
 import React, { useState, useRef, useCallback } from 'react'
-import { ArrowUpRight, Check, ChevronDown, ChevronUp, GripVertical, ListX, Moon, SquareCheck, Star, StarOff, Sun, Sunrise, X } from 'lucide-react'
+import { ArrowUpRight, Check, ChevronDown, ChevronUp, CornerDownLeft, GripVertical, Hourglass, ListX, Moon, SquareCheck, Star, StarOff, Sun, Sunrise, X } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { fetchTodos, fetchProjects, fetchPersons, updateTodo, createTodo, reorderFocus, fetchMustDoItems, createMustDoItem, updateMustDoItem, convertMustDoItem, deleteMustDoItem } from '../api'
+import { fetchTodos, fetchFollowups, fetchProjects, fetchPersons, updateTodo, createTodo, reorderFocus, fetchMustDoItems, createMustDoItem, updateMustDoItem, convertMustDoItem, deleteMustDoItem } from '../api'
 import type { Todo, Project } from '../types'
 import type { MustDoItem } from '../api'
 import TodoCard, { cardActionClass } from '../components/TodoCard'
 import TodoModal from '../components/TodoModal'
 import BulkActionBar from '../components/BulkActionBar'
-import HoursTodayCard from '../components/HoursTodayCard'
+import { HoursTodayInline } from '../components/HoursTodayCard'
+import WaitingOnPanel, { FOLLOWUP_DRAG_TYPE } from '../components/WaitingOnPanel'
 import { useTimezone, useHotkeys, useTodoDefaults, resolveAssigneeId } from '../SettingsContext'
 import { getTodayString } from '../dateUtils'
 import { useHotkey } from '../hooks/useHotkey'
 import { useUnfocusWithUndo } from '../hooks/useUnfocusWithUndo'
+import { useFollowupActions } from '../hooks/useFollowupActions'
 import { useToast } from '../ToastContext'
 
 // Must-do section headers (Morning / Afternoon / Evening)
@@ -246,6 +248,29 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  })
 
  const unfocusWithUndo = useUnfocusWithUndo()
+ const followupActions = useFollowupActions()
+ const [followupDragOver, setFollowupDragOver] = useState(false)
+
+ // Shares the Waiting on panel's cache entry (header counts only)
+ const { data: followups = [] } = useQuery<Todo[]>({
+ queryKey: ['todos', 'followups'],
+ queryFn: fetchFollowups,
+ })
+ const openFollowups = followups.filter((t) => t.is_followup && t.status !== 'done')
+ const chaseCount = openFollowups.filter((t) => t.check_back_due).length
+
+ // A follow-up row dropped on the Focus list: the reply came in, it is a todo again
+ const dropFollowup = useCallback((e: React.DragEvent) => {
+ if (!e.dataTransfer.types.includes(FOLLOWUP_DRAG_TYPE)) return false
+ e.preventDefault()
+ e.stopPropagation()
+ setFollowupDragOver(false)
+ setDragOverIndex(null)
+ const id = parseInt(e.dataTransfer.getData(FOLLOWUP_DRAG_TYPE))
+ const todo = openFollowups.find((t) => t.id === id)
+ if (todo) followupActions.toTodo([todo], true)
+ return true
+ }, [openFollowups, followupActions])
 
  const addFocusedTodo = useMutation({
  mutationFn: async (title: string) => {
@@ -356,6 +381,12 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  setSelectedIds(new Set())
  }, [selectedIds, todos, unfocusWithUndo]))
 
+ useHotkey(bindings.toggleFollowup, useCallback(() => {
+ if (selectedIds.size === 0) return
+ followupActions.toFollowup(todos.filter((t) => selectedIds.has(t.id)))
+ setSelectedIds(new Set())
+ }, [selectedIds, todos, followupActions]))
+
  useHotkey(bindings.editTodo, useCallback(() => {
  if (selectedIds.size !== 1) return
  const id = [...selectedIds][0]
@@ -404,6 +435,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
 
  const handleDrop = useCallback(
  (e: React.DragEvent, dropIndex: number) => {
+ if (dropFollowup(e)) return
  if (dragGroupKey.current || dragSubgroupKey.current) return
  e.preventDefault()
  e.stopPropagation()
@@ -427,7 +459,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  reorderMutation.mutate(items)
  dragItemId.current = null
  },
- [filtered, reorderMutation],
+ [filtered, reorderMutation, dropFollowup],
  )
 
  const handleDragEnd = useCallback(() => {
@@ -551,28 +583,57 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  })
  }
 
+ const mustDoDone = todayItems.filter((i) => i.done || (i.todo_id && todos.find((t) => t.id === i.todo_id)?.status === 'done')).length
+ const todayLabel = new Date(`${todayKey}T00:00:00`).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })
+
  return (
- <div className="p-6 flex flex-col gap-4">
- {/* Content — stacked on narrow screens; on xl+ splits into center (Must Do) and right (Focus tasks, scrollable) */}
- <div className="flex flex-col xl:flex-row xl:gap-6 xl:items-start min-w-0">
- {/* Must Do column — center on xl+ */}
- <div className="w-full xl:flex-1 xl:min-w-0">
- <div className="max-w-4xl mx-auto">
+ // On xl+ the page is exactly one screen tall: the left column (Must Do, Waiting on)
+ // and the Focus list split the width evenly, each capped at
+ // max-w-4xl (left centred, right left-aligned) and scrolling on its own.
+ // Narrower, it stacks and scrolls.
+ <div className="p-4 md:p-6 flex flex-col gap-5 xl:h-full xl:min-h-0">
+ <header className="hidden md:flex items-end justify-between gap-x-6 gap-y-3 flex-wrap shrink-0">
+ <div className="min-w-0">
+ <div className="flex items-baseline gap-x-5 gap-y-1 flex-wrap">
+ <h2 className="text-2xl font-semibold tracking-tight text-fg leading-tight">Focus</h2>
+ <HoursTodayInline className="self-center" />
+ </div>
+ <p className="text-sm text-fg-muted mt-0.5">{todayLabel}</p>
+ </div>
+ <div className="flex flex-wrap items-center gap-2">
+ <span className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full text-sm bg-warning-bg/70 text-fg-muted border border-warning/20">
+ <Star size={12} fill="currentColor" className="text-warning-vivid" />
+ <span className="tabular-nums font-semibold text-fg">{notDone.length}</span> in focus
+ </span>
+ <span className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full text-sm bg-success-bg/60 text-fg-muted border border-success/20">
+ <Check size={12} strokeWidth={3} className="text-success" />
+ <span className="tabular-nums font-semibold text-fg">{mustDoDone}/{todayItems.length}</span> must-do
+ </span>
+ <span className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full text-sm bg-wait-bg text-fg-muted border border-wait-border">
+ <Hourglass size={12} className="text-wait" />
+ <span className="tabular-nums font-semibold text-fg">{openFollowups.length}</span> waiting
+ {chaseCount > 0 && <span className="text-warning font-semibold">· {chaseCount} to chase</span>}
+ </span>
+ </div>
+ </header>
+
+ <div className="flex flex-col gap-6 xl:flex-row xl:flex-1 xl:min-h-0 min-w-0">
+ {/* Left rail */}
+ <aside className="w-full xl:flex-1 xl:min-w-0 xl:min-h-0 xl:overflow-y-auto xl:-mr-2 xl:pr-2 xl:pb-2">
+ {/* Capped and centred in its half, as before */}
+ <div className="max-w-4xl mx-auto flex flex-col gap-4">
 
  {/* Must Do Today — elevated importance:
       left amber stripe + subtle header tint + stronger shadow. */}
- <div className="relative rounded-xl border border-border bg-surface shadow-md mb-6 overflow-hidden">
+ <div className="relative shrink-0 rounded-xl border border-border bg-surface shadow-md overflow-hidden">
  <span aria-hidden className="absolute inset-y-0 left-0 w-1 bg-warning-vivid" />
  <div className="pl-6 pr-5 pt-4 pb-2 flex items-center gap-2 border-b border-border-subtle bg-warning-bg/40 dark:bg-warning-bg/25">
  <Star size={17} fill="currentColor" className="text-warning-vivid shrink-0" />
  <h3 className="text-sm font-bold text-fg uppercase tracking-wide whitespace-nowrap">
  Must Do Today
  </h3>
- <span className="hidden sm:inline text-xs text-fg-muted font-medium whitespace-nowrap">
- {todayKey}
- </span>
  <span className="text-xs text-fg-muted ml-auto tabular-nums whitespace-nowrap">
- {todayItems.filter((i) => i.done || (i.todo_id && todos.find((t) => t.id === i.todo_id)?.status === 'done')).length}/{todayItems.length} done
+ {mustDoDone}/{todayItems.length} done
  </span>
  <button
  onClick={() => {
@@ -1019,19 +1080,31 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  )}
  </div>
 
- {/* Hours today vs averages — fills the space under Must Do on wide screens */}
- <div className="hidden xl:block">
- <HoursTodayCard onOpenTodo={onOpenTodo} />
- </div>
- </div>
- </div>
+ {/* Waiting on — under Must Do on wide screens */}
+ <WaitingOnPanel onOpenTodo={onOpenTodo} className="hidden xl:flex shrink-0" />
 
- {/* Focus tasks column — right on xl+, scrolls independently */}
- <div className="w-full xl:flex-1 xl:min-w-0 xl:sticky xl:top-6 xl:self-start xl:max-h-[calc(100vh-3rem)] xl:overflow-y-auto">
+ </div>
+ </aside>
+
+ {/* Focus list — scrolls independently on xl+ */}
+ <section
+ aria-label="Focus list"
+ className="w-full xl:flex-1 xl:min-w-0 xl:min-h-0 xl:overflow-y-auto xl:-mx-2 xl:px-2 xl:pb-2"
+ onDragOver={(e) => {
+ if (!e.dataTransfer.types.includes(FOLLOWUP_DRAG_TYPE)) return
+ e.preventDefault()
+ setFollowupDragOver(true)
+ }}
+ onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setFollowupDragOver(false) }}
+ onDrop={(e) => { dropFollowup(e) }}
+ >
  <div className="max-w-4xl mx-auto xl:mx-0">
 
  {/* Options row — sits above the tasks list so it stays within this column and wraps against the column width, not the full toolbar. */}
- <div className="flex justify-end mb-3 md:px-1">
+ <div className="flex items-center justify-between gap-3 mb-3 md:px-1 xl:sticky xl:top-0 xl:z-10 xl:bg-app xl:py-1">
+ <h3 className="hidden md:flex items-baseline gap-2 text-sm font-bold text-fg uppercase tracking-wide shrink-0">
+ Focus list <span className="text-xs font-semibold text-fg-subtle tabular-nums normal-case tracking-normal">{filtered.length}</span>
+ </h3>
  <div className="flex flex-wrap md:flex-nowrap items-center gap-0.5 bg-inset rounded-2xl md:rounded-full px-1.5 py-1 border border-border-subtle w-full md:w-auto max-w-full min-w-0">
  {focusedProjects.length > 1 && (
  <>
@@ -1102,7 +1175,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  {focusSearchOpen && focusSearch.trim() && (() => {
  const q = focusSearch.trim().toLowerCase()
  const matches = allTodos.filter(
- (t) => !t.is_focused && t.title.toLowerCase().includes(q)
+ (t) => !t.is_focused && !t.is_followup && t.title.toLowerCase().includes(q)
  ).slice(0, 8)
  if (matches.length === 0) return (
  <div className="absolute right-0 top-full mt-1 z-20 bg-surface border border-border rounded-lg shadow-lg px-3 py-2 text-xs text-fg-subtle w-64">
@@ -1138,12 +1211,17 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  </div>
  </div>
 
+ {followupDragOver && (
+ <div className="mb-3 rounded-xl border-[1.5px] border-dashed border-accent bg-accent-1 text-accent-fg px-4 py-3 text-sm font-medium flex items-center justify-center gap-2">
+ <CornerDownLeft size={14} />Drop to make it a todo again and add it to Focus
+ </div>
+ )}
  {isLoading ? (
  <div className="text-fg-muted text-sm">Loading...</div>
  ) : filtered.length === 0 ? (
  <div className="bg-surface rounded-xl border border-dashed border-border p-8 text-center">
  <p className="text-fg-subtle text-sm">
- No focused todos yet. Drag todo cards onto "Focus" in the sidebar to add them.
+ No focused todos yet. Drag todo cards onto "Focus" in the sidebar, or a row from Waiting on, to add them.
  </p>
  </div>
  ) : (
@@ -1336,7 +1414,10 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  </div>
  )}
  </div>
- </div>
+ </section>
+
+ {/* Waiting on — after the Focus list below xl */}
+ <WaitingOnPanel onOpenTodo={onOpenTodo} className="xl:hidden" />
  </div>
 
  <BulkActionBar

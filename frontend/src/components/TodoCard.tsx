@@ -1,4 +1,4 @@
-import { AlarmClock, ArrowUpRight, Calendar, ChevronDown, ChevronUp, Folder, GripVertical, ListChecks, Star, Timer, User } from 'lucide-react'
+import { AlarmClock, ArrowUpRight, Calendar, ChevronDown, ChevronUp, CornerDownLeft, Folder, GripVertical, Hourglass, ListChecks, Star, Timer, User } from 'lucide-react'
 import { useState, useEffect, useRef } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
@@ -6,6 +6,8 @@ import DescriptionEditor from './DescriptionEditor'
 import { createTodo, createSubTodo, deleteTodo, restoreTodo, updateSubTodo, updateTodo, fetchPersons, fetchProjects, fetchTodos } from '../api'
 import { useToast } from '../ToastContext'
 import { useUnfocusWithUndo } from '../hooks/useUnfocusWithUndo'
+import { useFollowupActions } from '../hooks/useFollowupActions'
+import { FollowupActions, FollowupChip } from './Followup'
 import DatePicker from './DatePicker'
 import type { Todo, Person, Project } from '../types'
 import { pickableProjects, projectOptionLabel } from '../utils/projects'
@@ -145,6 +147,8 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
  const navigate = useNavigate()
  const { showToast } = useToast()
  const unfocusWithUndo = useUnfocusWithUndo()
+ const { toFollowup, toTodo } = useFollowupActions()
+ const isFollowup = !!todo.is_followup
 
  useEffect(() => {
  return () => {
@@ -305,13 +309,29 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
  }}
  onMouseDown={handleCardMouseDown}
  onClick={handleCardClick}
- className={`bg-surface rounded-xl shadow-sm border overflow-hidden transition-shadow duration-200 hover:shadow-md ${isSelected ? 'border-accent' : 'border-border'}`}
+ className={`rounded-xl shadow-sm border overflow-hidden transition-shadow duration-200 hover:shadow-md ${
+ isFollowup
+ ? `bg-surface bg-[linear-gradient(rgb(var(--wait-bg)/0.35),rgb(var(--wait-bg)/0.35))] border-dashed ${isSelected ? 'border-accent' : todo.check_back_due ? 'border-warning/50' : 'border-wait-border'}`
+ : `bg-surface ${isSelected ? 'border-accent' : 'border-border'}`
+ }`}
  >
  {/* Header */}
  <div className="px-4 py-3 md:px-5 md:py-4">
  {/* Grid, not flex: on phones the title spans under the actions instead of
      being squeezed into a narrow column beside them. */}
  <div className="grid grid-cols-[auto_auto_minmax(0,1fr)_auto] items-start gap-x-3">
+ {isFollowup ? (
+ /* A follow-up has no star and no done checkbox: you are waiting, not doing.
+    Resolving it is inside the expanded card. */
+ <span
+ title="Follow-up: waiting on a reply"
+ className={`col-start-1 col-end-3 row-start-1 row-end-3 w-10 h-10 rounded-lg grid place-items-center border ${
+ todo.check_back_due ? 'text-warning bg-warning-bg border-warning/35' : 'text-wait bg-wait-bg border-wait-border'
+ }`}
+ >
+ <Hourglass size={18} />
+ </span>
+ ) : (<>
  {/* Focus toggle */}
  <button
  onClick={(e) => {
@@ -336,6 +356,7 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
  title="Mark as done"
  className="col-start-2 row-start-1 mt-1 w-4 h-4 rounded cursor-pointer accent-green-600 flex-shrink-0"
  />
+ </>)}
  <div className="contents">
  {/* Badges row */}
  <div className="col-start-3 row-start-1 min-w-0 self-center flex flex-wrap items-center gap-2 mb-1">
@@ -362,6 +383,13 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
  {todo.importance}
  </span>
  )}
+
+ {isFollowup && (
+ <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-wait-bg text-wait border border-wait-border">
+ Follow-up
+ </span>
+ )}
+ {isFollowup && todo.status !== 'done' && <FollowupChip todo={todo} />}
 
  {todo.status === 'done' && (
  <span className="text-xs font-medium px-2 py-0.5 rounded-full capitalize bg-success-bg text-success">
@@ -414,6 +442,23 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
 
  {/* Actions */}
  <div className="col-start-4 row-start-1 md:row-end-3 justify-self-end flex items-center gap-1.5 md:gap-2 mb-1 md:mb-0">
+ {todo.status !== 'done' && (isFollowup ? (
+ <button
+ onClick={() => toTodo([todo], true)}
+ title="The reply came in: make it a todo again and add it to Focus"
+ className={`${cardActionClass} w-7 md:w-auto md:px-2.5 text-fg-muted bg-inset hover:bg-wait-bg hover:text-wait border-border hover:border-wait-border`}
+ >
+ <CornerDownLeft size={13} /><span className="hidden md:inline">Back to todo</span>
+ </button>
+ ) : (
+ <button
+ onClick={() => toFollowup([todo])}
+ title="Waiting on someone else: move it to follow-ups"
+ className={`${cardActionClass} w-7 md:w-auto md:px-2.5 text-fg-muted bg-inset hover:bg-wait-bg hover:text-wait border-border hover:border-wait-border`}
+ >
+ <Hourglass size={13} /><span className="hidden md:inline">Wait</span>
+ </button>
+ ))}
  {extraActions}
  {onOpenDetail && (
  <button
@@ -462,6 +507,7 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
  className="flex items-center gap-1 cursor-pointer hover:text-accent transition-colors"
  >
  <User size={12} className="shrink-0" />
+ {isFollowup && todo.assignee_name && <span className="text-fg-subtle">Waiting on</span>}
  {todo.assignee_name ?? <em className="text-fg-faint dark:text-fg-muted not-italic">+ person</em>}
  </span>
  )}
@@ -556,6 +602,7 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
  {/* Expanded content */}
  {expanded && (
  <div className="border-t border-border-subtle px-5 py-4 space-y-4">
+ {isFollowup && todo.status !== 'done' && <FollowupActions todo={todo} />}
  <div>
  <p className="text-xs font-semibold text-fg-muted uppercase tracking-wide mb-1">
  Description

@@ -12,6 +12,8 @@ interface DatePickerProps {
  className?: string
  /** Extra classes applied to the trigger button/input */
  triggerClassName?: string
+ /** Label shown instead of the raw YYYY-MM-DD value (e.g. "Sep 30") */
+ displayValue?: string
 }
 
 export default function DatePicker({
@@ -21,6 +23,7 @@ export default function DatePicker({
  placeholder = 'Set date',
  className = '',
  triggerClassName = '',
+ displayValue,
 }: DatePickerProps) {
  const [open, setOpen] = useState(false)
  const triggerRef = useRef<HTMLButtonElement>(null)
@@ -81,7 +84,7 @@ export default function DatePicker({
  onClick={(e) => { e.stopPropagation(); setOpen(!open) }}
  className={`${triggerBase} ${triggerClassName}`}
  >
- {value || placeholder}
+ {value ? (displayValue ?? value) : placeholder}
  </button>
  {open && createPortal(
  <div

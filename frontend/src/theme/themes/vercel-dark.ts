@@ -49,6 +49,10 @@ export const vercelDark: ThemePreset = {
       prioHigh:      '180 76 12',
       prioHighBg:    '255 241 230',
 
+      wait:          '79 70 229',
+      waitBg:        '238 242 255',
+      waitBorder:    '199 210 254',
+
       focusRing:     '64 124 236',
     },
     dark: {
@@ -89,6 +93,10 @@ export const vercelDark: ThemePreset = {
       prioCriticalBg:'56 22 34',
       prioHigh:      '248 150 86',
       prioHighBg:    '56 34 18',
+
+      wait:          '165 180 252',
+      waitBg:        '28 28 52',
+      waitBorder:    '52 52 96',
 
       focusRing:     '102 158 248',
     },

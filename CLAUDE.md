@@ -109,6 +109,8 @@ Proposed features and usability improvements are tracked in `claude_readmes/feat
 
 SQLite with SQLAlchemy 2.0. Core tables: `persons`, `projects`, `todos`, `subtodos`, `todo_blockers`, `must_do_items`, `daily_goals`, `meeting_notes` (plus association tables). Todo statuses: `todo`, `done` (`in_progress` is deprecated; legacy rows are backfilled to `todo` on startup and new writes of that value are rejected). Importance levels: `low`, `medium`, `high`, `critical`.
 
+Follow-ups (todos you are waiting on someone else for) are a variant, not a status: `todos.followup_since` (ISO timestamp; NULL = normal todo) and `check_back_on` (`YYYY-MM-DD` chase date). `TodoOut` derives `is_followup`, `waiting_days` and `check_back_due` server-side. A follow-up is never focused (422), and is left out of schedule reminders and hours-worked. Converting goes through `POST /todos/{id}/followup` / `unfollowup`; the frontend uses `hooks/useFollowupActions.ts` (optimistic + Undo toast) everywhere.
+
 Schema changes are ad-hoc, not Alembic: DDL goes in the `inspect()`-guarded `ALTER TABLE` block that runs at import right after `create_all()` (`backend/main.py`), and data backfills go in `lifespan()`.
 
 `persons` also carries check-in cadence tracking: `is_direct_report` (only direct reports raise dashboard warnings), `check_in_interval_days` (default 2), and `last_check_in_date` (`YYYY-MM-DD`). The date is a forward-only watermark — set by the check-in button and auto-advanced when a past-dated meeting note lists the person as an attendee.

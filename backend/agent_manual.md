@@ -40,7 +40,7 @@ Tokens carry a subset of these scopes. A `403` with `required_scope` tells you w
 | Scope | Unlocks |
 |---|---|
 | `read` | all `GET` endpoints listed below |
-| `write:todos` | create/edit/complete/focus todos and subtodos, restore a soft-deleted todo, convert a must-do item into a todo |
+| `write:todos` | create/edit/complete/focus todos and subtodos, turn todos into follow-ups and back, restore a soft-deleted todo, convert a must-do item into a todo |
 | `write:persons` | `PUT /persons/{id}` with **only** `last_check_in_date` and/or `notes` |
 | `write:notes` | create/edit/restore notes with `kind='personal'` only; never transcripts |
 | `write:daily` | daily goals and must-do items |
@@ -51,6 +51,7 @@ Tokens carry a subset of these scopes. A `403` with `required_scope` tells you w
 - Dates are `YYYY-MM-DD` strings; timestamps are ISO-8601 UTC. Use the local date of the device you run on as "today" (the user is in one timezone).
 - Todo `status` is `todo` or `done` (nothing else). `importance` is `low` | `medium` | `high` | `critical`.
 - Projects carry the same `importance` scale: `low` | `medium` | `high` | `critical` (critical sits above high).
+- Follow-ups: a todo with `is_followup=true` is one the user is **waiting on someone else** for — nothing to do until they reply. The assignee is who they are waiting on. Extra fields: `followup_since` (ISO timestamp), `check_back_on` (`YYYY-MM-DD`, when to chase; may be null), and server-derived `waiting_days` and `check_back_due` (chase date is today or past) — do not compute these yourself. `status` is still `todo`/`done`: resolving a follow-up is `{"status":"done"}`. A follow-up is never in focus. Do not suggest a follow-up as work for today; suggest chasing the ones with `check_back_due=true`.
 - Focus: a todo is "in focus" when `is_focused=true`; `focus_order` (ascending) is its rank. Moving focus = setting these on the affected todos, or one call to `PUT /todos/reorder-focus`.
 - Check-in ("ping"): each person may be a direct report with `check_in_interval_days` and `last_check_in_date`. A person is **overdue** when `today − last_check_in_date > check_in_interval_days` (or there is no date). Recording a check-in = `POST /persons/{id}/check-in`; the server keeps the date forward-only.
 - Tags: inline `#tag` / `#tag/sub` in a note body are indexed automatically. Tag segments must start with a letter and contain only letters, digits, `_` (no hyphens) — `#report/2026-w35` would index as just `report`. Reports: weekly `#report/weekly #report/w<yyyy>_<ww>` (e.g. `#report/w2026_35`); daily `#report/daily #report/d<yyyymmdd>`. The bundled `report daily|weekly` helper renders these from the digest.
@@ -65,10 +66,13 @@ Tokens carry a subset of these scopes. A `403` with `required_scope` tells you w
 
 Read the situation (most tasks start here):
 ```
-GET /agent/digest                     ONE call: today, focused/overdue/due-today todos, overdue check-ins,
+GET /agent/digest                     ONE call: today, focused/overdue/due-today todos, followups_due +
+                                      followups_waiting_count, overdue check-ins,
                                       today's must-do + goal, done in last 7 days
 GET /todos?is_focused=true            focused todos, in focus_order
-GET /todos                            todos (filters: project_id, assignee_id, status, exclude_done, is_focused)
+GET /todos                            todos (filters: project_id, assignee_id, status, exclude_done, is_focused,
+                                      kind=todo|followup)
+GET /todos/followups                  open follow-ups, due-to-chase first
 GET /todos/recently-done              done in the last few days
 GET /persons                          people; derive overdue check-ins from the check_in fields
 GET /persons/progress                 per-person open/done counts
@@ -94,6 +98,15 @@ PUT /todos/{id}   {"title":"…"}            any subset of fields
 PUT /todos/{id}   {"status":"done"}        complete
 PUT /todos/{id}   {"status":"todo"}        reopen
 ```
+
+Follow-ups (waiting on someone else):
+```
+POST /todos/{id}/followup     {"check_back_on":"2026-10-05"}   becomes a follow-up, leaves focus (body optional; default today+3d)
+POST /todos/{id}/unfollowup   {"focus":true}                   back to a normal todo; focus=true puts it at the end of the focus list
+PUT  /todos/{id}              {"check_back_on":"2026-10-09"}   the user chased it; check again later (follow-ups only, else 422)
+PUT  /todos/{id}              {"status":"done"}                resolved
+```
+Both POSTs are idempotent and return the todo. Focusing a follow-up (`is_focused:true` or `PUT /todos/focus`) is a 422 — unfollowup it first.
 
 Move focus (preferred — one idempotent call, returns the resulting list):
 ```
