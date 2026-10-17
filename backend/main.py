@@ -3621,7 +3621,8 @@ def agent_skill():
 def agent_digest(db: Session = Depends(get_db)):
     """Focused/overdue/due-today todos, follow-ups due to chase, overdue check-ins, today's must-do and goal, recently done.
 
-    Read-only: unlike GET /must-do/{date} this does not carry items over.
+    Today's must-do list is carried over first, exactly as GET /must-do/{today} does, so the
+    digest and the Focus page always show the same list.
     """
     today = today_in_user_tz()
     week_ago = (date.fromisoformat(today) - timedelta(days=7)).isoformat()
@@ -3675,7 +3676,8 @@ def agent_digest(db: Session = Depends(get_db)):
     ]
     social_nudges.sort(key=lambda f: f.days_until_due if f.days_until_due is not None else 0)
 
-    must_do = db.query(MustDoItem).filter(MustDoItem.date == today).order_by(MustDoItem.order).all()
+    carry_over_must_do(db, today)
+    must_do = db.query(MustDoItem).filter(MustDoItem.date == today).order_by(MustDoItem.order, MustDoItem.id).all()
     goal = db.query(DailyGoal).filter(DailyGoal.date == today).first()
     followups = open_q.filter(Todo.followup_since != None).all()
     followups.sort(key=lambda t: _followup_sort_key(t, today))
@@ -4757,6 +4759,11 @@ def update_todo(todo_id: int, data: TodoUpdate, db: Session = Depends(get_db), v
             t.done_at = datetime.now(timezone.utc).isoformat()
         elif new_status != "done" and old_status == "done":
             t.done_at = None
+        if new_status != old_status:
+            # Today's must-do items for this todo tick with it, wherever it was completed
+            db.query(MustDoItem).filter(
+                MustDoItem.todo_id == t.id, MustDoItem.date == today_in_user_tz()
+            ).update({"done": new_status == "done"})
     if blocked_by_ids is not None:
         blockers = db.query(Todo).filter(Todo.id.in_(blocked_by_ids)).all()
         t.blocked_by = blockers
@@ -4841,46 +4848,67 @@ def delete_subtodo(subtodo_id: int, db: Session = Depends(get_db), viewer: Viewe
 # ─── Must Do Items ───────────────────────────────────────────────────────────
 
 
-@app.get("/must-do/{date}", response_model=List[MustDoItemOut])
-def list_must_do(date: str, db: Session = Depends(get_db)):
-    items = (
-        db.query(MustDoItem)
-        .filter(MustDoItem.date == date)
-        .order_by(MustDoItem.order)
-        .all()
-    )
-    if items:
-        return items
+def carry_over_must_do(db: Session, today: str) -> None:
+    """Bring earlier days' unfinished must-do items onto today, once each.
 
-    # Carry over the previous day's unfinished items, once each: an item already carried
-    # stays put, so emptying today's list does not bring it back
-    prev_date = db.query(func.max(MustDoItem.date)).filter(MustDoItem.date < date).scalar()
-    if not prev_date:
-        return []
-    carried = (
+    Runs only for today's date (reading a past or future day never moves items), and
+    whether or not today already has items, so an item added before the first read
+    (by an agent, say) no longer strands yesterday's list. Each source row is claimed
+    with a conditional UPDATE, so two first reads at once cannot copy it twice. An item
+    whose linked todo is done or deleted is retired instead of copied; one already on
+    today's list (same todo, or same text) is not duplicated."""
+    pending = (
         db.query(MustDoItem)
-        .filter(MustDoItem.date == prev_date, MustDoItem.done == False, MustDoItem.carried_to.is_(None))
-        .order_by(MustDoItem.order)
+        .filter(MustDoItem.date < today, MustDoItem.done == False, MustDoItem.carried_to.is_(None))
+        .order_by(MustDoItem.date, MustDoItem.order, MustDoItem.id)
         .all()
     )
-    if not carried:
-        return []
-    for i, old in enumerate(carried):
+    if not pending:
+        return
+    existing = db.query(MustDoItem).filter(MustDoItem.date == today).all()
+    have_todos = {m.todo_id for m in existing if m.todo_id}
+    have_texts = {m.text.strip().lower() for m in existing if not m.todo_id}
+    next_order: dict = {}
+    for m in existing:
+        sec = m.section or "morning"
+        next_order[sec] = max(next_order.get(sec, 0), (m.order or 0) + 1)
+    for old in pending:
+        claimed = db.execute(
+            text("UPDATE must_do_items SET carried_to = :d WHERE id = :id AND carried_to IS NULL"),
+            {"d": today, "id": old.id},
+        ).rowcount
+        if not claimed:
+            continue
+        todo = old.todo
+        if todo is not None and (todo.status == "done" or todo.deleted_at):
+            continue
+        if old.todo_id:
+            if old.todo_id in have_todos:
+                continue
+            have_todos.add(old.todo_id)
+        else:
+            key = old.text.strip().lower()
+            if key in have_texts:
+                continue
+            have_texts.add(key)
+        sec = old.section or "morning"
         db.add(MustDoItem(
-            date=date,
-            todo_id=old.todo_id,
-            text=old.text,
-            done=False,
-            order=i,
-            section=old.section or "morning",
+            date=today, todo_id=old.todo_id, text=old.text, done=False,
+            order=next_order.get(sec, 0), section=sec,
         ))
-        old.carried_to = date
+        next_order[sec] = next_order.get(sec, 0) + 1
     db.commit()
 
+
+@app.get("/must-do/{date}", response_model=List[MustDoItemOut])
+def list_must_do(date: str, db: Session = Depends(get_db)):
+    """A day's must-do items. Reading today first carries earlier unfinished items over."""
+    if date == today_in_user_tz():
+        carry_over_must_do(db, date)
     return (
         db.query(MustDoItem)
         .filter(MustDoItem.date == date)
-        .order_by(MustDoItem.order)
+        .order_by(MustDoItem.order, MustDoItem.id)
         .all()
     )
 
