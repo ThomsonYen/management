@@ -71,24 +71,33 @@ export function useHoursToday() {
     queryFn: () => fetchRecentlyDone({ since: shiftDay(today, 1), limit: 200 }),
   })
   // Server list of today's done todos, overlaid with the live todo caches:
-  // a todo just ticked done (optimistic, no done_at yet) counts at once, and one
-  // just reopened drops out. Follow-ups never count — waiting is not your work.
+  // a todo just ticked done counts at once, and one just reopened drops out.
+  // Inactive list caches are not refetched on invalidate and are persisted, so
+  // a cached copy only counts if it carries a done_at on today, and only
+  // overrides the server if that cache was written after the todo was done.
+  // Follow-ups never count — waiting is not your work.
   const doneToday = useMemo(() => {
-    const live = new Map<number, Todo>()
-    queryClient.getQueriesData<Todo[]>({ queryKey: ['todos'] })
-      .forEach(([, list]) => list?.forEach((t) => live.set(t.id, t)))
+    const live = new Map<number, { t: Todo; at: number }>()
+    queryClient.getQueryCache().findAll({ queryKey: ['todos'] }).forEach((q) => {
+      const at = q.state.dataUpdatedAt
+      ;(q.state.data as Todo[] | undefined)?.forEach((t) => {
+        const prev = live.get(t.id)
+        if (!prev || at > prev.at) live.set(t.id, { t, at })
+      })
+    })
     const mine = (t: Todo) => t.assignee_id === meId && !t.is_followup
+    const isToday = (t: Todo) => !!t.done_at && getDateString(t.done_at, timezone) === today
     const out = new Map<number, Todo>()
     for (const t of recentlyDone) {
-      if (!mine(t) || !t.done_at || getDateString(t.done_at, timezone) !== today) continue
+      if (!mine(t) || !isToday(t)) continue
       const cur = live.get(t.id)
-      if (cur && cur.status !== 'done') continue
-      out.set(t.id, cur ? { ...t, ...cur, done_at: t.done_at } : t)
+      const fresh = cur && cur.at > Date.parse(t.done_at!)
+      if (fresh && cur.t.status !== 'done') continue
+      out.set(t.id, fresh ? { ...t, ...cur.t, done_at: t.done_at } : t)
     }
-    for (const t of live.values()) {
-      if (out.has(t.id) || t.status !== 'done' || !mine(t)) continue
-      if (t.done_at && getDateString(t.done_at, timezone) !== today) continue
-      out.set(t.id, { ...t, done_at: t.done_at ?? new Date().toISOString() })
+    for (const { t } of live.values()) {
+      if (out.has(t.id) || t.status !== 'done' || !mine(t) || !isToday(t)) continue
+      out.set(t.id, t)
     }
     return [...out.values()].sort((a, b) => (b.done_at ?? '').localeCompare(a.done_at ?? ''))
     // cacheTick: re-read the caches after any todo cache update
@@ -350,6 +359,9 @@ export function HoursTodayInline({ className = '' }: { className?: string }) {
   const firstLap = Math.min(ratio, 1)
   const secondLap = Math.min(Math.max(ratio - 1, 0), 1)
   const reached = ratio >= 1
+  // Past a typical day, say by how much: only against real history, not the 6h stand-in.
+  const pct = Math.round(ratio * 100)
+  const over = hasAvg && pct > 100
 
   const size = 30
   const stroke = 4.5
@@ -379,6 +391,14 @@ export function HoursTodayInline({ className = '' }: { className?: string }) {
       </svg>
       {reached && <Check size={13} strokeWidth={3.5} className="absolute text-accent" aria-hidden />}
     </span>
+    {over && (
+      <span
+        aria-hidden
+        className="-ml-1 inline-flex items-center gap-0.5 h-5 pl-1.5 pr-2 rounded-full text-[11px] font-bold leading-none tabular-nums text-accent-hover bg-gradient-to-r from-accent-1 to-accent-2 ring-1 ring-inset ring-accent/25 shadow-sm"
+      >
+        <TrendingUp size={11} strokeWidth={3} className="shrink-0" />{pct}%
+      </span>
+    )}
     <span aria-hidden className="text-sm text-fg-muted tabular-nums whitespace-nowrap">
       <span className="font-semibold text-fg">{todayTasks}</span> {todayTasks === 1 ? 'todo' : 'todos'}
       <span className="text-fg-faint"> · </span>

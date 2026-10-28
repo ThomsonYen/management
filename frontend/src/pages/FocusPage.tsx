@@ -15,6 +15,7 @@ import { useHotkey } from '../hooks/useHotkey'
 import { useUnfocusWithUndo } from '../hooks/useUnfocusWithUndo'
 import { useFollowupActions } from '../hooks/useFollowupActions'
 import { useToast } from '../ToastContext'
+import { patchTodoCaches } from '../utils/optimisticTodo'
 
 // Must-do section headers (Morning / Afternoon / Evening)
 const SECTION_ICON = 'shrink-0 text-fg-subtle'
@@ -205,9 +206,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  updateMustDo.mutate({ id: item.id, done: newDone })
  if (item.todo_id) {
  const status = newDone ? 'done' : 'todo'
- queryClient.setQueriesData<Todo[]>({ queryKey: ['todos'] }, (old) =>
- old?.map((t) => (t.id === item.todo_id ? { ...t, status } : t))
- )
+ patchTodoCaches(queryClient, item.todo_id, { status })
  // sync in the background; invalidate either way so an error resyncs the cache
  updateTodo(item.todo_id, { status })
  .catch(() => {})

@@ -35,7 +35,16 @@ export function restoreTodoCaches(
   queryClient.setQueryData(['todo', todoId], snapshot.detail)
 }
 
+// A status change carries its done_at, as the server would set it. Without it an
+// optimistic "done" left in an unrefetched (persisted) list cache reads as done
+// with no date, and the done-today ring counted it again the next day.
+export function withDoneAt<T extends Partial<Todo>>(patch: T): T {
+  if (!('status' in patch) || 'done_at' in patch || patch.status === undefined) return patch
+  return { ...patch, done_at: patch.status === 'done' ? new Date().toISOString() : undefined }
+}
+
 export function patchTodoCaches(queryClient: QueryClient, todoId: number, patch: Partial<Todo>) {
+  patch = withDoneAt(patch)
   queryClient.setQueriesData<Todo[]>({ queryKey: ['todos'] }, (old) =>
     old?.map((t) => (t.id === todoId ? { ...t, ...patch } : t))
   )
@@ -66,5 +75,5 @@ export function buildTodoPatch(
   for (const [key, value] of Object.entries(data)) patch[key] = value ?? undefined
   if ('assignee_id' in data) patch.assignee_name = persons.find((p) => p.id === data.assignee_id)?.name
   if ('project_id' in data) patch.project_name = projects.find((p) => p.id === data.project_id)?.name
-  return patch as Partial<Todo>
+  return withDoneAt(patch as Partial<Todo>)
 }
