@@ -585,20 +585,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  const mustDoDone = todayItems.filter((i) => i.done || (i.todo_id && todos.find((t) => t.id === i.todo_id)?.status === 'done')).length
  const todayLabel = new Date(`${todayKey}T00:00:00`).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })
 
- return (
- // On xl+ the page is exactly one screen tall: the left column (Must Do, Waiting on)
- // and the Focus list split the width evenly, each capped at
- // max-w-4xl (left centred, right left-aligned) and scrolling on its own.
- // Narrower, it stacks and scrolls.
- <div className="p-4 md:p-6 flex flex-col gap-5 xl:h-full xl:min-h-0">
- <header className="hidden md:flex items-end justify-between gap-x-6 gap-y-3 flex-wrap shrink-0">
- <div className="min-w-0">
- <div className="flex items-baseline gap-x-5 gap-y-1 flex-wrap">
- <h2 className="text-2xl font-semibold tracking-tight text-fg leading-tight">Focus</h2>
- <HoursTodayInline className="self-center" />
- </div>
- <p className="text-sm text-fg-muted mt-0.5">{todayLabel}</p>
- </div>
+ const statChips = (
  <div className="flex flex-wrap items-center gap-2">
  <span className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full text-sm bg-warning-bg/70 text-fg-muted border border-warning/20">
  <Star size={12} fill="currentColor" className="text-warning-vivid" />
@@ -613,6 +600,32 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  <span className="tabular-nums font-semibold text-fg">{openFollowups.length}</span> waiting
  {chaseCount > 0 && <span className="text-warning font-semibold">· {chaseCount} to chase</span>}
  </span>
+ </div>
+ )
+
+ return (
+ // On xl+ the page is exactly one screen tall: the left column (Must Do, Waiting on)
+ // and the Focus list split the width evenly, each capped at
+ // max-w-4xl (left centred, right left-aligned) and scrolling on its own.
+ // Narrower, it stacks and scrolls.
+ <div className="p-4 md:p-6 flex flex-col gap-5 xl:h-full xl:min-h-0">
+ <header className="hidden md:flex flex-col xl:flex-row gap-6 shrink-0">
+ {/* Mirrors the columns below so the title lines up with Must Do */}
+ <div className="w-full xl:flex-1 min-w-0">
+ <div className="max-w-4xl mx-auto flex items-end justify-between gap-x-6 gap-y-3 flex-wrap">
+ <div className="min-w-0">
+ <div className="flex items-baseline gap-x-5 gap-y-1 flex-wrap">
+ <h2 className="text-2xl font-semibold tracking-tight text-fg leading-tight">Focus</h2>
+ <HoursTodayInline className="self-center" />
+ </div>
+ <p className="text-sm text-fg-muted mt-0.5">{todayLabel}</p>
+ </div>
+ <div className="xl:hidden">{statChips}</div>
+ </div>
+ </div>
+ {/* Sits over the Focus list, right-aligned to its max-w-4xl box */}
+ <div className="hidden xl:flex xl:flex-1 min-w-0 items-end">
+ <div className="w-full max-w-4xl flex justify-end">{statChips}</div>
  </div>
  </header>
 
