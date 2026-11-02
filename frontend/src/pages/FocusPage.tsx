@@ -994,8 +994,9 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  }}
  onKeyDown={(e) => {
  if (e.key === 'Enter' && todayInput.trim()) {
+ // Completed todos are never relinked; the same name makes a fresh item
  const match = todos.find((t) =>
- t.title.toLowerCase() === todayInput.trim().toLowerCase()
+ t.status !== 'done' && t.title.toLowerCase() === todayInput.trim().toLowerCase()
  )
  if (match) addTodayTodo(match, sec)
  else addTodayText(todayInput, sec)
@@ -1015,6 +1016,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  const q = todayInput.trim().toLowerCase()
  const matches = todos.filter(
  (t) =>
+ t.status !== 'done' &&
  t.title.toLowerCase().includes(q) &&
  !todayItems.some((i) => i.todo_id === t.id)
  ).slice(0, 6)
