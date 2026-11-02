@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, Clock, TrendingDown, TrendingUp } from 'lucide-react'
 import { fetchPersonProgress, fetchPersons, fetchRecentlyDone } from '../api'
@@ -12,6 +12,7 @@ import { getTodayString, getDateString, formatDayLabel } from '../dateUtils'
 
 const HISTORY_DAYS = 28
 const CHART_DAYS = 14
+const TREND_DAYS = 7
 const LIST_PREVIEW = 5
 // 14 day columns, a divider, then 3 wider average columns.
 const GRID_COLS = `repeat(${CHART_DAYS}, minmax(0, 1fr)) 10px repeat(3, minmax(0, 1.8fr))`
@@ -340,7 +341,23 @@ export default function HoursTodayCard({ onOpenTodo }: { onOpenTodo?: (id: numbe
  *  you reach it; past that a darker second lap starts. Beside it: todos done,
  *  hours done and the average. Updates the moment a todo is ticked done. */
 export function HoursTodayInline({ className = '' }: { className?: string }) {
-  const { meId, stats } = useHoursToday()
+  const { meId, today, timezone, stats } = useHoursToday()
+  // Hovering the ring peeks at the 7-day trend; clicking pins it open, enlarged.
+  const [peek, setPeek] = useState(false)
+  const [pinned, setPinned] = useState(false)
+  const wrapRef = useRef<HTMLSpanElement>(null)
+  useEffect(() => {
+    if (!pinned) return
+    const onDown = (e: MouseEvent) => { if (!wrapRef.current?.contains(e.target as Node)) setPinned(false) }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setPinned(false) }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [pinned])
+
   if (meId === null) {
     return (
       <span
@@ -372,8 +389,20 @@ export function HoursTodayInline({ className = '' }: { className?: string }) {
     (hasAvg ? `${Math.round(ratio * 100)}% of your typical day (${fmt(avg)})` : 'no history yet — measured against a 6h day')
 
   return (
-    <span title={summary} className={`inline-flex items-center gap-2.5 ${className}`}>
-    <span role="img" aria-label={summary} className="relative inline-grid place-items-center shrink-0" style={{ width: size, height: size }}>
+    <span
+      ref={wrapRef}
+      className={`relative inline-flex items-center gap-2.5 ${className}`}
+      onMouseEnter={() => setPeek(true)}
+      onMouseLeave={() => setPeek(false)}
+    >
+    <button
+      type="button"
+      aria-label={`${summary}. Show the last ${TREND_DAYS} days`}
+      aria-expanded={pinned}
+      onClick={() => setPinned((v) => !v)}
+      className="relative inline-grid place-items-center shrink-0 rounded-full cursor-pointer transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+      style={{ width: size, height: size }}
+    >
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90" aria-hidden>
         <circle cx={size / 2} cy={size / 2} r={r} fill="none" strokeWidth={stroke} className="stroke-accent/15" />
         <circle
@@ -390,7 +419,7 @@ export function HoursTodayInline({ className = '' }: { className?: string }) {
         )}
       </svg>
       {reached && <Check size={13} strokeWidth={3.5} className="absolute text-accent" aria-hidden />}
-    </span>
+    </button>
     {over && (
       <span
         aria-hidden
@@ -405,6 +434,107 @@ export function HoursTodayInline({ className = '' }: { className?: string }) {
       <span className="font-semibold text-fg">{fmt(todayHours)}</span> done
       {hasAvg && <><span className="text-fg-faint"> · </span>avg {fmt(avg)}</>}
     </span>
+    {(peek || pinned) && (
+      <WeekTrend
+        days={stats.chart.slice(-TREND_DAYS)}
+        avg={hasAvg ? avg : null}
+        today={today}
+        timezone={timezone}
+        expanded={pinned}
+      />
+    )}
     </span>
+  )
+}
+
+/** Popover under the header ring: the last 7 days of done hours as bars, with the
+ *  4-week average as a dashed line. Compact on hover; enlarged when pinned, where
+ *  hovering a bar names the day and its hours. */
+function WeekTrend({ days, avg, today, timezone, expanded }: {
+  days: { day: string; hours: number; tasks: number }[]
+  avg: number | null
+  today: string
+  timezone: string
+  expanded: boolean
+}) {
+  const [hoverIdx, setHoverIdx] = useState<number | null>(null)
+  const total = days.reduce((sum, d) => sum + d.hours, 0)
+  const active = days.filter((d) => d.hours > 0).length
+  const scaleMax = Math.max(avg ?? 0, ...days.map((d) => d.hours), 1) * 1.15
+  const hovered = expanded && hoverIdx !== null ? days[hoverIdx] : null
+  const dayName = (d: string) => (d === today ? 'Today' : weekdayName(d).slice(0, 3))
+
+  return (
+    <div
+      role="dialog"
+      aria-label={`Done hours, last ${TREND_DAYS} days`}
+      className={`absolute left-0 top-full z-30 pt-2 ${expanded ? 'w-[24rem]' : 'w-60'}`}
+    >
+      <div className="rounded-xl border border-border bg-elevated shadow-lg p-3">
+        <div className="flex items-baseline justify-between gap-3 mb-2 h-4">
+          <span className="text-[11px] font-medium uppercase tracking-wider text-fg-subtle whitespace-nowrap">
+            Last {TREND_DAYS} days
+          </span>
+          <span className="text-[11px] text-fg-muted tabular-nums truncate">
+            {hovered
+              ? `${dayName(hovered.day)} ${formatDayLabel(hovered.day, timezone)} · ${fmt(hovered.hours)} · ${hovered.tasks} ${hovered.tasks === 1 ? 'todo' : 'todos'}`
+              : `${fmt(total)} total · ${fmt(active ? total / active : 0)}/active day`}
+          </span>
+        </div>
+
+        <div className={`relative ${expanded ? 'h-40' : 'h-16'}`} onMouseLeave={() => setHoverIdx(null)}>
+          {avg !== null && (
+            <div
+              aria-hidden
+              className="absolute left-0 right-0 border-t border-dashed border-fg-subtle/70 pointer-events-none z-10"
+              style={{ bottom: `${(avg / scaleMax) * 100}%` }}
+            />
+          )}
+          <div className={`absolute inset-0 grid grid-cols-7 items-end ${expanded ? 'gap-x-2' : 'gap-x-1'}`}>
+            {days.map((d, i) => {
+              const isToday = d.day === today
+              const isHovered = hoverIdx === i
+              return (
+                <div
+                  key={d.day}
+                  className="h-full flex flex-col justify-end items-center cursor-default"
+                  onMouseEnter={() => setHoverIdx(i)}
+                >
+                  {expanded && (
+                    <span className={`text-[11px] font-semibold tabular-nums leading-none mb-1 transition-opacity ${isHovered ? 'text-fg opacity-100' : 'text-fg-muted opacity-0'}`}>
+                      {fmt(d.hours)}
+                    </span>
+                  )}
+                  <div
+                    className={`w-full rounded-t-[4px] transition-all duration-300 ${
+                      isToday ? 'bg-accent' : isHovered ? 'bg-accent/70' : 'bg-accent/40'
+                    }`}
+                    style={{ height: d.hours > 0 ? `max(3px, ${(d.hours / scaleMax) * 100}%)` : '2px', opacity: d.hours > 0 ? 1 : 0.5 }}
+                  />
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        <div className={`grid grid-cols-7 mt-1.5 text-[11px] text-center ${expanded ? 'gap-x-2' : 'gap-x-1'}`}>
+          {days.map((d, i) => (
+            <span
+              key={d.day}
+              className={`truncate ${d.day === today ? 'font-semibold text-accent' : hoverIdx === i && expanded ? 'text-fg' : 'text-fg-subtle'}`}
+            >
+              {expanded ? dayName(d.day) : dayName(d.day).slice(0, 1)}
+            </span>
+          ))}
+        </div>
+
+        <div className="mt-2 flex items-center justify-between gap-3 text-[11px] text-fg-subtle">
+          <span className="inline-flex items-center gap-1.5">
+            {avg !== null && <><span aria-hidden className="w-3 border-t border-dashed border-fg-subtle" />4-wk avg {fmt(avg)}</>}
+          </span>
+          <span>{expanded ? 'Esc or click outside to close' : 'Click to expand'}</span>
+        </div>
+      </div>
+    </div>
   )
 }
