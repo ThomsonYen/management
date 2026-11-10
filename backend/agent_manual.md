@@ -40,7 +40,7 @@ Tokens carry a subset of these scopes. A `403` with `required_scope` tells you w
 | Scope | Unlocks |
 |---|---|
 | `read` | all `GET` endpoints listed below |
-| `write:todos` | create/edit/complete/focus todos and subtodos, turn todos into follow-ups and back, restore a soft-deleted todo, convert a must-do item into a todo |
+| `write:todos` | create/edit/complete/focus todos and subtodos, turn todos into follow-ups or Keep in Mind todos and back, restore a soft-deleted todo, convert a must-do item into a todo |
 | `write:persons` | `PUT /persons/{id}` with **only** `last_check_in_date` and/or `notes` |
 | `write:notes` | create/edit/restore notes with `kind='personal'` only; never transcripts |
 | `write:daily` | daily goals and must-do items |
@@ -68,11 +68,12 @@ Read the situation (most tasks start here):
 ```
 GET /agent/digest                     ONE call: today, focused/overdue/due-today todos, followups_due +
                                       followups_waiting_count, overdue check-ins,
-                                      today's must-do + goal, done in last 7 days
+                                      today's must-do + goal, keep_in_mind todos, done in last 7 days
 GET /todos?is_focused=true            focused todos, in focus_order
 GET /todos                            todos (filters: project_id, assignee_id, status, exclude_done, is_focused,
-                                      kind=todo|followup)
+                                      kind=todo|followup|keep_in_mind)
 GET /todos/followups                  open follow-ups, due-to-chase first
+GET /todos/keep-in-mind               open Keep in Mind todos, oldest first
 GET /todos/recently-done              done in the last few days
 GET /persons                          people; derive overdue check-ins from the check_in fields
 GET /persons/progress                 per-person open/done counts
@@ -108,6 +109,15 @@ PUT  /todos/{id}              {"check_back_on":"2026-10-09"}   the user chased i
 PUT  /todos/{id}              {"status":"done"}                resolved
 ```
 Both POSTs are idempotent and return the todo. Focusing a follow-up (`is_focused:true` or `PUT /todos/focus`) is a 422 — unfollowup it first.
+
+Keep in Mind (a standing list on the Focus page; its items are ordinary todos with hours, never focused):
+```
+POST /todos {"title":"…","keep_in_mind":true}       create one straight onto the list
+POST /todos/{id}/keep-in-mind                      move a todo there; leaves focus, stops being a follow-up
+POST /todos/{id}/unkeep-in-mind  {"focus":true}    back to a normal todo; focus=true puts it at the end of the focus list
+PUT  /todos/{id}  {"status":"done"}                complete it (it leaves the list)
+```
+Both POSTs are idempotent and return the todo. Focusing a Keep in Mind todo is a 422 — unkeep it first. `TodoOut` carries `is_keep_in_mind` and `keep_in_mind_since`.
 
 Move focus (preferred — one idempotent call, returns the resulting list):
 ```

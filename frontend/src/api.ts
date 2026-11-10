@@ -271,6 +271,7 @@ export const createTodo = (data: {
   estimated_hours?: number
   status?: string
   blocked_by_ids?: number[]
+  keep_in_mind?: boolean
 }): Promise<Todo> => api.post('/todos', data).then((r) => r.data)
 
 export const updateTodo = (
@@ -300,6 +301,16 @@ export const followupTodo = (id: number, checkBackOn?: string): Promise<Todo> =>
 
 export const unfollowupTodo = (id: number, focus = false): Promise<Todo> =>
   api.post(`/todos/${id}/unfollowup`, { focus }).then((r) => r.data)
+
+/** Open Keep in Mind todos, oldest first. */
+export const fetchKeepInMind = (): Promise<Todo[]> =>
+  api.get('/todos/keep-in-mind').then((r) => r.data)
+
+export const keepInMindTodo = (id: number): Promise<Todo> =>
+  api.post(`/todos/${id}/keep-in-mind`).then((r) => r.data)
+
+export const unkeepInMindTodo = (id: number, focus = false): Promise<Todo> =>
+  api.post(`/todos/${id}/unkeep-in-mind`, { focus }).then((r) => r.data)
 
 export const reorderFocus = (
   items: { id: number; focus_order: number }[],

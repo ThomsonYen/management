@@ -9,11 +9,13 @@ import TodoModal from '../components/TodoModal'
 import BulkActionBar from '../components/BulkActionBar'
 import { HoursTodayInline } from '../components/HoursTodayCard'
 import WaitingOnPanel, { FOLLOWUP_DRAG_TYPE } from '../components/WaitingOnPanel'
+import KeepInMindPanel, { KEEP_IN_MIND_DRAG_TYPE } from '../components/KeepInMindPanel'
 import { useTimezone, useHotkeys, useTodoDefaults, resolveAssigneeId } from '../SettingsContext'
 import { getTodayString } from '../dateUtils'
 import { useHotkey } from '../hooks/useHotkey'
 import { useUnfocusWithUndo } from '../hooks/useUnfocusWithUndo'
 import { useFollowupActions } from '../hooks/useFollowupActions'
+import { useKeepInMindActions } from '../hooks/useKeepInMindActions'
 import { useToast } from '../ToastContext'
 import { patchTodoCaches } from '../utils/optimisticTodo'
 
@@ -248,6 +250,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
 
  const unfocusWithUndo = useUnfocusWithUndo()
  const followupActions = useFollowupActions()
+ const keepInMindActions = useKeepInMindActions()
  const [followupDragOver, setFollowupDragOver] = useState(false)
 
  // Shares the Waiting on panel's cache entry (header counts only)
@@ -258,18 +261,25 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  const openFollowups = followups.filter((t) => t.is_followup && t.status !== 'done')
  const chaseCount = openFollowups.filter((t) => t.check_back_due).length
 
- // A follow-up row dropped on the Focus list: the reply came in, it is a todo again
+ // A follow-up or Keep in mind row dropped on the Focus list: it is a focused todo again
  const dropFollowup = useCallback((e: React.DragEvent) => {
- if (!e.dataTransfer.types.includes(FOLLOWUP_DRAG_TYPE)) return false
+ const types = e.dataTransfer.types
+ const kind = types.includes(FOLLOWUP_DRAG_TYPE) ? FOLLOWUP_DRAG_TYPE : types.includes(KEEP_IN_MIND_DRAG_TYPE) ? KEEP_IN_MIND_DRAG_TYPE : null
+ if (!kind) return false
  e.preventDefault()
  e.stopPropagation()
  setFollowupDragOver(false)
  setDragOverIndex(null)
- const id = parseInt(e.dataTransfer.getData(FOLLOWUP_DRAG_TYPE))
+ const id = parseInt(e.dataTransfer.getData(kind))
+ if (kind === FOLLOWUP_DRAG_TYPE) {
  const todo = openFollowups.find((t) => t.id === id)
  if (todo) followupActions.toTodo([todo], true)
+ } else {
+ const todo = queryClient.getQueryData<Todo[]>(['todos', 'keep-in-mind'])?.find((t) => t.id === id)
+ if (todo) keepInMindActions.fromKeepInMind([todo], true)
+ }
  return true
- }, [openFollowups, followupActions])
+ }, [openFollowups, followupActions, keepInMindActions, queryClient])
 
  const addFocusedTodo = useMutation({
  mutationFn: async (title: string) => {
@@ -604,7 +614,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  )
 
  return (
- // On xl+ the page is exactly one screen tall: the left column (Must Do, Waiting on)
+ // On xl+ the page is exactly one screen tall: the left column (Must Do, Waiting on, Keep in mind)
  // and the Focus list split the width evenly, each capped at
  // max-w-4xl (left centred, right left-aligned) and scrolling on its own.
  // Narrower, it stacks and scrolls.
@@ -1094,7 +1104,8 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  )}
  </div>
 
- {/* Waiting on — under Must Do on wide screens */}
+ {/* Keep in mind, then Waiting on — under Must Do on wide screens */}
+ <KeepInMindPanel onOpenTodo={onOpenTodo} newTodoPayload={defaultTodoPayload} className="hidden xl:flex shrink-0" />
  <WaitingOnPanel onOpenTodo={onOpenTodo} className="hidden xl:flex shrink-0" />
 
  </div>
@@ -1105,7 +1116,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  aria-label="Focus list"
  className="w-full xl:flex-1 xl:min-w-0 xl:min-h-0 xl:overflow-y-auto xl:-mx-2 xl:px-2 xl:pb-2"
  onDragOver={(e) => {
- if (!e.dataTransfer.types.includes(FOLLOWUP_DRAG_TYPE)) return
+ if (!e.dataTransfer.types.includes(FOLLOWUP_DRAG_TYPE) && !e.dataTransfer.types.includes(KEEP_IN_MIND_DRAG_TYPE)) return
  e.preventDefault()
  setFollowupDragOver(true)
  }}
@@ -1189,7 +1200,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  {focusSearchOpen && focusSearch.trim() && (() => {
  const q = focusSearch.trim().toLowerCase()
  const matches = allTodos.filter(
- (t) => !t.is_focused && !t.is_followup && t.title.toLowerCase().includes(q)
+ (t) => !t.is_focused && !t.is_followup && !t.is_keep_in_mind && t.title.toLowerCase().includes(q)
  ).slice(0, 8)
  if (matches.length === 0) return (
  <div className="absolute right-0 top-full mt-1 z-20 bg-surface border border-border rounded-lg shadow-lg px-3 py-2 text-xs text-fg-subtle w-64">
@@ -1227,7 +1238,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
 
  {followupDragOver && (
  <div className="mb-3 rounded-xl border-[1.5px] border-dashed border-accent bg-accent-1 text-accent-fg px-4 py-3 text-sm font-medium flex items-center justify-center gap-2">
- <CornerDownLeft size={14} />Drop to make it a todo again and add it to Focus
+ <CornerDownLeft size={14} />Drop to add it back to Focus
  </div>
  )}
  {isLoading ? (
@@ -1430,7 +1441,8 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  </div>
  </section>
 
- {/* Waiting on — after the Focus list below xl */}
+ {/* Below xl: Focus list, then Keep in mind, then Waiting on */}
+ <KeepInMindPanel onOpenTodo={onOpenTodo} newTodoPayload={defaultTodoPayload} className="xl:hidden" />
  <WaitingOnPanel onOpenTodo={onOpenTodo} className="xl:hidden" />
  </div>
 

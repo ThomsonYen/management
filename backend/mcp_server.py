@@ -491,7 +491,7 @@ def get_manual() -> str:
 
 @mcp.tool()
 def get_digest() -> dict:
-    """One call for the day: today, focused/overdue/due-today todos, follow-ups due to chase, overdue check-ins, must-do + goal, recently done."""
+    """One call for the day: today, focused/overdue/due-today todos, follow-ups due to chase, overdue check-ins, must-do + goal, Keep in Mind todos, recently done."""
     _need("read")
     with M.SessionLocal() as db:
         return _read(lambda: _out(M.agent_digest(db)))
@@ -500,7 +500,7 @@ def get_digest() -> dict:
 @mcp.tool()
 def list_todos(project_id: Optional[int] = None, assignee_id: Optional[int] = None, status: Optional[str] = None,
                is_focused: Optional[bool] = None, exclude_done: bool = True, kind: Optional[str] = None) -> list:
-    """List todos. status: 'todo' | 'done'. kind: 'todo' (normal) | 'followup' (waiting on someone); omit for both.
+    """List todos. status: 'todo' | 'done'. kind: 'todo' (normal) | 'followup' (waiting on someone) | 'keep_in_mind'; omit for all.
     Defaults to open todos only."""
     _need("read")
     with M.SessionLocal() as db:
@@ -522,11 +522,13 @@ def get_todo(todo_id: int) -> dict:
 @mcp.tool()
 def create_todo(title: str, description: Optional[str] = None, project_id: Optional[int] = None,
                 assignee_id: Optional[int] = None, deadline: Optional[str] = None, importance: str = "medium",
-                estimated_hours: float = 1.0, is_focused: bool = False) -> dict:
-    """Create a todo. deadline YYYY-MM-DD; importance low|medium|high|critical."""
+                estimated_hours: float = 1.0, is_focused: bool = False, keep_in_mind: bool = False) -> dict:
+    """Create a todo. deadline YYYY-MM-DD; importance low|medium|high|critical.
+    keep_in_mind=true puts it straight on the Focus page's Keep in Mind list (never focused)."""
     tid = _need("write:todos")
     args = dict(title=title, description=description, project_id=project_id, assignee_id=assignee_id,
-                deadline=deadline, importance=importance, estimated_hours=estimated_hours, is_focused=is_focused)
+                deadline=deadline, importance=importance, estimated_hours=estimated_hours, is_focused=is_focused,
+                keep_in_mind=keep_in_mind)
     with M.SessionLocal() as db:
         v = _viewer(db)
         return _audited(tid, "create_todo", args, lambda: _out(M.create_todo(M.TodoCreate(**args), db, viewer=v)))
@@ -573,6 +575,21 @@ def clear_followup(todo_id: int, focus: bool = False) -> dict:
         _viewer(db)
         return _audited(tid, "clear_followup", args,
                         lambda: _out(M.clear_followup(todo_id, M.UnfollowupIn(focus=focus), db)))
+
+
+@mcp.tool()
+def set_keep_in_mind(todo_id: int, keep: bool = True, focus: bool = False) -> dict:
+    """keep=true parks a todo on the Focus page's Keep in Mind list (a standing reminder that is still a todo
+    with hours): it leaves the focus list and stops being a follow-up. keep=false takes it off; focus=true then
+    also adds it to the end of the focus list. Idempotent."""
+    tid = _need("write:todos")
+    args = {"todo_id": todo_id, "keep": keep, "focus": focus}
+    with M.SessionLocal() as db:
+        _viewer(db)
+        if keep:
+            return _audited(tid, "set_keep_in_mind", args, lambda: _out(M.keep_todo_in_mind(todo_id, db)))
+        return _audited(tid, "set_keep_in_mind", args,
+                        lambda: _out(M.unkeep_todo_in_mind(todo_id, M.UnfollowupIn(focus=focus), db)))
 
 
 @mcp.tool()

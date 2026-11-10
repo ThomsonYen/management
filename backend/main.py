@@ -374,6 +374,8 @@ class Todo(Base):
     # Follow-up: NULL = a normal todo; set = waiting on someone else since then.
     followup_since = Column(String, nullable=True)
     check_back_on = Column(String, nullable=True)  # YYYY-MM-DD to chase it if nothing came back
+    # Keep in mind: NULL = a normal todo; set = parked on the Focus page's Keep in Mind list since then.
+    keep_in_mind_since = Column(String, nullable=True)
     subtodos = relationship(
         "SubTodo",
         back_populates="todo",
@@ -649,7 +651,7 @@ with engine.connect() as _conn:
             _conn.execute(text(f"ALTER TABLE {_tbl} ADD COLUMN deleted_at TEXT"))
             _conn.commit()
     _todo_cols = [c["name"] for c in _insp.get_columns("todos")]
-    for _col in ("followup_since", "check_back_on"):
+    for _col in ("followup_since", "check_back_on", "keep_in_mind_since"):
         if _col not in _todo_cols:
             _conn.execute(text(f"ALTER TABLE todos ADD COLUMN {_col} TEXT"))
             _conn.commit()
@@ -1242,6 +1244,7 @@ class TodoCreate(BaseModel):
     status: str = "todo"
     is_focused: bool = False
     blocked_by_ids: List[int] = []
+    keep_in_mind: bool = Field(False, description="Create it straight onto the Keep in Mind list (never focused)")
 
 
 class TodoUpdate(BaseModel):
@@ -1287,6 +1290,9 @@ class TodoOut(BaseModel):
     check_back_on: Optional[str] = None
     waiting_days: Optional[int] = None
     check_back_due: bool = False
+    # Keep in mind: a todo parked on the Focus page's standing list (never focused).
+    is_keep_in_mind: bool = False
+    keep_in_mind_since: Optional[str] = None
     model_config = {"from_attributes": True}
 
 
@@ -1498,6 +1504,8 @@ def todo_to_out(t: Todo, viewer: "Optional[Viewer]" = None) -> TodoOut:
         deleted_at=None if member else t.deleted_at,
         subtodos=[SubTodoOut.model_validate(s) for s in t.subtodos],
         blocked_by_ids=[] if member else [b.id for b in t.blocked_by],
+        is_keep_in_mind=False if member else bool(t.keep_in_mind_since),
+        keep_in_mind_since=None if member else t.keep_in_mind_since,
         **followup,
     )
 
@@ -2400,6 +2408,7 @@ _BEARER_ROUTE_SCOPES = [
         ("GET", r"/todos/deleted", "read"),
         ("GET", r"/todos/recently-done", "read"),
         ("GET", r"/todos/followups", "read"),
+        ("GET", r"/todos/keep-in-mind", "read"),
         ("GET", rf"/todos/{_ID}", "read"),
         ("GET", r"/projects", "read"),
         ("GET", r"/projects/tree", "read"),
@@ -2432,6 +2441,8 @@ _BEARER_ROUTE_SCOPES = [
         ("POST", rf"/todos/{_ID}/restore", "write:todos"),
         ("POST", rf"/todos/{_ID}/followup", "write:todos"),
         ("POST", rf"/todos/{_ID}/unfollowup", "write:todos"),
+        ("POST", rf"/todos/{_ID}/keep-in-mind", "write:todos"),
+        ("POST", rf"/todos/{_ID}/unkeep-in-mind", "write:todos"),
         ("POST", rf"/todos/{_ID}/subtodos", "write:todos"),
         ("PUT", rf"/subtodos/{_ID}", "write:todos"),
         # write:persons — handler additionally restricts fields for token auth
@@ -3619,7 +3630,7 @@ def agent_skill():
 
 @app.get("/agent/digest", summary="Everything an agent needs to plan the day, in one call")
 def agent_digest(db: Session = Depends(get_db)):
-    """Focused/overdue/due-today todos, follow-ups due to chase, overdue check-ins, today's must-do and goal, recently done.
+    """Focused/overdue/due-today todos, follow-ups due to chase, overdue check-ins, today's must-do and goal, Keep in Mind todos, recently done.
 
     Today's must-do list is carried over first, exactly as GET /must-do/{today} does, so the
     digest and the Focus page always show the same list.
@@ -3681,6 +3692,7 @@ def agent_digest(db: Session = Depends(get_db)):
     goal = db.query(DailyGoal).filter(DailyGoal.date == today).first()
     followups = open_q.filter(Todo.followup_since != None).all()
     followups.sort(key=lambda t: _followup_sort_key(t, today))
+    keep_in_mind = open_q.filter(Todo.keep_in_mind_since != None).order_by(Todo.keep_in_mind_since, Todo.id).all()
 
     return {
         "today": today,
@@ -3690,6 +3702,7 @@ def agent_digest(db: Session = Depends(get_db)):
         "overdue_check_ins": overdue_check_ins,
         "followups_due": [todo_to_out(t) for t in followups if t.check_back_on and t.check_back_on <= today],
         "followups_waiting_count": len(followups),
+        "keep_in_mind": [todo_to_out(t) for t in keep_in_mind],
         "social_nudges": social_nudges,
         "must_do_today": [MustDoItemOut.model_validate(m) for m in must_do],
         "daily_goal_today": DailyGoalOut.model_validate(goal) if goal else None,
@@ -4472,8 +4485,10 @@ def list_todos(
     status: Optional[str] = Query(None),
     exclude_done: bool = Query(False),
     is_focused: Optional[bool] = Query(None),
-    kind: Optional[Literal["todo", "followup"]] = Query(
-        None, description="'todo' = only normal todos, 'followup' = only follow-ups (waiting on someone); omit for both"
+    kind: Optional[Literal["todo", "followup", "keep_in_mind"]] = Query(
+        None,
+        description="'todo' = only normal todos, 'followup' = only follow-ups (waiting on someone), "
+        "'keep_in_mind' = only Keep in Mind todos; omit for all",
     ),
     db: Session = Depends(get_db),
     viewer: Viewer = Depends(get_viewer),
@@ -4483,9 +4498,11 @@ def list_todos(
     them because focus is the owner's planning state."""
     q = _scope_todos(db.query(Todo).filter(Todo.deleted_at == None), viewer)
     if kind == "todo":
-        q = q.filter(Todo.followup_since == None)
+        q = q.filter(Todo.followup_since == None, Todo.keep_in_mind_since == None)
     elif kind == "followup":
         q = q.filter(Todo.followup_since != None)
+    elif kind == "keep_in_mind":
+        q = q.filter(Todo.keep_in_mind_since != None)
     if assignee_id is not None:
         q = q.filter(Todo.assignee_id == assignee_id)
     if project_id is not None:
@@ -4568,6 +4585,11 @@ def set_focus_list(data: FocusListIn, db: Session = Depends(get_db)):
         raise HTTPException(
             422, f"Follow-ups cannot be focused: {followups}. POST /todos/{{id}}/unfollowup with focus=true first"
         )
+    parked = [i for i in ids if todos[i].keep_in_mind_since]
+    if parked:
+        raise HTTPException(
+            422, f"Keep in Mind todos cannot be focused: {parked}. POST /todos/{{id}}/unkeep-in-mind with focus=true first"
+        )
     for t in db.query(Todo).filter(Todo.is_focused == True, Todo.deleted_at == None).all():
         if t.id not in todos:
             t.is_focused = False
@@ -4631,13 +4653,14 @@ class UnfollowupIn(BaseModel):
 def make_followup(todo_id: int, data: Optional[FollowupIn] = None, db: Session = Depends(get_db)):
     """Marks the todo as waiting on someone else: sets `followup_since` (kept
     if it is already a follow-up), sets `check_back_on`, and takes it off the
-    focus list. Idempotent. Returns the todo."""
+    focus list (and Keep in Mind). Idempotent. Returns the todo."""
     t = db.query(Todo).filter(Todo.id == todo_id, Todo.deleted_at == None).first()
     if not t:
         raise HTTPException(404, "Todo not found")
     data = data or FollowupIn()
     if not t.followup_since:
         t.followup_since = datetime.now(timezone.utc).isoformat()
+    t.keep_in_mind_since = None  # the two lists are exclusive
     if data.check_back_on is not None:
         t.check_back_on = _check_date(data.check_back_on, "check_back_on")
     elif not t.check_back_on:
@@ -4659,6 +4682,55 @@ def clear_followup(todo_id: int, data: Optional[UnfollowupIn] = None, db: Sessio
     data = data or UnfollowupIn()
     t.followup_since = None
     t.check_back_on = None
+    if data.focus and not t.is_focused:
+        max_order = db.query(func.max(Todo.focus_order)).filter(Todo.is_focused == True).scalar() or 0
+        t.is_focused = True
+        t.focus_order = max_order + 1
+    db.commit()
+    db.refresh(t)
+    return todo_to_out(t)
+
+
+@app.get("/todos/keep-in-mind", response_model=List[TodoOut], summary="Open Keep in Mind todos, oldest first")
+def list_keep_in_mind(db: Session = Depends(get_db)):
+    """Open todos parked on the Focus page's Keep in Mind list, in the order they were added."""
+    return [
+        todo_to_out(t)
+        for t in db.query(Todo)
+        .filter(Todo.keep_in_mind_since != None, Todo.status != "done", Todo.deleted_at == None)
+        .order_by(Todo.keep_in_mind_since, Todo.id)
+        .all()
+    ]
+
+
+@app.post("/todos/{todo_id}/keep-in-mind", response_model=TodoOut, summary="Move a todo onto Keep in Mind")
+def keep_todo_in_mind(todo_id: int, db: Session = Depends(get_db)):
+    """Sets `keep_in_mind_since` (kept if already set), takes it off the focus
+    list, and turns a follow-up back into a normal todo first (the lists are
+    exclusive). Idempotent. Returns the todo."""
+    t = db.query(Todo).filter(Todo.id == todo_id, Todo.deleted_at == None).first()
+    if not t:
+        raise HTTPException(404, "Todo not found")
+    if not t.keep_in_mind_since:
+        t.keep_in_mind_since = datetime.now(timezone.utc).isoformat()
+    t.followup_since = None
+    t.check_back_on = None
+    t.is_focused = False
+    t.focus_order = 0
+    db.commit()
+    db.refresh(t)
+    return todo_to_out(t)
+
+
+@app.post("/todos/{todo_id}/unkeep-in-mind", response_model=TodoOut, summary="Take a todo off Keep in Mind")
+def unkeep_todo_in_mind(todo_id: int, data: Optional[UnfollowupIn] = None, db: Session = Depends(get_db)):
+    """Clears `keep_in_mind_since`. With `focus=true` the todo also goes to the
+    end of the focus list. Idempotent. Returns the todo."""
+    t = db.query(Todo).filter(Todo.id == todo_id, Todo.deleted_at == None).first()
+    if not t:
+        raise HTTPException(404, "Todo not found")
+    data = data or UnfollowupIn()
+    t.keep_in_mind_since = None
     if data.focus and not t.is_focused:
         max_order = db.query(func.max(Todo.focus_order)).filter(Todo.is_focused == True).scalar() or 0
         t.is_focused = True
@@ -4694,6 +4766,8 @@ def _member_todo_payload_check(db: Session, v: Viewer, payload: dict, creating: 
             raise HTTPException(403, "The focus list is managed by the owner")
         if payload.get("blocked_by_ids"):
             raise HTTPException(403, "Blockers are managed by the owner")
+        if payload.get("keep_in_mind"):
+            raise HTTPException(403, "Keep in Mind is managed by the owner")
     else:
         extra = sorted(set(payload) - MEMBER_TODO_FIELDS)
         if extra:
@@ -4714,11 +4788,14 @@ def create_todo(data: TodoCreate, db: Session = Depends(get_db), viewer: Viewer 
     if not viewer.is_owner:
         _member_todo_payload_check(db, viewer, data.model_dump(exclude_unset=True), creating=True)
     blocked_by_ids = data.blocked_by_ids
-    todo_data = data.model_dump(exclude={"blocked_by_ids"})
+    todo_data = data.model_dump(exclude={"blocked_by_ids", "keep_in_mind"})
     if not viewer.is_owner:
         todo_data["assignee_id"] = viewer.person_id
         todo_data["is_focused"] = False
         blocked_by_ids = []
+    if data.keep_in_mind and viewer.is_owner:
+        todo_data["keep_in_mind_since"] = datetime.now(timezone.utc).isoformat()
+        todo_data["is_focused"] = False
     t = Todo(**todo_data)
     if blocked_by_ids:
         blockers = db.query(Todo).filter(Todo.id.in_(blocked_by_ids)).all()
@@ -4746,6 +4823,10 @@ def update_todo(todo_id: int, data: TodoUpdate, db: Session = Depends(get_db), v
     if update_data.get("is_focused") and t.followup_since:
         raise HTTPException(
             422, "Follow-ups cannot be focused; POST /todos/{id}/unfollowup with focus=true instead"
+        )
+    if update_data.get("is_focused") and t.keep_in_mind_since:
+        raise HTTPException(
+            422, "Keep in Mind todos cannot be focused; POST /todos/{id}/unkeep-in-mind with focus=true instead"
         )
     blocked_by_ids = update_data.pop("blocked_by_ids", None)
     old_status = t.status

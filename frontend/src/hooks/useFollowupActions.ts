@@ -72,7 +72,7 @@ export function useFollowupActions() {
     const back = checkBackOn ?? addDays(today, FOLLOWUP_DEFAULT_DAYS)
     items.forEach((t) => patchTodoCaches(queryClient, t.id, {
       is_followup: true, followup_since: new Date().toISOString(), check_back_on: back,
-      waiting_days: 0, check_back_due: back <= today, is_focused: false,
+      waiting_days: 0, check_back_due: back <= today, is_focused: false, is_keep_in_mind: false, keep_in_mind_since: null,
     }))
     sync(Promise.all(items.map((t) => followupTodo(t.id, back))), items.map((t) => t.id))
     showToast({

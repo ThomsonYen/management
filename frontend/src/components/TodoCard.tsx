@@ -7,6 +7,7 @@ import { createTodo, createSubTodo, deleteTodo, restoreTodo, updateSubTodo, upda
 import { useToast } from '../ToastContext'
 import { useUnfocusWithUndo } from '../hooks/useUnfocusWithUndo'
 import { useFollowupActions } from '../hooks/useFollowupActions'
+import { useKeepInMindActions } from '../hooks/useKeepInMindActions'
 import { FollowupActions, FollowupChip } from './Followup'
 import DatePicker from './DatePicker'
 import type { Todo, Person, Project } from '../types'
@@ -148,6 +149,7 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
  const { showToast } = useToast()
  const unfocusWithUndo = useUnfocusWithUndo()
  const { toFollowup, toTodo } = useFollowupActions()
+ const { fromKeepInMind } = useKeepInMindActions()
  const isFollowup = !!todo.is_followup
 
  useEffect(() => {
@@ -191,6 +193,8 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
  const handleFocusToggle = () => {
  if (todo.is_focused) {
  unfocusWithUndo([todo])
+ } else if (todo.is_keep_in_mind) {
+ fromKeepInMind([todo], true)
  } else {
  updateMutation.mutate({ is_focused: true })
  }
@@ -390,6 +394,11 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
  </span>
  )}
  {isFollowup && todo.status !== 'done' && <FollowupChip todo={todo} />}
+ {todo.is_keep_in_mind && todo.status !== 'done' && (
+ <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-info-bg text-info border border-info/30">
+ Keep in mind
+ </span>
+ )}
 
  {todo.status === 'done' && (
  <span className="text-xs font-medium px-2 py-0.5 rounded-full capitalize bg-success-bg text-success">

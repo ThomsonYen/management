@@ -64,6 +64,9 @@ export interface Todo {
   check_back_on?: string | null
   waiting_days?: number | null
   check_back_due?: boolean
+  // Keep in mind: parked on the Focus page's standing list (never focused).
+  is_keep_in_mind?: boolean
+  keep_in_mind_since?: string | null
 }
 
 export interface ScheduleStatus {
