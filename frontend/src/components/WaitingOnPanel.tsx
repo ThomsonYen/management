@@ -83,47 +83,42 @@ function Row({ t, today, open, onToggle, onOpenTodo, holdingUp }: {
       }}
       className={`rounded-lg transition-colors ${open ? 'bg-inset' : 'hover:bg-inset/70'}`}
     >
+      {/* One line: who, title, chips, then when to chase */}
       <button
         onClick={onToggle}
         aria-expanded={open}
-        className="w-full flex items-start gap-3 px-3 py-2.5 text-left"
+        title={[t.title, t.assignee_name && `waiting on ${t.assignee_name}`, t.project_name, `${t.waiting_days ?? 0}d so far`].filter(Boolean).join(' · ')}
+        className="w-full flex items-center gap-2.5 px-3 py-1.5 text-left"
       >
         <span
-          title={t.assignee_name ? `Waiting on ${t.assignee_name}` : 'Waiting'}
-          className={`mt-0.5 shrink-0 w-7 h-7 rounded-full grid place-items-center text-[11px] font-bold tracking-wide ${
-            due ? 'bg-warning-bg text-warning ring-1 ring-warning/30' : 'bg-wait-bg text-wait ring-1 ring-wait-border'
+          className={`shrink-0 w-[18px] h-[18px] rounded-full grid place-items-center text-[8px] font-bold tracking-wide ring-1 ${
+            due ? 'bg-warning-bg text-warning ring-warning/30' : 'bg-wait-bg text-wait ring-wait-border'
           }`}
         >
-          {initials(t.assignee_name) || <Hourglass size={13} />}
+          {initials(t.assignee_name) || <Hourglass size={10} />}
         </span>
-        <span className="flex-1 min-w-0">
-          <span className="flex items-start gap-1.5">
-            {(t.importance === 'high' || t.importance === 'critical') && (
-              <span
-                title={`${t.importance} importance`}
-                className={`mt-[3px] shrink-0 text-[10px] font-bold uppercase tracking-wide px-1.5 rounded border ${importanceBadgeClass(t.importance)}`}
-              >
-                {t.importance === 'critical' ? 'crit' : 'high'}
-              </span>
-            )}
-            <span className="text-sm font-medium text-fg leading-snug line-clamp-2">{t.title}</span>
+        {(t.importance === 'high' || t.importance === 'critical') && (
+          <span
+            title={`${t.importance} importance`}
+            className={`shrink-0 text-[10px] font-bold uppercase tracking-wide px-1.5 rounded border ${importanceBadgeClass(t.importance)}`}
+          >
+            {t.importance === 'critical' ? 'crit' : 'high'}
           </span>
-          <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-fg-subtle">
-            <span className="truncate">{[t.assignee_name, t.project_name, `waiting ${t.waiting_days ?? 0}d`].filter(Boolean).join(' · ')}</span>
-            {subs.length > 0 && (
-              <span title={`${subsDone} of ${subs.length} sub-tasks done`} className={`inline-flex items-center gap-1 tabular-nums ${subsDone === subs.length ? 'text-success' : ''}`}>
-                <ListChecks size={12} />{subsDone}/{subs.length}
-              </span>
-            )}
-            {t.deadline && (
-              <span className={`inline-flex items-center gap-1 tabular-nums ${deadlineRisk ? 'text-danger font-semibold' : ''}`}>
-                <Calendar size={12} />due {relativeDay(t.deadline, today)}
-              </span>
-            )}
+        )}
+        <span className="flex-1 min-w-0 truncate text-sm font-medium text-fg">{t.title}</span>
+        {subs.length > 0 && (
+          <span title={`${subsDone} of ${subs.length} sub-tasks done`} className={`shrink-0 inline-flex items-center gap-1 text-xs tabular-nums ${subsDone === subs.length ? 'text-success' : 'text-fg-subtle'}`}>
+            <ListChecks size={12} />{subsDone}/{subs.length}
           </span>
-        </span>
+        )}
+        {t.deadline && (
+          <span title={`Due ${t.deadline}`} className={`shrink-0 inline-flex items-center gap-1 text-xs tabular-nums whitespace-nowrap ${deadlineRisk ? 'text-danger font-semibold' : 'text-fg-subtle'}`}>
+            <Calendar size={12} />{relativeDay(t.deadline, today)}
+          </span>
+        )}
         <span
-          className={`mt-0.5 shrink-0 inline-flex items-center gap-1 text-xs tabular-nums whitespace-nowrap ${
+          title={t.check_back_on ? `Check back ${t.check_back_on}` : 'No check-back date'}
+          className={`shrink-0 inline-flex items-center gap-1 text-xs tabular-nums whitespace-nowrap ${
             due ? 'text-warning font-semibold' : 'text-fg-subtle font-medium'
           }`}
         >
@@ -133,7 +128,7 @@ function Row({ t, today, open, onToggle, onOpenTodo, holdingUp }: {
       </button>
 
       {open && (
-        <div className="px-3 pb-2.5 pl-[3.25rem] flex flex-col gap-2.5" onClick={(e) => e.stopPropagation()}>
+        <div className="px-3 pb-2.5 pl-[2.6rem] flex flex-col gap-2.5" onClick={(e) => e.stopPropagation()}>
           {/* Dates, in one quiet line; the chase date is itself the picker */}
           <p className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-fg-subtle tabular-nums">
             <span>Check back</span>
@@ -268,14 +263,14 @@ export default function WaitingOnPanel({ onOpenTodo, className = '' }: { onOpenT
 
   const group = (label: string, items: Todo[], tone: 'warning' | 'muted') => items.length > 0 && (
     <div>
-      <div className="px-3 pt-2 pb-1 flex items-center gap-2">
+      <div className="px-3 pt-1.5 pb-0.5 flex items-center gap-2">
         <span className={`text-[11px] font-semibold uppercase tracking-wider ${tone === 'warning' ? 'text-warning' : 'text-fg-subtle'}`}>
           {label}
         </span>
         <span className="flex-1 h-px bg-border-subtle" />
         <span className="text-[11px] text-fg-subtle tabular-nums">{items.length}</span>
       </div>
-      <ul className="flex flex-col gap-0.5">
+      <ul className="flex flex-col">
         {items.map((t) => (
           <Row key={t.id} t={t} today={today} open={expanded.has(t.id)} onToggle={() => toggleRow(t.id)} onOpenTodo={onOpenTodo} holdingUp={holdingUp(t.id)} />
         ))}
@@ -316,7 +311,7 @@ export default function WaitingOnPanel({ onOpenTodo, className = '' }: { onOpenT
       {open && (
         <div className="min-h-0 overflow-y-auto px-2 pb-2">
           {list.length === 0 ? (
-            <div className="px-3 py-6 text-center">
+            <div className="px-3 py-4 text-center">
               <Hourglass size={18} className="mx-auto text-wait/70" />
               <p className="mt-2 text-sm text-fg-muted">Nothing you're waiting on.</p>
               <p className="mt-0.5 text-xs text-fg-subtle">Press <span className="font-semibold">Wait</span> on a todo when the next step is someone else's.</p>
