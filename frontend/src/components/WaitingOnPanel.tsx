@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlarmClock, ArrowUpRight, Calendar, CheckCircle2, ChevronDown, ChevronUp, Hand, Hourglass, Link2, ListChecks, Send } from 'lucide-react'
+import { AlarmClock, ArrowUpRight, Calendar, CheckCircle2, Hand, Hourglass, Link2, ListChecks, Send } from 'lucide-react'
 import { createSubTodo, fetchFollowups, fetchTodos, updateSubTodo, updateTodo } from '../api'
 import type { Todo } from '../types'
 import { useTimezone } from '../SettingsContext'
@@ -8,6 +8,7 @@ import { formatDayLabel, getDateString, getTodayString } from '../dateUtils'
 import { dayDiff, relativeDay, useFollowupActions } from '../hooks/useFollowupActions'
 import DatePicker from './DatePicker'
 import DescriptionEditor from './DescriptionEditor'
+import PanelHeader, { HeaderPill } from './PanelHeader'
 import { importanceBadgeClass } from '../utils/badgeClasses'
 import { patchSubtodoCaches, patchTodoCaches } from '../utils/optimisticTodo'
 
@@ -307,22 +308,10 @@ export default function WaitingOnPanel({ onOpenTodo, className = '' }: { onOpenT
         dropActive ? 'border-wait ring-2 ring-wait/30' : 'border-border'
       } ${className}`}
     >
-      <button
-        onClick={toggleOpen}
-        aria-expanded={open}
-        className="shrink-0 w-full flex items-center gap-2 pl-5 pr-4 py-3 text-left bg-wait-bg/60 border-b border-border-subtle"
-      >
-        <Hourglass size={16} className="text-wait shrink-0" />
-        <h3 className="text-sm font-bold text-fg uppercase tracking-wide">Waiting on</h3>
-        <span className="flex-1" />
-        {toChase.length > 0 && (
-          <span className="bg-warning-bg text-warning text-xs font-bold px-2 py-0.5 rounded-full whitespace-nowrap">
-            {toChase.length} to chase
-          </span>
-        )}
-        <span className="text-xs text-fg-muted tabular-nums whitespace-nowrap">{list.length} open</span>
-        {open ? <ChevronUp size={15} className="text-fg-faint" /> : <ChevronDown size={15} className="text-fg-faint" />}
-      </button>
+      <PanelHeader icon={Hourglass} tone="wait" title="Waiting on" onToggle={toggleOpen} open={open}>
+        {toChase.length > 0 && <HeaderPill tone="warning">{toChase.length} to chase</HeaderPill>}
+        <HeaderPill>{list.length} open</HeaderPill>
+      </PanelHeader>
 
       {open && (
         <div className="min-h-0 overflow-y-auto px-2 pb-2">

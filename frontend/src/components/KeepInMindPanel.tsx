@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowUpRight, Calendar, CheckCircle2, ChevronDown, ChevronUp, Circle, CornerDownLeft, Crosshair, Lightbulb, ListChecks, Minus, Plus } from 'lucide-react'
+import { ArrowUpRight, Calendar, CheckCircle2, ChevronDown, ChevronUp, CornerDownLeft, Crosshair, Lightbulb, ListChecks, Minus, Plus } from 'lucide-react'
 import { createSubTodo, createTodo, fetchKeepInMind, updateSubTodo, updateTodo } from '../api'
 import type { Todo } from '../types'
 import { useTimezone } from '../SettingsContext'
@@ -8,6 +8,8 @@ import { getTodayString } from '../dateUtils'
 import { relativeDay } from '../hooks/useFollowupActions'
 import { useKeepInMindActions } from '../hooks/useKeepInMindActions'
 import DatePicker from './DatePicker'
+import DoneCheck from './DoneCheck'
+import PanelHeader, { HeaderPill } from './PanelHeader'
 import DescriptionEditor from './DescriptionEditor'
 import { importanceBadgeClass } from '../utils/badgeClasses'
 import { patchSubtodoCaches, patchTodoCaches } from '../utils/optimisticTodo'
@@ -90,15 +92,7 @@ function Row({ t, today, open, onToggle, onOpenTodo }: {
     >
       {/* One line: done circle, title, then small chips and the hours */}
       <div className="flex items-center gap-2.5 px-3 py-1.5">
-        <button
-          onClick={() => complete(t)}
-          title="Done"
-          aria-label={`Complete "${t.title}"`}
-          className="shrink-0 text-info/70 hover:text-success transition-colors"
-        >
-          <Circle size={16} className="group-hover:hidden" />
-          <CheckCircle2 size={16} className="hidden group-hover:block" />
-        </button>
+        <DoneCheck done={false} onClick={() => complete(t)} label={`Complete "${t.title}"`} />
         {(t.importance === 'high' || t.importance === 'critical') && (
           <span
             title={`${t.importance} importance`}
@@ -351,18 +345,10 @@ export default function KeepInMindPanel({ onOpenTodo, newTodoPayload, className 
         dropActive ? 'border-info ring-2 ring-info/30' : 'border-border'
       } ${className}`}
     >
-      <button
-        onClick={toggleOpen}
-        aria-expanded={open}
-        className="shrink-0 w-full flex items-center gap-2 pl-5 pr-4 py-3 text-left bg-info-bg/60 border-b border-border-subtle"
-      >
-        <Lightbulb size={16} className="text-info shrink-0" />
-        <h3 className="text-sm font-bold text-fg uppercase tracking-wide">Keep in mind</h3>
-        <span className="flex-1" />
-        {totalHours > 0 && <span className="text-xs text-fg-muted tabular-nums whitespace-nowrap">{fmtHours(totalHours)}</span>}
-        <span className="text-xs text-fg-muted tabular-nums whitespace-nowrap">{list.length} open</span>
-        {open ? <ChevronUp size={15} className="text-fg-faint" /> : <ChevronDown size={15} className="text-fg-faint" />}
-      </button>
+      <PanelHeader icon={Lightbulb} tone="info" title="Keep in mind" onToggle={toggleOpen} open={open}>
+        {totalHours > 0 && <HeaderPill title="Estimated hours">{fmtHours(totalHours)}</HeaderPill>}
+        <HeaderPill>{list.length} open</HeaderPill>
+      </PanelHeader>
 
       {open && (
         // Clicking any empty part of the block starts writing a new item

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback } from 'react'
-import { ArrowUpRight, Check, ChevronDown, ChevronUp, CornerDownLeft, GripVertical, Hourglass, ListX, Moon, SquareCheck, Star, StarOff, Sun, Sunrise, X } from 'lucide-react'
+import { ArrowUpRight, Check, ChevronDown, ChevronUp, CornerDownLeft, Crosshair, GripVertical, Hourglass, ListX, Moon, Plus, SquareCheck, Star, StarOff, Sun, Sunrise, X } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { fetchTodos, fetchFollowups, fetchProjects, fetchPersons, updateTodo, createTodo, reorderFocus, fetchMustDoItems, createMustDoItem, updateMustDoItem, convertMustDoItem, deleteMustDoItem } from '../api'
 import type { Todo, Project } from '../types'
@@ -10,6 +10,8 @@ import BulkActionBar from '../components/BulkActionBar'
 import { HoursTodayInline } from '../components/HoursTodayCard'
 import WaitingOnPanel, { FOLLOWUP_DRAG_TYPE } from '../components/WaitingOnPanel'
 import KeepInMindPanel, { KEEP_IN_MIND_DRAG_TYPE } from '../components/KeepInMindPanel'
+import DoneCheck from '../components/DoneCheck'
+import PanelHeader, { HeaderPill, PanelIcon } from '../components/PanelHeader'
 import { useTimezone, useHotkeys, useTodoDefaults, resolveAssigneeId } from '../SettingsContext'
 import { getTodayString } from '../dateUtils'
 import { useHotkey } from '../hooks/useHotkey'
@@ -649,25 +651,19 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
       left amber stripe + subtle header tint + stronger shadow. */}
  <div className="relative shrink-0 rounded-xl border border-border bg-surface shadow-md overflow-hidden">
  <span aria-hidden className="absolute inset-y-0 left-0 w-1 bg-warning-vivid" />
- <div className="pl-6 pr-5 pt-4 pb-2 flex items-center gap-2 border-b border-border-subtle bg-warning-bg/40 dark:bg-warning-bg/25">
- <Star size={17} fill="currentColor" className="text-warning-vivid shrink-0" />
- <h3 className="text-sm font-bold text-fg uppercase tracking-wide whitespace-nowrap">
- Must Do Today
- </h3>
- <span className="text-xs text-fg-muted ml-auto tabular-nums whitespace-nowrap">
- {mustDoDone}/{todayItems.length} done
- </span>
+ <PanelHeader icon={Star} filledIcon tone="warning" title="Must do today" className="!pl-5">
+ <HeaderPill>{mustDoDone}/{todayItems.length} done</HeaderPill>
  <button
  onClick={() => {
  const doneItems = todayItems.filter((i) => i.done || (i.todo_id && todos.find((t) => t.id === i.todo_id)?.status === 'done'))
  doneItems.forEach((i) => deleteMustDo.mutate(i.id))
  }}
- className="text-fg-subtle hover:text-fg transition-colors"
+ className="p-1 -m-1 rounded-md text-fg-subtle hover:text-fg hover:bg-surface/80 transition-colors"
  title="Clear done items"
  >
  <ListX size={15} />
  </button>
- </div>
+ </PanelHeader>
 
  {/* Sections */}
  {mustDoSections.map((sec) => {
@@ -769,7 +765,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  }
  }}
  >
- <div className={`pl-6 pr-5 py-1.5 flex items-center gap-2 ${sec !== 'morning' ? 'border-t border-border-subtle ' : ''}`}>
+ <div className={`pl-6 pr-5 pt-1.5 pb-0.5 flex items-center gap-2 ${sec !== 'morning' ? 'border-t border-border-subtle ' : ''}`}>
  <span className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-fg-muted capitalize">
  {sec === 'morning' ? <Sunrise size={13} className={SECTION_ICON} /> : sec === 'afternoon' ? <Sun size={13} className={SECTION_ICON} /> : <Moon size={13} className={SECTION_ICON} />}
  {sec === 'morning' ? 'Morning' : sec === 'afternoon' ? 'Afternoon' : 'Evening'}
@@ -783,7 +779,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  </div>
 
  {sectionItems.length > 0 && (
- <ul className="pl-4 pr-3 pb-1">
+ <ul className="pl-4 pr-3">
  {sectionItems.map((item, itemIdx) => {
  const linkedTodo = item.todo_id ? todos.find((t) => t.id === item.todo_id) : undefined
  const effectiveDone = item.done || (linkedTodo?.status === 'done')
@@ -815,7 +811,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  <div className="h-0.5 bg-accent rounded-full mx-1 my-0.5 transition-all" />
  )}
  <li
- className={`flex items-center gap-1.5 md:gap-3 group cursor-pointer rounded-md px-2 py-2 transition-colors ${
+ className={`flex items-center gap-1.5 md:gap-2.5 group cursor-pointer rounded-lg px-2 py-1 transition-colors ${
  selectedMustDoIds.has(item.id)
  ? 'bg-accent-2 ring-1 ring-inset ring-accent/25'
  : 'hover:bg-inset/60'
@@ -860,20 +856,11 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  }}
  >
  <GripVertical size={12} className="flex-shrink-0 text-fg-faint dark:text-fg-muted cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-60 transition-opacity" />
- <button
- onClick={() => toggleTodayDone(item)}
- className={`flex-shrink-0 w-[18px] h-[18px] rounded-full border flex items-center justify-center transition-colors ${
- effectiveDone
- ? 'bg-accent border-accent text-fg-on-accent'
- : 'border-border-strong hover:border-accent'
- }`}
- >
- {effectiveDone && <Check size={12} strokeWidth={3} />}
- </button>
+ <DoneCheck done={!!effectiveDone} onClick={() => toggleTodayDone(item)} label={`Mark "${itemText}" ${effectiveDone ? 'not done' : 'done'}`} />
  {editingMustDoId === item.id ? (
  <input
  autoFocus
- className="flex-1 text-md text-fg bg-transparent outline-none border-b border-accent py-0"
+ className="flex-1 min-w-0 text-sm text-fg bg-transparent outline-none border-b border-accent py-0"
  value={editingMustDoText}
  onChange={(e) => setEditingMustDoText(e.target.value)}
  onKeyDown={(e) => {
@@ -898,7 +885,8 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  />
  ) : (
  <span
- className={`flex-1 text-md ${
+ title={itemText}
+ className={`flex-1 min-w-0 truncate text-sm ${
  effectiveDone
  ? 'line-through text-fg-subtle'
  : 'text-fg font-medium'
@@ -989,7 +977,21 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  )}
 
  {/* Inline input for every section */}
- <div className="pl-6 pr-5 pb-2 pt-0.5 relative">
+ <div className="pl-[4.125rem] md:pl-[4.625rem] pr-5 pb-1.5 pt-0.5 relative group/add">
+ {/* ＋ sits in the check column: ul pl-4 + li px-2 + grip 12px + gap (1.5 / md 2.5) */}
+ <button
+ type="button"
+ tabIndex={-1}
+ aria-hidden
+ onMouseDown={(e) => e.preventDefault()}
+ onClick={(e) => (e.currentTarget.parentElement?.querySelector('input') as HTMLInputElement | null)?.focus()}
+ className="absolute left-[2.625rem] md:left-[2.875rem] top-[3px] w-[18px] h-[18px] rounded-full grid place-items-center text-warning-vivid/70 group-hover/add:text-warning-vivid group-focus-within/add:bg-warning-bg group-focus-within/add:text-warning-vivid transition-colors"
+ >
+ <Plus size={15} strokeWidth={2.5} />
+ </button>
+ {isActive && todayInput.trim() && (
+ <span className="pointer-events-none absolute right-5 top-[4px] text-[11px] text-fg-faint">Enter ↵</span>
+ )}
  <input
  ref={sec === activeSection ? todayInputRef : undefined}
  type="text"
@@ -1127,8 +1129,9 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
 
  {/* Options row — sits above the tasks list so it stays within this column and wraps against the column width, not the full toolbar. */}
  <div className="flex items-center justify-between gap-3 mb-3 md:px-1 xl:sticky xl:top-0 xl:z-10 xl:bg-app xl:py-1">
- <h3 className="hidden md:flex items-baseline gap-2 text-sm font-bold text-fg uppercase tracking-wide shrink-0">
- Focus list <span className="text-xs font-semibold text-fg-subtle tabular-nums normal-case tracking-normal">{filtered.length}</span>
+ <h3 className="hidden md:flex items-center gap-2.5 text-[13px] font-bold text-fg uppercase tracking-[0.06em] shrink-0">
+ <PanelIcon icon={Crosshair} tone="accent" />
+ Focus list <HeaderPill>{filtered.length}</HeaderPill>
  </h3>
  <div className="flex flex-wrap md:flex-nowrap items-center gap-0.5 bg-inset rounded-2xl md:rounded-full px-1.5 py-1 border border-border-subtle w-full md:w-auto max-w-full min-w-0">
  {focusedProjects.length > 1 && (
@@ -1266,8 +1269,9 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  {dragOverIndex === globalIndex && dragItemId.current !== null && dragItemId.current !== t.id && (
  <div className="h-1 bg-accent-hover rounded-full mx-2 mb-1 transition-all" />
  )}
- <div className={`mb-2 rounded-xl transition-all duration-500 ${highlightedTodoId === t.id ? 'ring-2 ring-accent bg-accent-1/50 ' : ''}`}>
+ <div className={`mb-1.5 rounded-lg transition-all duration-500 ${highlightedTodoId === t.id ? 'ring-2 ring-accent bg-accent-1/50 ' : ''}`}>
  <TodoCard
+ compact
  todo={t}
  onEdit={handleEdit}
  onOpenDetail={() => onOpenTodo(t.id)}
@@ -1284,7 +1288,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  e.stopPropagation()
  moveFocusTodo(globalIndex, -1)
  }}
- className={`${cardActionClass} w-7 text-fg-muted bg-inset border-border disabled:opacity-30`}
+ className={`${cardActionClass} w-7 text-fg-muted bg-transparent border-transparent disabled:opacity-30`}
  title="Move up"
  >
  <ChevronUp size={14} />
@@ -1295,7 +1299,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  e.stopPropagation()
  moveFocusTodo(globalIndex, 1)
  }}
- className={`${cardActionClass} w-7 text-fg-muted bg-inset border-border disabled:opacity-30`}
+ className={`${cardActionClass} w-7 text-fg-muted bg-transparent border-transparent disabled:opacity-30`}
  title="Move down"
  >
  <ChevronDown size={14} />
@@ -1304,9 +1308,10 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  <button
  onClick={() => unfocusWithUndo([t])}
  title="Remove from Focus"
- className={`${cardActionClass} hidden md:inline-flex px-2.5 text-fg-muted bg-inset hover:bg-danger-bg hover:text-danger border-border hover:border-danger/30`}
+ aria-label="Unfocus"
+ className={`${cardActionClass} hidden md:inline-flex w-7 text-fg-muted bg-transparent hover:bg-danger-bg hover:text-danger border-transparent`}
  >
- <StarOff size={12} /><span className="hidden md:inline">Unfocus</span>
+ <StarOff size={13} />
  </button>
  </>
  }

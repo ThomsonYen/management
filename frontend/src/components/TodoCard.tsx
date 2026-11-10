@@ -1,4 +1,4 @@
-import { AlarmClock, ArrowUpRight, Calendar, ChevronDown, ChevronUp, CornerDownLeft, Folder, GripVertical, Hourglass, ListChecks, Star, Timer, User } from 'lucide-react'
+import { AlarmClock, ArrowUpRight, Calendar, ChevronDown, ChevronUp, CornerDownLeft, Folder, GripVertical, Hourglass, Lightbulb, ListChecks, Star, Timer, User } from 'lucide-react'
 import { useState, useEffect, useRef } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
@@ -8,6 +8,7 @@ import { useToast } from '../ToastContext'
 import { useUnfocusWithUndo } from '../hooks/useUnfocusWithUndo'
 import { useFollowupActions } from '../hooks/useFollowupActions'
 import { useKeepInMindActions } from '../hooks/useKeepInMindActions'
+import DoneCheck from './DoneCheck'
 import { FollowupActions, FollowupChip } from './Followup'
 import DatePicker from './DatePicker'
 import type { Todo, Person, Project } from '../types'
@@ -44,6 +45,8 @@ interface TodoCardProps {
  extraActions?: React.ReactNode
  isSelected?: boolean
  onToggleSelect?: (id: number) => void
+ /** Focus list layout: round done check, one title line with hover actions, one info line */
+ compact?: boolean
 }
 
 function BlockerPicker({
@@ -126,7 +129,7 @@ function fitToContent(el: HTMLTextAreaElement | null) {
  el.style.height = `${el.scrollHeight}px`
 }
 
-export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraActions, isSelected, onToggleSelect, forceCollapseSignal = 0 }: TodoCardProps & { forceCollapseSignal?: number }) {
+export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraActions, isSelected, onToggleSelect, compact = false, forceCollapseSignal = 0 }: TodoCardProps & { forceCollapseSignal?: number }) {
  const { timezone } = useTimezone()
  const [expanded, setExpanded] = useState(false)
 
@@ -149,7 +152,7 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
  const { showToast } = useToast()
  const unfocusWithUndo = useUnfocusWithUndo()
  const { toFollowup, toTodo } = useFollowupActions()
- const { fromKeepInMind } = useKeepInMindActions()
+ const { fromKeepInMind, toKeepInMind } = useKeepInMindActions()
  const isFollowup = !!todo.is_followup
 
  useEffect(() => {
@@ -282,89 +285,9 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
 
  const isOverdue = checkOverdue(todo.deadline, todo.status, timezone)
 
- const dragStartPos = useRef<{ x: number; y: number } | null>(null)
-
- const handleCardMouseDown = (e: React.MouseEvent) => {
- dragStartPos.current = { x: e.clientX, y: e.clientY }
- // A press inside the description editor selects text, not drags the card.
- e.currentTarget.setAttribute('draggable', (e.target as HTMLElement).closest('.cm-editor') ? 'false' : 'true')
- }
-
- const handleCardClick = (e: React.MouseEvent) => {
- if (!onToggleSelect) return
- // Ignore if this was a drag (moved more than 5px)
- if (dragStartPos.current) {
- const dx = Math.abs(e.clientX - dragStartPos.current.x)
- const dy = Math.abs(e.clientY - dragStartPos.current.y)
- if (dx > 5 || dy > 5) return
- }
- // Ignore clicks on interactive elements
- const target = e.target as HTMLElement
- if (target.closest('button, input, select, textarea, a, [role="button"]')) return
- onToggleSelect(todo.id)
- }
-
- return (
- <div
- draggable
- onDragStart={(e) => {
- e.dataTransfer.setData('application/x-todo-id', String(todo.id))
- e.dataTransfer.effectAllowed = 'link'
- }}
- onMouseDown={handleCardMouseDown}
- onClick={handleCardClick}
- className={`rounded-xl shadow-sm border overflow-hidden transition-shadow duration-200 hover:shadow-md ${
- isFollowup
- ? `bg-surface bg-[linear-gradient(rgb(var(--wait-bg)/0.35),rgb(var(--wait-bg)/0.35))] border-dashed ${isSelected ? 'border-accent' : todo.check_back_due ? 'border-warning/50' : 'border-wait-border'}`
- : `bg-surface ${isSelected ? 'border-accent' : 'border-border'}`
- }`}
- >
- {/* Header */}
- <div className="px-4 py-3 md:px-5 md:py-4">
- {/* Grid, not flex: on phones the title spans under the actions instead of
-     being squeezed into a narrow column beside them. */}
- <div className="grid grid-cols-[auto_auto_minmax(0,1fr)_auto] items-start gap-x-3">
- {isFollowup ? (
- /* A follow-up has no star and no done checkbox: you are waiting, not doing.
-    Resolving it is inside the expanded card. */
- <span
- title="Follow-up: waiting on a reply"
- className={`col-start-1 col-end-3 row-start-1 row-end-3 w-10 h-10 rounded-lg grid place-items-center border ${
- todo.check_back_due ? 'text-warning bg-warning-bg border-warning/35' : 'text-wait bg-wait-bg border-wait-border'
- }`}
- >
- <Hourglass size={18} />
- </span>
- ) : (<>
- {/* Focus toggle */}
- <button
- onClick={(e) => {
- e.stopPropagation()
- handleFocusToggle()
- }}
- title={todo.is_focused ? 'Remove from Focus' : 'Add to Focus'}
- className={`col-start-1 row-start-1 p-2 -m-2 mt-[-6px] text-lg leading-none flex-shrink-0 transition-colors ${
- todo.is_focused
- ? 'text-warning-vivid hover:text-warning-vivid'
- : 'text-fg-faint dark:text-fg-muted hover:text-warning-vivid'
- }`}
- >
- <Star size={17} fill={todo.is_focused ? 'currentColor' : 'none'} />
- </button>
- {/* Done checkbox */}
- <input
- type="checkbox"
- checked={todo.status === 'done'}
- onChange={(e) => handleDoneCheck(e.target.checked)}
- onClick={(e) => e.stopPropagation()}
- title="Mark as done"
- className="col-start-2 row-start-1 mt-1 w-4 h-4 rounded cursor-pointer accent-green-600 flex-shrink-0"
- />
- </>)}
- <div className="contents">
- {/* Badges row */}
- <div className="col-start-3 row-start-1 min-w-0 self-center flex flex-wrap items-center gap-2 mb-1">
- {/* Importance badge */}
+ // Pieces shared by the full and compact layouts
+ const importanceEl = (
+ <>
  {editingField === 'importance' ? (
  <select
  ref={autoOpenSelect}
@@ -387,39 +310,10 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
  {todo.importance}
  </span>
  )}
-
- {isFollowup && (
- <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-wait-bg text-wait border border-wait-border">
- Follow-up
- </span>
- )}
- {isFollowup && todo.status !== 'done' && <FollowupChip todo={todo} />}
- {todo.is_keep_in_mind && todo.status !== 'done' && (
- <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-info-bg text-info border border-info/30">
- Keep in mind
- </span>
- )}
-
- {todo.status === 'done' && (
- <span className="text-xs font-medium px-2 py-0.5 rounded-full capitalize bg-success-bg text-success">
- done
- </span>
- )}
-
- {todo.is_blocked && (
- <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-danger-bg text-danger">
- blocked
- </span>
- )}
- {isOverdue && (
- <span className="inline-flex items-center gap-1 text-xs font-semibold text-danger">
- <AlarmClock size={13} className="shrink-0" />
- Overdue
- </span>
- )}
- </div>
-
- {/* Title */}
+ </>
+ )
+ const titleEl = (cls: string) => (
+ <>
  {editingField === 'title' ? (
  <input
  autoFocus
@@ -436,62 +330,21 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
  if (e.key === 'Escape') setEditingField(null)
  }}
  onClick={(e) => e.stopPropagation()}
- className="col-start-3 col-end-5 md:col-end-4 row-start-2 font-semibold text-fg text-base leading-tight w-full -mx-1.5 px-1.5 rounded-md bg-accent/[0.07] ring-1 ring-inset ring-accent/25 caret-accent focus:outline-none"
+ className={`${cls} font-semibold text-fg text-base leading-tight w-full -mx-1.5 px-1.5 rounded-md bg-accent/[0.07] ring-1 ring-inset ring-accent/25 caret-accent focus:outline-none`}
  />
  ) : (
  <h3
  onClick={(e) => { caretRef.current = clickOffset(e); startEdit(e, 'title', todo.title) }}
  title="Click to edit title"
- className="col-start-3 col-end-5 md:col-end-4 row-start-2 font-semibold text-fg text-base leading-tight cursor-pointer hover:text-accent transition-colors"
+ className={`${cls} font-semibold text-fg text-base leading-tight cursor-pointer hover:text-accent transition-colors`}
  >
  {todo.title}
  </h3>
  )}
- </div>
-
- {/* Actions */}
- <div className="col-start-4 row-start-1 md:row-end-3 justify-self-end flex items-center gap-1.5 md:gap-2 mb-1 md:mb-0">
- {todo.status !== 'done' && (isFollowup ? (
- <button
- onClick={() => toTodo([todo], true)}
- title="The reply came in: make it a todo again and add it to Focus"
- className={`${cardActionClass} w-7 md:w-auto md:px-2.5 text-fg-muted bg-inset hover:bg-wait-bg hover:text-wait border-border hover:border-wait-border`}
- >
- <CornerDownLeft size={13} /><span className="hidden md:inline">Back to todo</span>
- </button>
- ) : (
- <button
- onClick={() => toFollowup([todo])}
- title="Waiting on someone else: move it to follow-ups"
- className={`${cardActionClass} w-7 md:w-auto md:px-2.5 text-fg-muted bg-inset hover:bg-wait-bg hover:text-wait border-border hover:border-wait-border`}
- >
- <Hourglass size={13} /><span className="hidden md:inline">Wait</span>
- </button>
- ))}
- {extraActions}
- {onOpenDetail && (
- <button
- onClick={onOpenDetail}
- title="Open (quick view)"
- className={`${cardActionClass} w-7 md:w-auto md:px-2.5 text-accent bg-accent-1 hover:bg-accent-2 border-accent-2`}
- >
- <ArrowUpRight size={13} /><span className="hidden md:inline">Open</span>
- </button>
- )}
- <button
- onClick={() => setExpanded((e) => !e)}
- title={expanded ? 'Collapse' : 'Expand'}
- aria-expanded={expanded}
- className={`${cardActionClass} w-7 text-fg-muted bg-inset hover:bg-border-subtle hover:text-fg border-border`}
- >
- {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
- </button>
- </div>
- </div>
-
- {/* Info row (spans full card width so fields like "1h" aren't
-   squeezed by the actions column on the right) */}
- <div className="flex flex-wrap gap-3 mt-1.5 text-xs text-fg-muted pl-0 md:pl-[52px]">
+ </>
+ )
+ const infoItems = (
+ <>
  {/* Assignee */}
  {editingField === 'assignee_id' ? (
  <select
@@ -605,8 +458,238 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
  </span>
  </button>
  )}
+ </>
+ )
+
+ const dragStartPos = useRef<{ x: number; y: number } | null>(null)
+
+ const handleCardMouseDown = (e: React.MouseEvent) => {
+ dragStartPos.current = { x: e.clientX, y: e.clientY }
+ // A press inside the description editor selects text, not drags the card.
+ e.currentTarget.setAttribute('draggable', (e.target as HTMLElement).closest('.cm-editor') ? 'false' : 'true')
+ }
+
+ const handleCardClick = (e: React.MouseEvent) => {
+ if (!onToggleSelect) return
+ // Ignore if this was a drag (moved more than 5px)
+ if (dragStartPos.current) {
+ const dx = Math.abs(e.clientX - dragStartPos.current.x)
+ const dy = Math.abs(e.clientY - dragStartPos.current.y)
+ if (dx > 5 || dy > 5) return
+ }
+ // Ignore clicks on interactive elements
+ const target = e.target as HTMLElement
+ if (target.closest('button, input, select, textarea, a, [role="button"]')) return
+ onToggleSelect(todo.id)
+ }
+
+ return (
+ <div
+ draggable
+ onDragStart={(e) => {
+ e.dataTransfer.setData('application/x-todo-id', String(todo.id))
+ e.dataTransfer.effectAllowed = 'link'
+ }}
+ onMouseDown={handleCardMouseDown}
+ onClick={handleCardClick}
+ className={`group/card ${compact ? 'rounded-lg' : 'rounded-xl'} shadow-sm border overflow-hidden transition-shadow duration-200 hover:shadow-md ${
+ isFollowup
+ ? `bg-surface bg-[linear-gradient(rgb(var(--wait-bg)/0.35),rgb(var(--wait-bg)/0.35))] border-dashed ${isSelected ? 'border-accent' : todo.check_back_due ? 'border-warning/50' : 'border-wait-border'}`
+ : `bg-surface ${isSelected ? 'border-accent' : 'border-border'}`
+ }`}
+ >
+ {/* Header */}
+ {compact ? (
+ <div className="px-3 py-2 md:px-4 md:py-2.5">
+ <div className="flex items-center gap-2.5">
+ <DoneCheck done={todo.status === 'done'} onClick={() => handleDoneCheck(todo.status !== 'done')} label={`Mark "${todo.title}" ${todo.status === 'done' ? 'not done' : 'done'}`} />
+ {(todo.importance === 'high' || todo.importance === 'critical' || editingField === 'importance') && (
+ <span className="shrink-0 flex [&>*]:!text-[10px] [&>*]:!px-1.5 [&>*]:!py-0 [&>*]:!rounded">{importanceEl}</span>
+ )}
+ {titleEl('flex-1 min-w-0 truncate !text-sm leading-snug')}
+ {todo.is_blocked && (
+ <span className="shrink-0 text-[11px] font-semibold px-1.5 rounded bg-danger-bg text-danger">blocked</span>
+ )}
+ {isOverdue && (
+ <span title="Overdue" className="shrink-0 inline-flex items-center gap-1 text-[11px] font-semibold text-danger">
+ <AlarmClock size={12} />Overdue
+ </span>
+ )}
+ {/* Actions show on hover (always on touch screens) */}
+ <div className="shrink-0 flex items-center gap-0.5 md:opacity-0 md:group-hover/card:opacity-100 focus-within:opacity-100 transition-opacity">
+ {todo.status !== 'done' && !isFollowup && (
+ <button
+ onClick={() => toFollowup([todo])}
+ title="Waiting on someone else: move it to Waiting on"
+ aria-label="Wait"
+ className={`${cardActionClass} w-7 text-fg-muted bg-transparent hover:bg-wait-bg hover:text-wait border-transparent`}
+ >
+ <Hourglass size={13} />
+ </button>
+ )}
+ {todo.status !== 'done' && !isFollowup && (
+ <button
+ onClick={() => toKeepInMind([todo])}
+ title="Not now, but keep it in view: move it to Keep in mind"
+ aria-label="Keep in mind"
+ className={`${cardActionClass} w-7 text-fg-muted bg-transparent hover:bg-info-bg hover:text-info border-transparent`}
+ >
+ <Lightbulb size={13} />
+ </button>
+ )}
+ {extraActions}
+ {onOpenDetail && (
+ <button
+ onClick={onOpenDetail}
+ title="Open (quick view)"
+ aria-label="Open"
+ className={`${cardActionClass} w-7 text-fg-muted bg-transparent hover:bg-accent-1 hover:text-accent border-transparent`}
+ >
+ <ArrowUpRight size={14} />
+ </button>
+ )}
+ </div>
+ <button
+ onClick={() => setExpanded((e) => !e)}
+ title={expanded ? 'Collapse' : 'Details: notes, sub-tasks, blockers'}
+ aria-expanded={expanded}
+ className={`${cardActionClass} w-7 text-fg-faint hover:text-fg bg-transparent hover:bg-inset border-transparent`}
+ >
+ {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+ </button>
+ </div>
+ <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-0.5 pl-[28px] text-xs text-fg-subtle">
+ {infoItems}
  </div>
  </div>
+ ) : (
+ <div className="px-4 py-3 md:px-5 md:py-4">
+ {/* Grid, not flex: on phones the title spans under the actions instead of
+     being squeezed into a narrow column beside them. */}
+ <div className="grid grid-cols-[auto_auto_minmax(0,1fr)_auto] items-start gap-x-3">
+ {isFollowup ? (
+ /* A follow-up has no star and no done checkbox: you are waiting, not doing.
+    Resolving it is inside the expanded card. */
+ <span
+ title="Follow-up: waiting on a reply"
+ className={`col-start-1 col-end-3 row-start-1 row-end-3 w-10 h-10 rounded-lg grid place-items-center border ${
+ todo.check_back_due ? 'text-warning bg-warning-bg border-warning/35' : 'text-wait bg-wait-bg border-wait-border'
+ }`}
+ >
+ <Hourglass size={18} />
+ </span>
+ ) : (<>
+ {/* Focus toggle */}
+ <button
+ onClick={(e) => {
+ e.stopPropagation()
+ handleFocusToggle()
+ }}
+ title={todo.is_focused ? 'Remove from Focus' : 'Add to Focus'}
+ className={`col-start-1 row-start-1 p-2 -m-2 mt-[-6px] text-lg leading-none flex-shrink-0 transition-colors ${
+ todo.is_focused
+ ? 'text-warning-vivid hover:text-warning-vivid'
+ : 'text-fg-faint dark:text-fg-muted hover:text-warning-vivid'
+ }`}
+ >
+ <Star size={17} fill={todo.is_focused ? 'currentColor' : 'none'} />
+ </button>
+ {/* Done checkbox */}
+ <input
+ type="checkbox"
+ checked={todo.status === 'done'}
+ onChange={(e) => handleDoneCheck(e.target.checked)}
+ onClick={(e) => e.stopPropagation()}
+ title="Mark as done"
+ className="col-start-2 row-start-1 mt-1 w-4 h-4 rounded cursor-pointer accent-green-600 flex-shrink-0"
+ />
+ </>)}
+ <div className="contents">
+ {/* Badges row */}
+ <div className="col-start-3 row-start-1 min-w-0 self-center flex flex-wrap items-center gap-2 mb-1">
+ {importanceEl}
+
+ {isFollowup && (
+ <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-wait-bg text-wait border border-wait-border">
+ Follow-up
+ </span>
+ )}
+ {isFollowup && todo.status !== 'done' && <FollowupChip todo={todo} />}
+ {todo.is_keep_in_mind && todo.status !== 'done' && (
+ <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-info-bg text-info border border-info/30">
+ Keep in mind
+ </span>
+ )}
+
+ {todo.status === 'done' && (
+ <span className="text-xs font-medium px-2 py-0.5 rounded-full capitalize bg-success-bg text-success">
+ done
+ </span>
+ )}
+
+ {todo.is_blocked && (
+ <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-danger-bg text-danger">
+ blocked
+ </span>
+ )}
+ {isOverdue && (
+ <span className="inline-flex items-center gap-1 text-xs font-semibold text-danger">
+ <AlarmClock size={13} className="shrink-0" />
+ Overdue
+ </span>
+ )}
+ </div>
+
+ {titleEl('col-start-3 col-end-5 md:col-end-4 row-start-2')}
+ </div>
+
+ {/* Actions */}
+ <div className="col-start-4 row-start-1 md:row-end-3 justify-self-end flex items-center gap-1.5 md:gap-2 mb-1 md:mb-0">
+ {todo.status !== 'done' && (isFollowup ? (
+ <button
+ onClick={() => toTodo([todo], true)}
+ title="The reply came in: make it a todo again and add it to Focus"
+ className={`${cardActionClass} w-7 md:w-auto md:px-2.5 text-fg-muted bg-inset hover:bg-wait-bg hover:text-wait border-border hover:border-wait-border`}
+ >
+ <CornerDownLeft size={13} /><span className="hidden md:inline">Back to todo</span>
+ </button>
+ ) : (
+ <button
+ onClick={() => toFollowup([todo])}
+ title="Waiting on someone else: move it to follow-ups"
+ className={`${cardActionClass} w-7 md:w-auto md:px-2.5 text-fg-muted bg-inset hover:bg-wait-bg hover:text-wait border-border hover:border-wait-border`}
+ >
+ <Hourglass size={13} /><span className="hidden md:inline">Wait</span>
+ </button>
+ ))}
+ {extraActions}
+ {onOpenDetail && (
+ <button
+ onClick={onOpenDetail}
+ title="Open (quick view)"
+ className={`${cardActionClass} w-7 md:w-auto md:px-2.5 text-accent bg-accent-1 hover:bg-accent-2 border-accent-2`}
+ >
+ <ArrowUpRight size={13} /><span className="hidden md:inline">Open</span>
+ </button>
+ )}
+ <button
+ onClick={() => setExpanded((e) => !e)}
+ title={expanded ? 'Collapse' : 'Expand'}
+ aria-expanded={expanded}
+ className={`${cardActionClass} w-7 text-fg-muted bg-inset hover:bg-border-subtle hover:text-fg border-border`}
+ >
+ {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+ </button>
+ </div>
+ </div>
+
+ {/* Info row (spans full card width so fields like "1h" aren't
+   squeezed by the actions column on the right) */}
+ <div className="flex flex-wrap gap-3 mt-1.5 text-xs text-fg-muted pl-0 md:pl-[52px]">
+ {infoItems}
+ </div>
+ </div>
+ )}
 
  {/* Expanded content */}
  {expanded && (
