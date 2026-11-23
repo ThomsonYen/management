@@ -21,7 +21,7 @@ The Claude Code skills (`mgmt-operator` with the `mgmt` wrapper and `report` ren
 
 ## MCP (claude.ai, Claude Desktop, mobile, Claude Code)
 
-The same capabilities are exposed as MCP tools at **`https://management-wxisjq.fly.dev/mcp`** (origin root, not `/api`). Tools: `get_manual`, `get_digest`, `list_todos`, `get_todo`, `create_todo`, `update_todo`, `delete_todo`, `restore_todo`, `add_subtodos`, `update_subtodo`, `set_followup`, `clear_followup`, `set_keep_in_mind`, `set_focus`, `list_projects`, `list_persons`, `check_in`, `search_notes`, `get_note`, `create_note`, `append_note`, `set_daily_goal`. Same scopes, same restrictions (personal notes only, no deletes except soft-deleting a todo), same audit log (`MCP tool:<name>` rows).
+The same capabilities are exposed as MCP tools at **`https://management-wxisjq.fly.dev/mcp`** (origin root, not `/api`). Tools: `get_manual`, `get_digest`, `list_todos`, `get_todo`, `create_todo`, `update_todo`, `delete_todo`, `restore_todo`, `add_subtodos`, `update_subtodo`, `set_followup`, `clear_followup`, `set_keep_in_mind`, `set_focus`, `list_projects`, `list_persons`, `check_in`, `search_notes`, `get_note`, `create_note`, `append_note`, `set_daily_goal`, `add_must_do`, `update_must_do`. Same scopes, same restrictions (personal notes only, no deletes except soft-deleting a todo), same audit log (`MCP tool:<name>` rows).
 
 - **claude.ai / Desktop / mobile** — Settings → Connectors → Add custom connector → URL above. Claude registers itself (OAuth + PKCE) and sends you to a sign-in page on the app; you log in with the app password and pick scopes. The grant appears in Settings → API tokens as `connector: <client>` and can be revoked there.
 - **Claude Code** — `claude mcp add --transport http management https://management-wxisjq.fly.dev/mcp` (OAuth prompt on first use), or `--header "Authorization: Bearer mgmt_pat_…"` to use a plain API token.
@@ -138,7 +138,7 @@ POST /notes
 ```
 Append to an existing personal note: `GET /notes/{id}`, then `PUT /notes/{id} {"content": old_content + "\n\n…"}`. Never overwrite a note you have not just read.
 
-Daily planning: `PUT /daily-goals/{date} {"content":"…"}`; `POST /must-do/{date} {"text":"…","section":"morning"}` (or `{"todo_id":…}` to put an existing todo on the list).
+Daily planning: `PUT /daily-goals/{date} {"content":"…"}`; `POST /must-do/{date} {"text":"…","section":"morning"}` (or `{"todo_id":…}` to put an existing todo on the list). MCP: `add_must_do(date, todo_id=… | text=…, section)` appends to the end of the section (a todo already on that day's list is returned, not duplicated); `update_must_do(item_id, done|text|section|order)`.
 A must-do item linked to a todo (`todo_id` set) is ticked when that todo is completed today and left behind (not carried) once the todo is done or deleted. It always shows the todo's title; renaming either one (`PUT /must-do/items/{id} {"text":…}` or `PUT /todos/{id} {"title":…}`) renames both.
 Turn a plain item into a todo with `POST /must-do/items/{id}/convert` (scope `write:todos`; optional body `{"importance","estimated_hours","assignee_id","deadline"}`). It creates the todo, focuses it and links the item in one step, and returns `{"item","todo"}`. Idempotent: an already-linked item returns its todo.
 

@@ -793,6 +793,55 @@ def append_note(note_id: int, text: str) -> dict:
 
 
 @mcp.tool()
+def add_must_do(date: str, text: Optional[str] = None, todo_id: Optional[int] = None,
+                section: str = "morning") -> dict:
+    """Add an item to a day's Must Do list (YYYY-MM-DD), at the end of section morning|afternoon|evening.
+    Pass todo_id to link an existing todo (it shows the todo's title and ticks when the todo is done), or
+    text for a plain item. Idempotent for a todo already on that day's list: returns the existing item."""
+    tid = _need("write:daily")
+    args = {"date": date, "text": text, "todo_id": todo_id, "section": section}
+    with M.SessionLocal() as db:
+        _viewer(db)
+
+        def run():
+            M._check_date(date, "date")
+            if section not in ("morning", "afternoon", "evening"):
+                raise M.HTTPException(422, "section must be morning, afternoon or evening")
+            title = text
+            if todo_id is not None:
+                t = db.query(M.Todo).filter(M.Todo.id == todo_id, M.Todo.deleted_at == None).first()
+                if not t:
+                    raise M.HTTPException(404, "Todo not found")
+                existing = db.query(M.MustDoItem).filter(M.MustDoItem.date == date,
+                                                         M.MustDoItem.todo_id == todo_id).first()
+                if existing:
+                    return _out(M.MustDoItemOut.model_validate(existing))
+                title = t.title
+            if not title:
+                raise M.HTTPException(422, "text or todo_id is required")
+            last = db.query(M.func.max(M.MustDoItem.order)).filter(
+                M.MustDoItem.date == date, M.MustDoItem.section == section).scalar()
+            item = M.create_must_do(date, M.MustDoItemCreate(
+                todo_id=todo_id, text=title, section=section, order=0 if last is None else last + 1), db)
+            return _out(M.MustDoItemOut.model_validate(item))
+        return _audited(tid, "add_must_do", args, run)
+
+
+@mcp.tool()
+def update_must_do(item_id: int, text: Optional[str] = None, done: Optional[bool] = None,
+                   section: Optional[str] = None, order: Optional[int] = None) -> dict:
+    """Tick/untick (done), rename, or move a Must Do item. Renaming a linked item renames its todo too.
+    Item ids come from get_digest → must_do_today."""
+    tid = _need("write:daily")
+    fields = {k: v for k, v in dict(text=text, done=done, section=section, order=order).items() if v is not None}
+    with M.SessionLocal() as db:
+        _viewer(db)
+        return _audited(tid, "update_must_do", {"item_id": item_id, **fields},
+                        lambda: _out(M.MustDoItemOut.model_validate(
+                            M.update_must_do(item_id, M.MustDoItemUpdate(**fields), db))))
+
+
+@mcp.tool()
 def set_daily_goal(date: str, content: str) -> dict:
     """Set (or replace) the daily goal text for a date (YYYY-MM-DD)."""
     tid = _need("write:daily")
