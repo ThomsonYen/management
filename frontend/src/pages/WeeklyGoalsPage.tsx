@@ -326,7 +326,8 @@ export default function WeeklyGoalsPage() {
  </div>
  </div>
 
- <div className="w-full min-w-0 space-y-3">
+ {/* Days flow into columns on wide screens so short goal lists don't stretch across the whole page */}
+ <div className="w-full min-w-0 grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-3 items-start">
  {dates.map((date) => {
  const isAnchor = date === anchor
  const isToday = date === todayStr

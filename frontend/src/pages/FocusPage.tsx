@@ -20,7 +20,7 @@ import { useFollowupActions } from '../hooks/useFollowupActions'
 import { useKeepInMindActions } from '../hooks/useKeepInMindActions'
 import { useToast } from '../ToastContext'
 import { patchTodoCaches } from '../utils/optimisticTodo'
-import { importanceBadgeClass } from '../utils/badgeClasses'
+import { ImportanceIcon } from '../components/TodoStatusIcons'
 
 // Must-do section headers (Morning / Afternoon / Evening)
 const SECTION_ICON = 'shrink-0 text-fg-subtle'
@@ -218,6 +218,13 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  .then(() => queryClient.invalidateQueries({ queryKey: ['todos'] }))
  }
  }, [updateMustDo, queryClient])
+
+ const setLinkedImportance = useCallback((todoId: number, importance: string) => {
+ patchTodoCaches(queryClient, todoId, { importance })
+ updateTodo(todoId, { importance })
+ .catch(() => {})
+ .then(() => queryClient.invalidateQueries({ queryKey: ['todos'] }))
+ }, [queryClient])
 
  const removeTodayItem = useCallback((itemId: number) => {
  deleteMustDo.mutate(itemId)
@@ -859,9 +866,6 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  >
  <GripVertical size={12} className="flex-shrink-0 text-fg-faint dark:text-fg-muted cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-60 transition-opacity" />
  <DoneCheck done={!!effectiveDone} onClick={() => toggleTodayDone(item)} label={`Mark "${itemText}" ${effectiveDone ? 'not done' : 'done'}`} />
- {isCritical && (
- <span className={`shrink-0 text-[10px] font-bold uppercase tracking-wide px-1.5 rounded border ${importanceBadgeClass('critical')}`}>crit</span>
- )}
  {editingMustDoId === item.id ? (
  <input
  autoFocus
@@ -930,6 +934,10 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  </button>
  )}
  </span>
+ )}
+ {/* Same icons as the Focus list cards, for open critical and high todos only; click to change */}
+ {linkedTodo && !effectiveDone && (
+ <ImportanceIcon importance={linkedTodo.importance} onChange={(v) => setLinkedImportance(linkedTodo.id, v)} />
  )}
  {!item.todo_id && (
  <button

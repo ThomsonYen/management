@@ -8,6 +8,7 @@ import { useToast } from '../ToastContext'
 import { useUnfocusWithUndo } from '../hooks/useUnfocusWithUndo'
 import { useFollowupActions } from '../hooks/useFollowupActions'
 import { useKeepInMindActions } from '../hooks/useKeepInMindActions'
+import { BlockedIcon, ImportanceIcon, OverdueIcon } from './TodoStatusIcons'
 import DoneCheck from './DoneCheck'
 import { FollowupActions, FollowupChip } from './Followup'
 import DatePicker from './DatePicker'
@@ -503,18 +504,7 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
  <div className="px-3 py-2 md:px-4 md:py-2.5">
  <div className="flex items-center gap-2.5">
  <DoneCheck done={todo.status === 'done'} onClick={() => handleDoneCheck(todo.status !== 'done')} label={`Mark "${todo.title}" ${todo.status === 'done' ? 'not done' : 'done'}`} />
- {(todo.importance === 'high' || todo.importance === 'critical' || editingField === 'importance') && (
- <span className="shrink-0 flex [&>*]:!text-[10px] [&>*]:!px-1.5 [&>*]:!py-0 [&>*]:!rounded">{importanceEl}</span>
- )}
  {titleEl('flex-1 min-w-0 truncate !text-sm leading-snug')}
- {todo.is_blocked && (
- <span className="shrink-0 text-[11px] font-semibold px-1.5 rounded bg-danger-bg text-danger">blocked</span>
- )}
- {isOverdue && (
- <span title="Overdue" className="shrink-0 inline-flex items-center gap-1 text-[11px] font-semibold text-danger">
- <AlarmClock size={12} />Overdue
- </span>
- )}
  {/* Actions show on hover (always on touch screens) */}
  <div className="shrink-0 flex items-center gap-0.5 md:opacity-0 md:group-hover/card:opacity-100 focus-within:opacity-100 transition-opacity">
  {todo.status !== 'done' && !isFollowup && (
@@ -560,6 +550,17 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
  </div>
  <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-0.5 pl-[28px] text-xs text-fg-subtle">
  {infoItems}
+ {/* Status icons, bottom right: blocked, overdue, then importance (click it to change). Low and medium
+ only show their flag on hover (always on touch screens) or while the picker is open. */}
+ <div className="ml-auto flex items-center gap-1">
+ {todo.is_blocked && <BlockedIcon />}
+ {isOverdue && <OverdueIcon />}
+ <ImportanceIcon
+ importance={todo.importance}
+ onChange={(v) => saveField('importance', v)}
+ lowClass="md:opacity-0 md:group-hover/card:opacity-100 focus-within:opacity-100"
+ />
+ </div>
  </div>
  </div>
  ) : (
