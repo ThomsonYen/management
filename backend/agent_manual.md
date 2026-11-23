@@ -21,7 +21,7 @@ The Claude Code skills (`mgmt-operator` with the `mgmt` wrapper and `report` ren
 
 ## MCP (claude.ai, Claude Desktop, mobile, Claude Code)
 
-The same capabilities are exposed as MCP tools at **`https://management-wxisjq.fly.dev/mcp`** (origin root, not `/api`). Tools: `get_manual`, `get_digest`, `list_todos`, `get_todo`, `create_todo`, `update_todo`, `set_focus`, `list_projects`, `list_persons`, `check_in`, `search_notes`, `get_note`, `create_note`, `append_note`, `set_daily_goal`. Same scopes, same restrictions (personal notes only, no deletes), same audit log (`MCP tool:<name>` rows).
+The same capabilities are exposed as MCP tools at **`https://management-wxisjq.fly.dev/mcp`** (origin root, not `/api`). Tools: `get_manual`, `get_digest`, `list_todos`, `get_todo`, `create_todo`, `update_todo`, `add_subtodos`, `update_subtodo`, `set_followup`, `clear_followup`, `set_keep_in_mind`, `set_focus`, `list_projects`, `list_persons`, `check_in`, `search_notes`, `get_note`, `create_note`, `append_note`, `set_daily_goal`. Same scopes, same restrictions (personal notes only, no deletes), same audit log (`MCP tool:<name>` rows).
 
 - **claude.ai / Desktop / mobile** — Settings → Connectors → Add custom connector → URL above. Claude registers itself (OAuth + PKCE) and sends you to a sign-in page on the app; you log in with the app password and pick scopes. The grant appears in Settings → API tokens as `connector: <client>` and can be revoked there.
 - **Claude Code** — `claude mcp add --transport http management https://management-wxisjq.fly.dev/mcp` (OAuth prompt on first use), or `--header "Authorization: Bearer mgmt_pat_…"` to use a plain API token.
@@ -125,7 +125,7 @@ PUT /todos/focus   {"todo_ids":[236,269,254]}    these become the focus list, in
 ```
 Always read the current list first (`GET /agent/digest` → `focused_todos`) and send the full new order, not a delta. Max 30 ids; unknown ids → 404 and nothing changes. Single-todo fallbacks: `PUT /todos/{id} {"is_focused":true,"focus_order":0}` / `{"is_focused":false}`.
 
-Add a subtodo: `POST /todos/{id}/subtodos {"title":"…"}`; toggle it: `PUT /subtodos/{id} {"done":true}`.
+Add a subtodo: `POST /todos/{id}/subtodos {"title":"…"}`; toggle it: `PUT /subtodos/{id} {"done":true}` (also `title`, `order`). MCP: `add_subtodos(todo_id, titles=[…])` appends several in order; `update_subtodo(subtodo_id, title|done|order)`.
 
 Record a check-in: `POST /persons/{id}/check-in` (empty body = today; or `{"date":"YYYY-MM-DD"}`). Forward-only and idempotent — older dates are ignored — so it is always safe to call. Returns the person. Sending someone a message is **outside this API** — draft it in whatever messaging tool you have, get the user's approval, send, then record the check-in here.
 

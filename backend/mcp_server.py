@@ -554,6 +554,37 @@ def update_todo(todo_id: int, title: Optional[str] = None, description: Optional
 
 
 @mcp.tool()
+def add_subtodos(todo_id: int, titles: list[str]) -> list:
+    """Append sub-tasks (checklist items) to a todo, in the order given, after any it already has.
+    Returns the created sub-tasks with their ids."""
+    tid = _need("write:todos")
+    args = {"todo_id": todo_id, "titles": titles}
+    with M.SessionLocal() as db:
+        v = _viewer(db)
+
+        def run():
+            t = M._editable_todo_or_403(db, v, todo_id)
+            start = max((s.order for s in t.subtodos), default=-1) + 1
+            return [_out(M.SubTodoOut.model_validate(
+                        M.create_subtodo(todo_id, M.SubTodoCreate(title=title, order=start + i), db, viewer=v)))
+                    for i, title in enumerate(titles)]
+        return _audited(tid, "add_subtodos", args, run)
+
+
+@mcp.tool()
+def update_subtodo(subtodo_id: int, title: Optional[str] = None, done: Optional[bool] = None,
+                   order: Optional[int] = None) -> dict:
+    """Rename, tick/untick (done=true/false) or reorder one sub-task. Ids come from a todo's `subtodos`."""
+    tid = _need("write:todos")
+    fields = {k: v for k, v in dict(title=title, done=done, order=order).items() if v is not None}
+    with M.SessionLocal() as db:
+        v = _viewer(db)
+        return _audited(tid, "update_subtodo", {"subtodo_id": subtodo_id, **fields},
+                        lambda: _out(M.SubTodoOut.model_validate(
+                            M.update_subtodo(subtodo_id, M.SubTodoUpdate(**fields), db, viewer=v))))
+
+
+@mcp.tool()
 def set_followup(todo_id: int, check_back_on: Optional[str] = None) -> dict:
     """Mark a todo as a follow-up: the user is waiting on someone else and has nothing to do until they reply.
     Takes it off the focus list. check_back_on YYYY-MM-DD (default today + 3 days). Idempotent."""
