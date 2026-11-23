@@ -16,7 +16,7 @@ const IMPORTANCE_RING: Record<string, string> = {
  low: '',
  medium: '',
  high: 'ring-1 ring-prio-high/25',
- critical: 'ring-2 ring-prio-critical/40',
+ critical: 'prio-critical-ring',
 }
 
 export default function PersonProjectBoard({

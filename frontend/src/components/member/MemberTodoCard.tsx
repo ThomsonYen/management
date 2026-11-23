@@ -105,7 +105,7 @@ export default function MemberTodoCard({ todo, editable, showAssignee, expanded,
     <div
       className={`bg-surface rounded-xl border shadow-sm transition-colors ${
         isDone ? 'border-border opacity-75' : deadline?.tone === 'danger' ? 'border-danger/40' : 'border-border'
-      }`}
+      } ${todo.importance === 'critical' && !isDone ? 'prio-critical-card' : ''}`}
     >
       <div className="px-4 py-3 cursor-pointer" onClick={onToggle}>
         <div className="flex items-start gap-3">

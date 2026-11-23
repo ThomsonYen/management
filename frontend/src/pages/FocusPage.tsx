@@ -20,6 +20,7 @@ import { useFollowupActions } from '../hooks/useFollowupActions'
 import { useKeepInMindActions } from '../hooks/useKeepInMindActions'
 import { useToast } from '../ToastContext'
 import { patchTodoCaches } from '../utils/optimisticTodo'
+import { importanceBadgeClass } from '../utils/badgeClasses'
 
 // Must-do section headers (Morning / Afternoon / Evening)
 const SECTION_ICON = 'shrink-0 text-fg-subtle'
@@ -784,6 +785,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  const linkedTodo = item.todo_id ? todos.find((t) => t.id === item.todo_id) : undefined
  const effectiveDone = item.done || (linkedTodo?.status === 'done')
  const itemText = linkedTodo?.title ?? item.text
+ const isCritical = linkedTodo?.importance === 'critical' && !effectiveDone
  const isNoOp = (insertIdx: number) => {
  if (dragMustDoId.current === null) return false
  // Get all dragged IDs (multi-select aware)
@@ -815,7 +817,7 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  selectedMustDoIds.has(item.id)
  ? 'bg-accent-2 ring-1 ring-inset ring-accent/25'
  : 'hover:bg-inset/60'
- }`}
+ } ${isCritical ? 'prio-critical-row' : ''}`}
  onDragOver={(e) => {
  if (!e.dataTransfer.types.includes('application/x-must-do-id')) return
  e.preventDefault()
@@ -857,6 +859,9 @@ export default function FocusPage({ onOpenTodo }: { onOpenTodo: (id: number) => 
  >
  <GripVertical size={12} className="flex-shrink-0 text-fg-faint dark:text-fg-muted cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-60 transition-opacity" />
  <DoneCheck done={!!effectiveDone} onClick={() => toggleTodayDone(item)} label={`Mark "${itemText}" ${effectiveDone ? 'not done' : 'done'}`} />
+ {isCritical && (
+ <span className={`shrink-0 text-[10px] font-bold uppercase tracking-wide px-1.5 rounded border ${importanceBadgeClass('critical')}`}>crit</span>
+ )}
  {editingMustDoId === item.id ? (
  <input
  autoFocus

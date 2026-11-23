@@ -496,7 +496,7 @@ export default function TodoCard({ todo, onEdit, onOpenDetail, queryKeys, extraA
  isFollowup
  ? `bg-surface bg-[linear-gradient(rgb(var(--wait-bg)/0.35),rgb(var(--wait-bg)/0.35))] border-dashed ${isSelected ? 'border-accent' : todo.check_back_due ? 'border-warning/50' : 'border-wait-border'}`
  : `bg-surface ${isSelected ? 'border-accent' : 'border-border'}`
- }`}
+ } ${todo.importance === 'critical' && todo.status !== 'done' && !isFollowup ? 'prio-critical-card' : ''}`}
  >
  {/* Header */}
  {compact ? (

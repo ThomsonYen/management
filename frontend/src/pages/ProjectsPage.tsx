@@ -756,10 +756,10 @@ export default function ProjectsPage({ onOpenTodo }: { onOpenTodo: (id: number) 
  importanceMutation.mutate({ id: selectedProject.id, importance: next })
  }}
  title={`Importance: ${selectedProject.importance} (click to cycle)`}
- className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-2xs font-semibold uppercase tracking-wide border border-border hover:bg-inset transition-colors ${PROJECT_IMPORTANCE_TEXT[selectedProject.importance] ?? PROJECT_IMPORTANCE_TEXT.medium}`}
+ className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-2xs font-semibold uppercase tracking-wide border border-border hover:bg-inset transition-colors`}
  >
  <span className={`w-2 h-2 rounded-full ${PROJECT_IMPORTANCE_DOT[selectedProject.importance] ?? PROJECT_IMPORTANCE_DOT.medium}`} />
- {selectedProject.importance}
+ <span className={PROJECT_IMPORTANCE_TEXT[selectedProject.importance] ?? PROJECT_IMPORTANCE_TEXT.medium}>{selectedProject.importance}</span>
  </button>
  {selectedProject.deprecated_at && (
  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-2xs font-semibold uppercase tracking-wide border border-border text-fg-muted">

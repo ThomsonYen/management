@@ -271,3 +271,97 @@ html.dark {
   .goal-today { animation: none; }
   .goal-today .animate-ping { animation: none; opacity: 0; }
 }
+
+/* ─── Critical priority: the Aurora gradient ───
+   Critical projects and todos are drawn with a violet → magenta → amber gradient instead of one colour, so they
+   pop against "high" orange. Gradients can't go through the rgb tokens, so these classes replace the
+   prio-critical utilities wherever critical is drawn. Soft and outline chips clip one gradient layer to the text
+   and another to the border, so they need no inner span and also work on a native <select>. */
+:root {
+  --prio-crit-g: linear-gradient(90deg, #7c3aed, #db2777, #f59e0b);
+  --prio-crit-mid: #db2777;
+}
+.dark {
+  --prio-crit-g: linear-gradient(90deg, #a78bfa, #f472b6, #fbbf24);
+  --prio-crit-mid: #f472b6;
+}
+.prio-critical-text {
+  background-image: var(--prio-crit-g);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.prio-critical-fill { background-image: var(--prio-crit-g); }
+.prio-critical-solid {
+  background-image: var(--prio-crit-g);
+  border-color: transparent;
+  color: #fff;
+}
+.dark .prio-critical-solid { color: rgb(var(--bg-app)); }
+.prio-critical-soft,
+.prio-critical-outline {
+  --prio-crit-ground: color-mix(in srgb, var(--prio-crit-mid) 12%, rgb(var(--bg-surface)));
+  background-image: var(--prio-crit-g), linear-gradient(var(--prio-crit-ground), var(--prio-crit-ground)), var(--prio-crit-g);
+  background-origin: border-box;
+  -webkit-background-clip: text, padding-box, border-box;
+  background-clip: text, padding-box, border-box;
+  border-color: transparent;
+  color: transparent;
+}
+.prio-critical-outline { --prio-crit-ground: rgb(var(--bg-surface)); }
+.prio-critical-soft option,
+.prio-critical-outline option {
+  color: rgb(var(--fg-default));
+  background: rgb(var(--bg-surface));
+}
+/* A 2px gradient ring just outside the box (like ring-2), drawn on a masked pseudo-element so it doesn't touch
+   the element's own background or border. Needs a positioned element without overflow clipping. */
+.prio-critical-ring { position: relative; }
+.prio-critical-ring::before {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  padding: 2px;
+  border-radius: calc(var(--radius-lg) * var(--radius-k, 1) + 3px);
+  background: var(--prio-crit-g);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  pointer-events: none;
+}
+/* Open critical todo cards: a 3px Aurora bar down the left edge, a faint wash that fades out before the middle and a
+   tinted lift on hover. Quiet enough to sit among ordinary cards, obvious when scanning a list. The edge is inset
+   from the corners as a short rounded bar, so the card needn't clip its overflow. */
+.prio-critical-card,
+.prio-critical-row {
+  position: relative;
+  background-image: linear-gradient(100deg,
+    color-mix(in srgb, #7c3aed 6%, transparent),
+    color-mix(in srgb, #db2777 3%, transparent) 35%,
+    transparent 65%);
+}
+.dark .prio-critical-card,
+.dark .prio-critical-row {
+  background-image: linear-gradient(100deg,
+    color-mix(in srgb, #a78bfa 9%, transparent),
+    color-mix(in srgb, #f472b6 4%, transparent) 35%,
+    transparent 65%);
+}
+.prio-critical-card::before,
+.prio-critical-row::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 10px;
+  bottom: 10px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  /* The shared --prio-crit-g runs left → right; the edge needs top → bottom */
+  background-image: linear-gradient(180deg, #7c3aed, #db2777, #f59e0b);
+  pointer-events: none;
+}
+.dark .prio-critical-card::before,
+.dark .prio-critical-row::before { background-image: linear-gradient(180deg, #a78bfa, #f472b6, #fbbf24); }
+.prio-critical-card:hover { box-shadow: 0 6px 18px -8px color-mix(in srgb, var(--prio-crit-mid) 45%, transparent); }
+/* Must Do rows are single lines, so the bar sits closer to the ends and there is no lift */
+.prio-critical-row::before { top: 6px; bottom: 6px; }

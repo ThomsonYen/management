@@ -24,6 +24,7 @@ import MeetingNotesPage from './pages/MeetingNotesPage'
 import PersonalNotesPage from './pages/PersonalNotesPage'
 import NoteDetailPage from './pages/NoteDetailPage'
 import WeeklyGoalsPage from './pages/WeeklyGoalsPage'
+import DemoPage from './pages/DemoPage'
 import ProgressPage from './pages/ProgressPage'
 import TodoModal from './components/TodoModal'
 import TodoPeek from './components/TodoPeek'
@@ -277,6 +278,7 @@ function AppShell() {
           <Route path="/weekly-goals" element={<WeeklyGoalsPage />} />
           <Route path="/progress" element={<ProgressPage />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/demo" element={<DemoPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>

@@ -31,12 +31,12 @@ export const PROJECT_IMPORTANCE_DOT: Record<string, string> = {
   low: 'bg-border dark:bg-inset',
   medium: 'bg-info',
   high: 'bg-prio-high',
-  critical: 'bg-prio-critical',
+  critical: 'prio-critical-fill',
 }
 
 export const PROJECT_IMPORTANCE_TEXT: Record<string, string> = {
   low: 'text-fg-muted',
   medium: 'text-info',
   high: 'text-prio-high',
-  critical: 'text-prio-critical',
+  critical: 'prio-critical-text',
 }

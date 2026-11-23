@@ -13,7 +13,7 @@ const toneClasses: Record<BadgeVariant, Record<BadgeTone, string>> = {
     warning: 'bg-warning-bg text-warning border-warning/30',
     danger:  'bg-danger-bg text-danger border-danger/30',
     info:    'bg-info-bg text-info border-info/30',
-    critical: 'bg-prio-critical-bg text-prio-critical border-prio-critical/30',
+    critical: 'prio-critical-soft',
     high:    'bg-prio-high-bg text-prio-high border-prio-high/30',
   },
   solid: {
@@ -23,7 +23,7 @@ const toneClasses: Record<BadgeVariant, Record<BadgeTone, string>> = {
     warning: 'bg-warning text-white dark:text-app border-transparent',
     danger:  'bg-danger text-white dark:text-app border-transparent',
     info:    'bg-info text-white dark:text-app border-transparent',
-    critical: 'bg-prio-critical text-white dark:text-app border-transparent',
+    critical: 'prio-critical-solid',
     high:    'bg-prio-high text-white dark:text-app border-transparent',
   },
   outline: {
@@ -33,7 +33,7 @@ const toneClasses: Record<BadgeVariant, Record<BadgeTone, string>> = {
     warning: 'text-warning border-warning/40',
     danger:  'text-danger border-danger/40',
     info:    'text-info border-info/40',
-    critical: 'text-prio-critical border-prio-critical/40',
+    critical: 'prio-critical-outline',
     high:    'text-prio-high border-prio-high/40',
   },
 }

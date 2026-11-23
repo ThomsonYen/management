@@ -842,8 +842,20 @@ def update_must_do(item_id: int, text: Optional[str] = None, done: Optional[bool
 
 
 @mcp.tool()
+def list_daily_goals(date_from: str, date_to: str) -> list:
+    """Daily goal text per date between date_from and date_to (YYYY-MM-DD, inclusive); the Weekly Goals page
+    shows these. Dates with no goal are absent. Read a day before set_daily_goal, which replaces the whole text."""
+    _need("read")
+    with M.SessionLocal() as db:
+        _viewer(db)
+        return _read(lambda: _out([M.DailyGoalOut.model_validate(g)
+                                   for g in M.list_daily_goals(date_from, date_to, db)]))
+
+
+@mcp.tool()
 def set_daily_goal(date: str, content: str) -> dict:
-    """Set (or replace) the daily goal text for a date (YYYY-MM-DD)."""
+    """Set (or replace) the daily goal text for a date (YYYY-MM-DD). Replaces the whole text: read the
+    day with list_daily_goals first when editing."""
     tid = _need("write:daily")
     with M.SessionLocal() as db:
         return _audited(tid, "set_daily_goal", {"date": date, "content_len": len(content)},
