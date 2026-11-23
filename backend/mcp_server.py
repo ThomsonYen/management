@@ -554,6 +554,26 @@ def update_todo(todo_id: int, title: Optional[str] = None, description: Optional
 
 
 @mcp.tool()
+def delete_todo(todo_id: int) -> dict:
+    """Soft-delete a todo: it disappears from every list but stays in Recently Deleted, where restore_todo
+    (or the app) brings it back. Use for duplicates or things the user no longer wants; to finish a todo,
+    set status 'done' instead."""
+    tid = _need("write:todos")
+    with M.SessionLocal() as db:
+        _viewer(db)
+        return _audited(tid, "delete_todo", {"todo_id": todo_id}, lambda: M.delete_todo(todo_id, db))
+
+
+@mcp.tool()
+def restore_todo(todo_id: int) -> dict:
+    """Bring back a soft-deleted todo."""
+    tid = _need("write:todos")
+    with M.SessionLocal() as db:
+        _viewer(db)
+        return _audited(tid, "restore_todo", {"todo_id": todo_id}, lambda: M.restore_todo(todo_id, db))
+
+
+@mcp.tool()
 def add_subtodos(todo_id: int, titles: list[str]) -> list:
     """Append sub-tasks (checklist items) to a todo, in the order given, after any it already has.
     Returns the created sub-tasks with their ids."""
@@ -625,7 +645,8 @@ def set_keep_in_mind(todo_id: int, keep: bool = True, focus: bool = False) -> di
 
 @mcp.tool()
 def set_focus(todo_ids: list[int]) -> list:
-    """Replace the focus list with these todo ids in this order (max 30). Read the current list first; send the full order."""
+    """Replace the focus list with these open todo ids in this order (max 30); other open todos are unfocused.
+    Read the current list first; send the full order. Completed todos leave focus on their own."""
     tid = _need("write:todos")
     with M.SessionLocal() as db:
         return _audited(tid, "set_focus", {"todo_ids": todo_ids},

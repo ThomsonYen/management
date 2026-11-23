@@ -21,7 +21,7 @@ The Claude Code skills (`mgmt-operator` with the `mgmt` wrapper and `report` ren
 
 ## MCP (claude.ai, Claude Desktop, mobile, Claude Code)
 
-The same capabilities are exposed as MCP tools at **`https://management-wxisjq.fly.dev/mcp`** (origin root, not `/api`). Tools: `get_manual`, `get_digest`, `list_todos`, `get_todo`, `create_todo`, `update_todo`, `add_subtodos`, `update_subtodo`, `set_followup`, `clear_followup`, `set_keep_in_mind`, `set_focus`, `list_projects`, `list_persons`, `check_in`, `search_notes`, `get_note`, `create_note`, `append_note`, `set_daily_goal`. Same scopes, same restrictions (personal notes only, no deletes), same audit log (`MCP tool:<name>` rows).
+The same capabilities are exposed as MCP tools at **`https://management-wxisjq.fly.dev/mcp`** (origin root, not `/api`). Tools: `get_manual`, `get_digest`, `list_todos`, `get_todo`, `create_todo`, `update_todo`, `delete_todo`, `restore_todo`, `add_subtodos`, `update_subtodo`, `set_followup`, `clear_followup`, `set_keep_in_mind`, `set_focus`, `list_projects`, `list_persons`, `check_in`, `search_notes`, `get_note`, `create_note`, `append_note`, `set_daily_goal`. Same scopes, same restrictions (personal notes only, no deletes except soft-deleting a todo), same audit log (`MCP tool:<name>` rows).
 
 - **claude.ai / Desktop / mobile** — Settings → Connectors → Add custom connector → URL above. Claude registers itself (OAuth + PKCE) and sends you to a sign-in page on the app; you log in with the app password and pick scopes. The grant appears in Settings → API tokens as `connector: <client>` and can be revoked there.
 - **Claude Code** — `claude mcp add --transport http management https://management-wxisjq.fly.dev/mcp` (OAuth prompt on first use), or `--header "Authorization: Bearer mgmt_pat_…"` to use a plain API token.
@@ -35,12 +35,12 @@ Nothing changes for you: tokens and connectors belong to the owner only (a membe
 
 ## Scopes
 
-Tokens carry a subset of these scopes. A `403` with `required_scope` tells you which one is missing. Endpoints not listed here **cannot be reached with a token at all** (deletes, purges, vaults, config, backup, transcription, audio download, token management) — do not try; ask the user to do it in the UI.
+Tokens carry a subset of these scopes. A `403` with `required_scope` tells you which one is missing. Endpoints not listed here **cannot be reached with a token at all** (other deletes, purges, vaults, config, backup, transcription, audio download, token management) — do not try; ask the user to do it in the UI.
 
 | Scope | Unlocks |
 |---|---|
 | `read` | all `GET` endpoints listed below |
-| `write:todos` | create/edit/complete/focus todos and subtodos, turn todos into follow-ups or Keep in Mind todos and back, restore a soft-deleted todo, convert a must-do item into a todo |
+| `write:todos` | create/edit/complete/focus todos and subtodos, turn todos into follow-ups or Keep in Mind todos and back, soft-delete and restore a todo, convert a must-do item into a todo |
 | `write:persons` | `PUT /persons/{id}` with **only** `last_check_in_date` and/or `notes` |
 | `write:notes` | create/edit/restore notes with `kind='personal'` only; never transcripts |
 | `write:daily` | daily goals and must-do items |
@@ -52,12 +52,12 @@ Tokens carry a subset of these scopes. A `403` with `required_scope` tells you w
 - Todo `status` is `todo` or `done` (nothing else). `importance` is `low` | `medium` | `high` | `critical`.
 - Projects carry the same `importance` scale: `low` | `medium` | `high` | `critical` (critical sits above high).
 - Follow-ups: a todo with `is_followup=true` is one the user is **waiting on someone else** for — nothing to do until they reply. The assignee is who they are waiting on. Extra fields: `followup_since` (ISO timestamp), `check_back_on` (`YYYY-MM-DD`, when to chase; may be null), and server-derived `waiting_days` and `check_back_due` (chase date is today or past) — do not compute these yourself. `status` is still `todo`/`done`: resolving a follow-up is `{"status":"done"}`. A follow-up is never in focus. Do not suggest a follow-up as work for today; suggest chasing the ones with `check_back_due=true`.
-- Focus: a todo is "in focus" when `is_focused=true`; `focus_order` (ascending) is its rank. Moving focus = setting these on the affected todos, or one call to `PUT /todos/reorder-focus`.
+- Focus: a todo is "in focus" when `is_focused=true`; `focus_order` (ascending) is its rank. Completing a todo takes it off focus. Moving focus = setting these on the affected todos, or one call to `PUT /todos/reorder-focus`.
 - Check-in ("ping"): each person may be a direct report with `check_in_interval_days` and `last_check_in_date`. A person is **overdue** when `today − last_check_in_date > check_in_interval_days` (or there is no date). Recording a check-in = `POST /persons/{id}/check-in`; the server keeps the date forward-only.
 - Tags: inline `#tag` / `#tag/sub` in a note body are indexed automatically. Tag segments must start with a letter and contain only letters, digits, `_` (no hyphens) — `#report/2026-w35` would index as just `report`. Reports: weekly `#report/weekly #report/w<yyyy>_<ww>` (e.g. `#report/w2026_35`); daily `#report/daily #report/d<yyyymmdd>`. The bundled `report daily|weekly` helper renders these from the digest.
 - Social cadence: each friend has `cadence_days` and `last_hangout_date`. Derived fields come back on every friend, so do not compute them yourself: `days_since_hangout`, `days_until_due` (negative = overdue), `cadence_tier` (elapsed time alone) and `status`, which is what the user is shown. `status` is `planned` (something is arranged — **do not nudge**), `needs_confirm` (a plan's date passed and nobody said whether it happened), `never`, `ok`, `due_soon` (≥80% of the cadence), `slipping` (≥95%) or `overdue`. A plan outranks the cadence, and an unconfirmed past plan outranks everything.
 - A hangout is either `happened` or `planned`. Only `happened` entries dated today or earlier count toward `last_hangout_date`, so a plan that falls through can never silently mute the nudge. Unlike person check-ins this is **not** a forward-only watermark: the log is the source of truth, so deleting, re-dating or confirming an entry recomputes the date.
-- Soft deletes: never delete. If something should go away, tell the user.
+- Soft deletes: the only delete a token can do is a todo's soft delete (`DELETE /todos/{id}`, restorable). Use it when the user asks, or for a duplicate you created yourself — never to finish work (that is `status: done`). Anything else that should go away: tell the user.
 - Deprecated projects: a project with a non-null `deprecated_at` is retired but kept — its todos and notes are intact and still readable. Listings include them by default so every `project_id` still resolves to a name; pass `?include_deprecated=false` (MCP: `include_deprecated=false`) for only the active ones. Never file new todos under a deprecated project unless the user names it. Deprecating and reactivating are the owner's call in the app; tokens cannot do either.
 - Every mutating request you make is logged (method, path, status, body) and visible to the user in Settings → API tokens. Act as if the user will read it.
 - Every mutation returns the updated object — show the user a before/after for anything non-trivial. Prefer one-at-a-time updates; confirm with the user before touching more than ~10 items.
@@ -98,7 +98,9 @@ Edit / complete a todo:
 ```
 PUT /todos/{id}   {"title":"…"}            any subset of fields
 PUT /todos/{id}   {"status":"done"}        complete
-PUT /todos/{id}   {"status":"todo"}        reopen
+PUT /todos/{id}   {"status":"todo"}        reopen (a todo that was focused when completed goes back on focus)
+DELETE /todos/{id}                         soft delete (Recently Deleted)
+POST /todos/{id}/restore                   undo a soft delete
 ```
 
 Follow-ups (waiting on someone else):

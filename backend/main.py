@@ -368,6 +368,8 @@ class Todo(Base):
     status = Column(String, default="todo")
     is_focused = Column(Boolean, default=False)
     focus_order = Column(Integer, default=0)
+    # Completing a focused todo takes it off focus; this remembers to put it back if reopened (Undo)
+    refocus_on_reopen = Column(Boolean, default=False)
     created_at = Column(String, default=lambda: datetime.now(timezone.utc).isoformat())
     done_at = Column(String, nullable=True)
     deleted_at = Column(String, nullable=True)
@@ -655,6 +657,9 @@ with engine.connect() as _conn:
         if _col not in _todo_cols:
             _conn.execute(text(f"ALTER TABLE todos ADD COLUMN {_col} TEXT"))
             _conn.commit()
+    if "refocus_on_reopen" not in _todo_cols:
+        _conn.execute(text("ALTER TABLE todos ADD COLUMN refocus_on_reopen BOOLEAN NOT NULL DEFAULT 0"))
+        _conn.commit()
     _project_cols = [c["name"] for c in _insp.get_columns("projects")]
     if "display_order" not in _project_cols:
         _conn.execute(text("ALTER TABLE projects ADD COLUMN display_order INTEGER NOT NULL DEFAULT 0"))
@@ -2257,6 +2262,10 @@ async def lifespan(_app: FastAPI):
         db.query(Todo).filter(Todo.status.in_(["in_progress", "in-progress"])).update(
             {Todo.status: "todo"}, synchronize_session=False
         )
+        # Completed todos leave the focus list (legacy rows stayed focused forever)
+        db.query(Todo).filter(Todo.status == "done", Todo.is_focused == True).update(
+            {Todo.is_focused: False}, synchronize_session=False
+        )
         # UTC isoformat strings compare lexically, so string <= string is safe here.
         db.query(AuthSession).filter(
             AuthSession.expires_at <= datetime.now(timezone.utc).isoformat()
@@ -2438,6 +2447,7 @@ _BEARER_ROUTE_SCOPES = [
         ("PUT", r"/todos/reorder-focus", "write:todos"),
         ("PUT", r"/todos/focus", "write:todos"),
         ("PUT", rf"/todos/{_ID}", "write:todos"),
+        ("DELETE", rf"/todos/{_ID}", "write:todos"),  # soft delete; restorable
         ("POST", rf"/todos/{_ID}/restore", "write:todos"),
         ("POST", rf"/todos/{_ID}/followup", "write:todos"),
         ("POST", rf"/todos/{_ID}/unfollowup", "write:todos"),
@@ -4574,7 +4584,8 @@ class FocusListIn(BaseModel):
 @app.put("/todos/focus", response_model=List[TodoOut], summary="Set the whole focus list in one call")
 def set_focus_list(data: FocusListIn, db: Session = Depends(get_db)):
     """The given ids become the focus list, in this order; every other open
-    todo is unfocused. Idempotent. Returns the resulting focus list."""
+    todo is unfocused (done todos are left alone). Idempotent. Returns the
+    resulting focus list."""
     ids = list(dict.fromkeys(data.todo_ids))  # dedupe, keep order
     todos = {t.id: t for t in db.query(Todo).filter(Todo.id.in_(ids), Todo.deleted_at == None).all()} if ids else {}
     missing = [i for i in ids if i not in todos]
@@ -4590,7 +4601,7 @@ def set_focus_list(data: FocusListIn, db: Session = Depends(get_db)):
         raise HTTPException(
             422, f"Keep in Mind todos cannot be focused: {parked}. POST /todos/{{id}}/unkeep-in-mind with focus=true first"
         )
-    for t in db.query(Todo).filter(Todo.is_focused == True, Todo.deleted_at == None).all():
+    for t in db.query(Todo).filter(Todo.is_focused == True, Todo.status != "done", Todo.deleted_at == None).all():
         if t.id not in todos:
             t.is_focused = False
             t.focus_order = 0
@@ -4838,8 +4849,16 @@ def update_todo(todo_id: int, data: TodoUpdate, db: Session = Depends(get_db), v
         new_status = update_data["status"]
         if new_status == "done" and old_status != "done":
             t.done_at = datetime.now(timezone.utc).isoformat()
+            # Done todos leave focus; reopening (e.g. Undo) puts them back in their old slot
+            t.refocus_on_reopen = bool(t.is_focused)
+            if "is_focused" not in update_data:
+                t.is_focused = False
         elif new_status != "done" and old_status == "done":
             t.done_at = None
+            if t.refocus_on_reopen and "is_focused" not in update_data \
+                    and not t.followup_since and not t.keep_in_mind_since:
+                t.is_focused = True
+            t.refocus_on_reopen = False
         if new_status != old_status:
             # Today's must-do items for this todo tick with it, wherever it was completed
             db.query(MustDoItem).filter(
@@ -4853,7 +4872,7 @@ def update_todo(todo_id: int, data: TodoUpdate, db: Session = Depends(get_db), v
     return todo_to_out(t, viewer)
 
 
-@app.delete("/todos/{todo_id}")
+@app.delete("/todos/{todo_id}", summary="Soft-delete a todo (restorable from Recently Deleted)")
 def delete_todo(todo_id: int, db: Session = Depends(get_db)):
     t = db.query(Todo).get(todo_id)
     if not t:
@@ -4863,7 +4882,7 @@ def delete_todo(todo_id: int, db: Session = Depends(get_db)):
     return {"ok": True}
 
 
-@app.post("/todos/{todo_id}/restore")
+@app.post("/todos/{todo_id}/restore", summary="Restore a soft-deleted todo")
 def restore_todo(todo_id: int, db: Session = Depends(get_db)):
     t = db.query(Todo).get(todo_id)
     if not t:
